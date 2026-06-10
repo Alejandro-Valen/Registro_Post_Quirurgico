@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 .entorno_registro
 db.sqlite3
+.env
