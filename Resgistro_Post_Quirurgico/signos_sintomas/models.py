@@ -118,3 +118,66 @@ class RegistroDiario(models.Model):
 
     def __str__(self):
         return f"{self.paciente.nombre_completo} — Día {self.dia_postoperatorio} — {self.fecha_registro}"
+
+class Alerta(models.Model):
+    """
+    Registra cada evento crítico detectado por el alert_engine.
+    Cuando el sistema detecta una red flag en un RegistroDiario,
+    crea una Alerta que notifica al oncólogo y queda guardada
+    en el historial clínico del paciente.
+    """
+
+    # Tipos de alerta — basados en protocolos Sugarbaker/HIPEC
+    TIPO_CHOICES = [
+        ('SEPSIS',             'Fiebre — Riesgo de Sepsis'),
+        ('FUGA_ANASTOMOTICA',  'Drenaje Anormal — Posible Fuga Anastomótica'),
+        ('ILEO_PARALITICO',    'Sin Tránsito Intestinal — Posible Íleo Paralítico'),
+        ('DOLOR_AGUDO',        'Dolor Agudo Incontrolable'),
+    ]
+
+    SEVERIDAD_CHOICES = [
+        ('ALTA',   'Alta — Ir a urgencias'),
+        ('MEDIA',  'Media — Llamar al médico'),
+        ('BAJA',   'Baja — Monitorear'),
+    ]
+
+    # Relaciones
+    paciente = models.ForeignKey(
+        Paciente,
+        on_delete=models.PROTECT,
+        related_name='alertas'
+    )
+    registro_origen = models.ForeignKey(
+        RegistroDiario,
+        on_delete=models.PROTECT,
+        related_name='alertas',
+        help_text="El registro diario que disparó esta alerta"
+    )
+
+    # Datos de la alerta
+    tipo = models.CharField(max_length=30, choices=TIPO_CHOICES)
+    severidad = models.CharField(max_length=10, choices=SEVERIDAD_CHOICES)
+    mensaje = models.TextField(
+        help_text="Descripción automática generada por el alert_engine"
+    )
+
+    # Estado
+    resuelta = models.BooleanField(
+        default=False,
+        help_text="El oncólogo marca esto cuando atiende la alerta"
+    )
+    fecha_alerta = models.DateTimeField(auto_now_add=True)
+    fecha_resolucion = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Cuándo fue atendida por el médico"
+    )
+
+    class Meta:
+        verbose_name = "Alerta"
+        verbose_name_plural = "Alertas"
+        ordering = ["-fecha_alerta"]
+
+    def __str__(self):
+        estado = "Resuelta" if self.resuelta else "ACTIVA"
+        return f"[{estado}] {self.get_tipo_display()} — {self.paciente.nombre_completo}"
