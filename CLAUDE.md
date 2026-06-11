@@ -1,65 +1,171 @@
 # Contexto del Proyecto — MVP Sugarbaker / Clínica Somer
 
+> **Para agentes IA:** Lee este archivo COMPLETO antes de sugerir cualquier
+> cambio al proyecto. Toda decisión técnica debe ser compatible con el contexto
+> clínico descrito aquí. Las reglas del alert_engine no son negociables —
+> tienen base en protocolos médicos reales de postoperatorio HIPEC/Sugarbaker.
+
+---
+
 ## ¿Qué es este proyecto?
-Sistema de monitoreo remoto postquirúrgico para pacientes de cirugía
-oncológica Sugarbaker (HIPEC) de la Clínica Somer, Medellín, Colombia.
-El paciente interactúa exclusivamente por WhatsApp. Un bot le hace
-preguntas diarias de telemetría. El sistema clasifica los datos,
-detecta alertas rojas y notifica al oncólogo a través de un dashboard
-en Django Admin.
 
-## Stack tecnológico
-- Backend: Django 5.x + PostgreSQL
-- Interfaz paciente: WhatsApp Bot vía Twilio API
-- Panel médico: Django Admin personalizado
-- Servidor: Python, hosted en Railway o Render (futuro)
-- IA: Claude Code (arquitectura/lógica), Codex CLI (implementación)
+Sistema de monitoreo remoto postquirúrgico para pacientes de cirugía oncológica
+Sugarbaker (HIPEC) de la Clínica Somer, Medellín, Colombia. El paciente interactúa
+exclusivamente por WhatsApp. Un bot le hace preguntas diarias de telemetría. El
+sistema clasifica los datos, detecta alertas rojas y notifica al oncólogo a través
+de un dashboard en Django Admin.
 
-## Estructura de apps Django
-- `home/` — portal web del sistema, páginas informativas
-- `signos_sintomas/` — núcleo clínico: modelos, bot, alertas, webhook
+**La IA NO diagnostica.** Funciona bajo un sistema de reglas clínicas fijas
+(alert_engine) para clasificar, resumir telemetría y generar alertas tempranas.
 
-## Variables clínicas que registra el sistema
-Estas variables se capturan una vez al día por WhatsApp:
+---
 
-1. **Temperatura corporal** (°C) — riesgo de sepsis si >= 38.0°C
-2. **Dolor EVA** (escala 1-10) — dolor agudo repentino es red flag
-3. **Volumen de drenaje** (ml) — cantidad de líquido en los drenajes
-4. **Aspecto del drenaje** — seroso / hemático / purulento / fecaloide
-5. **Tránsito intestinal** — presencia de gases (sí/no)
-6. **Náuseas o vómito** — episodios en las últimas 24 horas
+## Stack Tecnológico
 
-## Reglas del motor de alertas (alert_engine.py)
-Estas reglas generan una Alerta roja automática y notifican al médico:
+- **Backend:** Django 6.0.5 + Python 3.13
+- **Base de datos:** PostgreSQL 18 (local: sugarbaker_db)
+- **Interfaz paciente:** WhatsApp Bot vía Twilio API (pendiente Sprint 3)
+- **Panel médico:** Django Admin personalizado
+- **Dependencias clave:** python-decouple, psycopg2-binary, twilio (futuro)
+- **OS desarrollo:** Windows 11
 
-| Regla | Condición | Tipo de alerta |
-|-------|-----------|----------------|
-| 1 | Temperatura >= 38.0°C | SEPSIS |
-| 2 | Drenaje purulento o fecaloide | FUGA_ANASTOMOTICA |
-| 3 | Sin gases por 3 días consecutivos | ILEO_PARALITICO |
-| 4 | Vómito incontrolable (>3 episodios) | ILEO_PARALITICO |
+---
 
-## Modelos de base de datos (Sprint 1)
-- `Paciente` — nombre, teléfono WhatsApp, fecha cirugía, médico
-- `RegistroDiario` — todas las variables clínicas + timestamp
-- `Alerta` — tipo, severidad, paciente, resuelta (bool), timestamp
+## Repositorio
 
-## Convenciones del equipo
-- Idioma del código: español (nombres de variables, comentarios)
-- Rama principal de desarrollo: `Desarrollo`
+- **URL:** https://github.com/Alejandro-Valen/Registro_Post_Quirurgico
+- **Rama principal:** `Desarrollo`
+- **Ramas activas:** `sprint-1-modelos` (León), `sprint-1-frontend` (Alejandro)
+
+---
+
+## Estructura de Apps Django
+
+```
+Registro_Post_Quirurgico/Registro_Post_Quirurgico/
+├── home/             → portal web, páginas informativas
+└── signos_sintomas/  → núcleo clínico: modelos, bot, alertas, webhook
+```
+
+**Importante:** La carpeta del proyecto se llama `Registro_Post_Quirurgico`
+(sin typo). Hubo una versión anterior llamada `Resgistro_Post_Quirurgico`
+que fue eliminada en el Sprint 1.
+
+---
+
+## Variables Clínicas que Registra el Sistema
+
+Capturadas una vez al día por WhatsApp:
+
+| # | Variable | Tipo | Unidad |
+|---|----------|------|--------|
+| 1 | Temperatura corporal | Decimal | °C |
+| 2 | Dolor EVA | Entero | Escala 1-10 |
+| 3 | Volumen de drenaje | Entero | ml (nullable) |
+| 4 | Aspecto del drenaje | Choices | seroso/hemático/purulento/fecaloide/sin_drenaje |
+| 5 | Presencia de gases | Booleano | sí/no |
+| 6 | Episodios de náuseas/vómito | Entero | cantidad en 24h |
+
+---
+
+## Reglas del Motor de Alertas (alert_engine.py)
+
+**Archivo a crear:** `signos_sintomas/alert_engine.py`
+**Función principal:** `evaluar_registro(registro: RegistroDiario) -> list[Alerta]`
+
+| Regla | Condición exacta | Tipo Alerta | Severidad | Base clínica |
+|-------|-----------------|-------------|-----------|--------------|
+| 1 | temperatura >= 38.0 | SEPSIS | ALTA | Riesgo de sepsis post-HIPEC |
+| 2 | aspecto_drenaje in ['purulento','fecaloide'] | FUGA_ANASTOMOTICA | ALTA | Fuga anastomótica |
+| 3 | sin gases 3 días consecutivos | ILEO_PARALITICO | ALTA | Íleo paralítico severo |
+| 4 | episodios_nauseas > 3 | ILEO_PARALITICO | MEDIA | Íleo paralítico moderado |
+
+---
+
+## Modelos de Base de Datos (Sprint 1 — COMPLETADO)
+
+### Paciente
+```python
+nombre_completo       CharField(200)
+telefono_whatsapp     CharField(20) unique  # identificador para el bot
+fecha_cirugia         DateField
+medico_responsable    CharField(200)
+activo                BooleanField default=True
+fecha_registro        DateTimeField auto_now_add=True
+```
+
+### RegistroDiario
+```python
+paciente              ForeignKey(Paciente, PROTECT)
+temperatura           DecimalField(4,1)
+dolor_eva             PositiveSmallIntegerField  # 1-10
+volumen_drenaje_ml    PositiveIntegerField nullable
+aspecto_drenaje       CharField choices=[seroso,hematico,purulento,fecaloide,sin_drenaje]
+presencia_gases       BooleanField
+episodios_nauseas     PositiveSmallIntegerField
+fecha_registro        DateTimeField auto_now_add=True
+dia_postoperatorio    PositiveSmallIntegerField  # calculado automáticamente en save()
+```
+
+### Alerta
+```python
+paciente              ForeignKey(Paciente, PROTECT)
+registro_origen       ForeignKey(RegistroDiario, PROTECT)
+tipo                  CharField choices=[SEPSIS,FUGA_ANASTOMOTICA,ILEO_PARALITICO,DOLOR_AGUDO]
+severidad             CharField choices=[ALTA,MEDIA,BAJA]
+mensaje               TextField
+resuelta              BooleanField default=False
+fecha_alerta          DateTimeField auto_now_add=True
+fecha_resolucion      DateTimeField null=True blank=True
+```
+
+---
+
+## Estado Actual del Proyecto
+
+| Sprint | Descripción | Estado |
+|--------|-------------|--------|
+| Sprint 0 | Configuración base y seguridad | ✅ Completado |
+| Sprint 1 | Modelos clínicos y base de datos | ✅ Completado |
+| Sprint 2 | Motor de alertas (alert_engine) | ⏳ Siguiente |
+| Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Pendiente |
+| Sprint 4 | Dashboard oncólogo y notificaciones | ⏳ Pendiente |
+| Sprint 5 | Producción y despliegue | ⏳ Pendiente |
+
+**Punto actual:** Sprint 1 completado. Panel del oncólogo funcionando en
+`http://127.0.0.1:8000/admin/` con Pacientes, Registros Diarios y Alertas.
+Pendiente merge sprint-1-modelos → Desarrollo e iniciar Sprint 2.
+
+---
+
+## Roles del Equipo
+
+- **León (Arquitecto IA):** define lógica clínica, valida reglas médicas,
+  trabaja con Claude Code. NO es el programador principal.
+- **Alejandro (Dev Full-Stack):** implementa modelos y vistas, configura
+  infraestructura, trabaja con Codex CLI.
+
+---
+
+## Convenciones del Equipo
+
+- Idioma del código: **español** (nombres de variables, comentarios, commits)
+- Rama principal: `Desarrollo` — **nadie trabaja directo aquí**
 - Una rama por sprint: `sprint-1-modelos`, `sprint-2-alertas`, etc.
-- Nunca trabajar directo en `Desarrollo`
-- El `.env` nunca se sube a GitHub
+- El `.env` **nunca** se sube a GitHub
+- Ningún código clínico entra a `Desarrollo` sin aprobación del Arquitecto
+- Commits: formato `feat:`, `fix:`, `docs:` + descripción en español
 
-## Roles del equipo
-- **Arquitecto IA**: define lógica clínica, valida reglas médicas,
-  trabaja con Claude Code
-- **Dev Full-Stack (Alejandro)**: implementa modelos y vistas,
-  configura infraestructura, trabaja con Codex CLI
+---
 
-## Cómo usar este archivo si eres un agente IA
-Lee este archivo completo antes de sugerir cualquier cambio al
-proyecto. Toda decisión técnica debe ser compatible con el contexto
-clínico descrito aquí. Las reglas del alert_engine no son
-negociables — tienen base en protocolos médicos reales de
-postoperatorio HIPEC/Sugarbaker.
+## Comandos Esenciales
+
+```bash
+# Posición correcta para todos los comandos manage.py
+cd Registro_Post_Quirurgico/Registro_Post_Quirurgico
+
+python manage.py check           # verificar sin errores
+python manage.py makemigrations  # después de cambiar models.py
+python manage.py migrate         # aplicar cambios a PostgreSQL
+python manage.py runserver       # iniciar servidor → http://127.0.0.1:8000/admin/
+```
