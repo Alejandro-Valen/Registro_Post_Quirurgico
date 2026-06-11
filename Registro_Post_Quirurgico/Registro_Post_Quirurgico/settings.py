@@ -4,7 +4,6 @@ from decouple import config
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = config('SECRET_KEY')
-
 DEBUG = config('DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = []
@@ -30,7 +29,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'Resgistro_Post_Quirurgico.urls'
+ROOT_URLCONF = 'Registro_Post_Quirurgico.urls'
 
 TEMPLATES = [
     {
@@ -47,7 +46,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'Resgistro_Post_Quirurgico.wsgi.application'
+WSGI_APPLICATION = 'Registro_Post_Quirurgico.wsgi.application'
 
 DATABASES = {
     'default': {
