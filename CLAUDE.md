@@ -70,7 +70,7 @@ Capturadas una vez al día por WhatsApp:
 
 ## Reglas del Motor de Alertas (alert_engine.py)
 
-**Archivo a crear:** `signos_sintomas/alert_engine.py`
+**Archivo:** `signos_sintomas/alert_engine.py` — implementado localmente en Sprint 2
 **Función principal:** `evaluar_registro(registro: RegistroDiario) -> list[Alerta]`
 
 | Regla | Condición exacta | Tipo Alerta | Severidad | Base clínica |
@@ -127,14 +127,14 @@ fecha_resolucion      DateTimeField null=True blank=True
 |--------|-------------|--------|
 | Sprint 0 | Configuración base y seguridad | ✅ Completado |
 | Sprint 1 | Modelos clínicos y base de datos | ✅ Completado |
-| Sprint 2 | Motor de alertas (alert_engine) | ⏳ Siguiente |
+| Sprint 2 | Motor de alertas (alert_engine) | ⏳ Implementado localmente |
 | Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Pendiente |
 | Sprint 4 | Dashboard oncólogo y notificaciones | ⏳ Pendiente |
 | Sprint 5 | Producción y despliegue | ⏳ Pendiente |
 
-**Punto actual:** Sprint 1 completado. Panel del oncólogo funcionando en
-`http://127.0.0.1:8000/admin/` con Pacientes, Registros Diarios y Alertas.
-Pendiente merge sprint-1-modelos → Desarrollo e iniciar Sprint 2.
+**Punto actual:** Sprint 2 implementado localmente en la rama `sprint-2-alertas`.
+El motor de alertas cubre las 4 reglas clínicas y tiene 7 pruebas unitarias OK.
+Pendiente push seguro, revisión del Arquitecto IA y merge posterior a `Desarrollo`.
 
 ---
 

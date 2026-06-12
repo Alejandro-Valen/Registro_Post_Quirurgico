@@ -101,20 +101,27 @@
 ---
 
 ## Sprint 2 — Motor de Alertas
-**Fecha:** pendiente
-**Responsable:** pendiente
-**Estado:** EN COLA ⏳
+**Fecha:** 12/06/2026
+**Responsable:** León (Arquitecto IA) + Codex
+**Estado:** IMPLEMENTADO LOCALMENTE ⏳
 
 ### Objetivo
 Implementar `alert_engine.py` con función `evaluar_registro(registro)` que
 evalúa un `RegistroDiario` y crea automáticamente objetos `Alerta` cuando
 detecta red flags del protocolo Sugarbaker/HIPEC.
 
-### Reglas a implementar
-1. temperatura >= 38.0°C → Alerta SEPSIS severidad ALTA
-2. aspecto_drenaje en ['purulento', 'fecaloide'] → Alerta FUGA_ANASTOMOTICA ALTA
-3. sin gases 3 días consecutivos → Alerta ILEO_PARALITICO ALTA
-4. episodios_nauseas > 3 → Alerta ILEO_PARALITICO MEDIA
+### Qué se hizo
+- Creado `signos_sintomas/alert_engine.py` con la función `evaluar_registro`.
+- Implementadas las 4 reglas clínicas del protocolo Sugarbaker/HIPEC.
+- Agregadas constantes clínicas auditables para umbrales y valores críticos.
+- Creadas 7 pruebas unitarias para reglas, valores límite y caso sin alertas.
+- Verificación: `python manage.py test signos_sintomas` → 7 pruebas OK.
+- Verificación: `python manage.py check` → 0 errores.
+
+### Pendiente antes de cerrar
+- Push seguro de la rama `sprint-2-alertas` a GitHub.
+- Revisión/aprobación del Arquitecto IA antes de merge.
+- Resolver después la duplicación de modelos clínicos en `home/models.py`.
 
 ---
 
