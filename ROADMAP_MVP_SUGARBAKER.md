@@ -4,7 +4,7 @@
 > **Para agentes IA:** Lee este archivo completo antes de sugerir cualquier acción.
 > Contiene el contexto clínico, el estado actual del proyecto, y los pasos pendientes.
 > El repositorio es: https://github.com/Alejandro-Valen/Registro_Post_Quirurgico
-> Rama principal: `Desarrollo` | Rama activa: `sprint-1-modelos`
+> Rama principal: `Desarrollo` | Rama activa: `sprint-2-alertas`
 
 ---
 
@@ -27,7 +27,8 @@ dashboard en Django Admin.
 
 **Ramas Git:**
 - `Desarrollo` — rama principal estable ✅ actualizada
-- `sprint-1-modelos` — rama de León ✅ activa
+- `sprint-1-modelos` — rama de León ✅ completada
+- `sprint-2-alertas` — rama de Sprint 2 ⏳ implementación local
 - `sprint-1-frontend` — rama de Alejandro ✅ activa
 
 ---
@@ -169,17 +170,23 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 
 ---
 
-### ⏳ FASE 2 — Motor de Alertas — SIGUIENTE SPRINT
-> Crear rama: `git checkout -b sprint-2-alertas`
+### ⏳ FASE 2 — Motor de Alertas — IMPLEMENTADO LOCALMENTE
+> Rama actual: `sprint-2-alertas`
 
-- [ ] Crear archivo signos_sintomas/alert_engine.py
-- [ ] Implementar función evaluar_registro(registro)
-- [ ] Regla 1: temperatura >= 38.0°C → crear Alerta tipo SEPSIS
-- [ ] Regla 2: drenaje purulento o fecaloide → crear Alerta FUGA_ANASTOMOTICA
-- [ ] Regla 3: sin gases 3 días consecutivos → crear Alerta ILEO_PARALITICO
-- [ ] Regla 4: vómito > 3 episodios → crear Alerta ILEO_PARALITICO
-- [ ] Escribir tests unitarios para las 4 reglas clínicas
+- [x] Crear archivo signos_sintomas/alert_engine.py
+- [x] Implementar función evaluar_registro(registro)
+- [x] Regla 1: temperatura >= 38.0°C → crear Alerta tipo SEPSIS
+- [x] Regla 2: drenaje purulento o fecaloide → crear Alerta FUGA_ANASTOMOTICA
+- [x] Regla 3: sin gases 3 días consecutivos → crear Alerta ILEO_PARALITICO
+- [x] Regla 4: vómito > 3 episodios → crear Alerta ILEO_PARALITICO
+- [x] Escribir tests unitarios para las 4 reglas clínicas
+- [x] Agregar pruebas de caso sano, valores límite y alertas combinadas
+- [x] python manage.py test signos_sintomas → 7 pruebas OK
+- [x] python manage.py check → 0 errores
+- [ ] Push seguro de sprint-2-alertas a GitHub
+- [ ] Revisión/aprobación del Arquitecto IA
 - [ ] Merge sprint-2-alertas → Desarrollo
+- [ ] Resolver después duplicación de modelos clínicos en home/models.py
 
 ---
 
@@ -312,5 +319,5 @@ DB_PORT=5432
 
 ---
 
-*Última actualización: Sprint 1 completado — Panel del oncólogo funcionando con 3 modelos clínicos*
-*Siguiente paso: Merge sprint-1-modelos → Desarrollo, luego iniciar Sprint 2 (alert_engine)*
+*Última actualización: Sprint 2 implementado localmente — Motor de alertas con 4 reglas clínicas y 7 pruebas OK*
+*Siguiente paso: push seguro de `sprint-2-alertas`, revisión del Arquitecto IA y merge posterior a `Desarrollo`*
