@@ -3,108 +3,384 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contacto</title>
+    <title>Contacto | Seguimiento Postquirurgico</title>
 
     <style>
-
-        *{
-            margin:0;
-            padding:0;
-            box-sizing:border-box;
-            font-family:Arial, Helvetica, sans-serif;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, Helvetica, sans-serif;
         }
 
-        body{
-            background:#f4f8fb;
+        :root {
+            --azul: #0d6efd;
+            --azul-oscuro: #084298;
+            --verde: #198754;
+            --rojo: #dc3545;
+            --fondo: #eef5fb;
+            --texto: #233142;
+            --gris: #687385;
+            --borde: #d9e5f2;
         }
 
-        header{
-            background:#0d6efd;
-            color:white;
-            padding:20px 50px;
-            display:flex;
-            justify-content:space-between;
+        body {
+            min-height: 100vh;
+            background: var(--fondo);
+            color: var(--texto);
         }
 
-        nav a{
-            color:white;
-            text-decoration:none;
-            margin-left:20px;
-            font-weight:bold;
+        header {
+            background: var(--azul);
+            color: white;
+            padding: 18px 8%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            box-shadow: 0 8px 22px rgba(13, 110, 253, 0.22);
         }
 
-        .container{
-            max-width:800px;
-            margin:60px auto;
-            background:white;
-            padding:40px;
-            border-radius:12px;
-            box-shadow:0 0 15px rgba(0,0,0,.1);
+        header h2 {
+            font-size: 20px;
+            line-height: 1.25;
         }
 
-        h1{
-            color:#0d6efd;
-            margin-bottom:20px;
+        nav {
+            display: flex;
+            gap: 10px;
         }
 
-        .info{
-            margin-top:25px;
-            line-height:2;
+        nav a {
+            color: white;
+            text-decoration: none;
+            padding: 9px 14px;
+            border-radius: 6px;
+            font-weight: bold;
+            transition: background 0.2s ease, transform 0.2s ease;
         }
 
-        footer{
-            background:#0d6efd;
-            color:white;
-            text-align:center;
-            padding:20px;
-            margin-top:50px;
+        nav a:hover,
+        nav a.activo {
+            background: rgba(255, 255, 255, 0.18);
+            transform: translateY(-1px);
         }
 
+        main {
+            width: min(1100px, 92%);
+            margin: 42px auto;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, #ffffff 0%, #e7f1ff 100%);
+            border: 1px solid var(--borde);
+            border-radius: 12px;
+            padding: 34px;
+            margin-bottom: 24px;
+        }
+
+        .etiqueta {
+            display: inline-block;
+            color: var(--azul-oscuro);
+            background: #dcecff;
+            padding: 7px 12px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 16px;
+        }
+
+        h1 {
+            color: var(--azul-oscuro);
+            font-size: clamp(30px, 5vw, 46px);
+            margin-bottom: 12px;
+        }
+
+        .hero p {
+            max-width: 760px;
+            color: var(--gris);
+            font-size: 18px;
+            line-height: 1.65;
+        }
+
+        .contenido {
+            display: grid;
+            grid-template-columns: 1.05fr 0.95fr;
+            gap: 24px;
+            align-items: start;
+        }
+
+        .panel {
+            background: white;
+            border: 1px solid var(--borde);
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 14px 30px rgba(18, 38, 63, 0.08);
+        }
+
+        .panel h2 {
+            color: var(--azul-oscuro);
+            font-size: 24px;
+            margin-bottom: 18px;
+        }
+
+        .info {
+            display: grid;
+            gap: 15px;
+        }
+
+        .dato {
+            display: flex;
+            gap: 14px;
+            padding: 16px;
+            border: 1px solid var(--borde);
+            border-radius: 10px;
+            background: #fbfdff;
+        }
+
+        .icono {
+            width: 42px;
+            height: 42px;
+            flex: 0 0 42px;
+            display: grid;
+            place-items: center;
+            border-radius: 10px;
+            color: white;
+            background: var(--azul);
+            font-size: 20px;
+        }
+
+        .dato strong {
+            display: block;
+            color: var(--texto);
+            margin-bottom: 4px;
+        }
+
+        .dato span,
+        .dato a {
+            color: var(--gris);
+            text-decoration: none;
+            line-height: 1.45;
+        }
+
+        .alerta {
+            margin-top: 18px;
+            padding: 18px;
+            border-left: 5px solid var(--rojo);
+            border-radius: 8px;
+            background: #fff1f2;
+            color: #842029;
+            line-height: 1.55;
+        }
+
+        form {
+            display: grid;
+            gap: 14px;
+        }
+
+        label {
+            font-weight: bold;
+            color: var(--texto);
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            border: 1px solid var(--borde);
+            border-radius: 8px;
+            padding: 13px 14px;
+            font-size: 15px;
+            color: var(--texto);
+            outline: none;
+            transition: border 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        input:focus,
+        textarea:focus {
+            border-color: var(--azul);
+            box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.12);
+        }
+
+        button {
+            border: none;
+            border-radius: 8px;
+            padding: 14px 18px;
+            background: var(--verde);
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.2s ease;
+        }
+
+        button:hover {
+            background: #146c43;
+            transform: translateY(-1px);
+        }
+
+        .nota {
+            color: var(--gris);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .exito {
+            padding: 14px 16px;
+            border-left: 5px solid var(--verde);
+            border-radius: 8px;
+            background: #d1e7dd;
+            color: #0f5132;
+            font-weight: bold;
+            line-height: 1.5;
+        }
+
+        footer {
+            background: var(--azul-oscuro);
+            color: white;
+            text-align: center;
+            padding: 22px;
+            margin-top: 50px;
+        }
+
+        @media (max-width: 760px) {
+            header {
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 18px 5%;
+            }
+
+            nav {
+                width: 100%;
+            }
+
+            nav a {
+                flex: 1;
+                text-align: center;
+            }
+
+            .hero {
+                padding: 24px;
+            }
+
+            .contenido {
+                grid-template-columns: 1fr;
+            }
+
+            .panel {
+                padding: 22px;
+            }
+        }
     </style>
-
 </head>
 <body>
 
 <header>
-
-    <h2>Seguimiento Postquirúrgico SugarBaker</h2>
+    <h2>Seguimiento Postquirurgico SugarBaker</h2>
 
     <nav>
         <a href="/">Inicio</a>
-        <a href="/contacto/">Contacto</a>
+        <a href="/contacto/" class="activo">Contacto</a>
     </nav>
-
 </header>
 
-<div class="container">
+<main>
+    <section class="hero">
+        <span class="etiqueta">Acompanamiento medico</span>
+        <h1>Contacto</h1>
+        <p>
+            Si presenta signos de alarma, dudas sobre su recuperacion o necesita orientacion,
+            comuniquese con el equipo medico responsable del seguimiento postquirurgico.
+        </p>
+    </section>
 
-    <h1>Contacto</h1>
+    <section class="contenido">
+        <div class="panel">
+            <h2>Canales de atencion</h2>
 
-    <p>
-        Si presenta signos de alarma o necesita orientación,
-        comuníquese con el equipo médico responsable.
-    </p>
+            <div class="info">
+                <div class="dato">
+                    <div class="icono">✉</div>
+                    <div>
+                        <strong>Correo</strong>
+                        <a href="mailto:soporte@hospital.com">soporte@hospital.com</a>
+                    </div>
+                </div>
 
-    <div class="info">
+                <div class="dato">
+                    <div class="icono">☎</div>
+                    <div>
+                        <strong>Telefono</strong>
+                        <a href="tel:+573000000000">+57 300 000 0000</a>
+                    </div>
+                </div>
 
-        <p><strong>Correo:</strong> soporte@hospital.com</p>
+                <div class="dato">
+                    <div class="icono">◷</div>
+                    <div>
+                        <strong>Horario</strong>
+                        <span>Lunes a viernes de 8:00 AM a 5:00 PM</span>
+                    </div>
+                </div>
 
-        <p><strong>Teléfono:</strong> +57 300 000 0000</p>
+                <div class="dato">
+                    <div class="icono">⌂</div>
+                    <div>
+                        <strong>Direccion</strong>
+                        <span>Rionegro, Antioquia, Colombia</span>
+                    </div>
+                </div>
+            </div>
 
-        <p><strong>Horario:</strong> Lunes a Viernes de 8:00 AM a 5:00 PM</p>
+            <div class="alerta">
+                <strong>Importante:</strong> si presenta fiebre, dolor intenso, sangrado,
+                dificultad para respirar o deterioro rapido, acuda a urgencias de inmediato.
+            </div>
+        </div>
 
-        <p><strong>Dirección:</strong> Rionegro-Antioquia, Colombia</p>
+        <div class="panel">
+            <h2>Enviar mensaje</h2>
 
-    </div>
+            <form method="POST" action="{% url 'contacto' %}">
+                {% csrf_token %}
 
-</div>
+                {% if mensaje_enviado %}
+                    <p class="exito">
+                        Su mensaje fue enviado correctamente. El equipo medico revisara la solicitud.
+                    </p>
+                {% endif %}
+
+                <div>
+                    <label for="nombre">Nombre completo</label>
+                    <input type="text" id="nombre" name="nombre" placeholder="Escriba su nombre" required>
+                </div>
+
+                <div>
+                    <label for="telefono">Telefono</label>
+                    <input type="tel" id="telefono" name="telefono" placeholder="+57 300 000 0000" required>
+                </div>
+
+                <div>
+                    <label for="mensaje">Mensaje</label>
+                    <textarea id="mensaje" name="mensaje" placeholder="Cuente brevemente que necesita" required></textarea>
+                </div>
+
+                <button type="submit">Enviar solicitud</button>
+
+                <p class="nota">
+                    La informacion enviada quedara registrada para revision del equipo medico.
+                </p>
+            </form>
+        </div>
+    </section>
+</main>
 
 <footer>
-
-    <p>
-        Sistema de Seguimiento Postquirúrgico © 2026
-    </p>
-
+    <p>Sistema de Seguimiento Postquirurgico © 2026</p>
 </footer>
 
 </body>
