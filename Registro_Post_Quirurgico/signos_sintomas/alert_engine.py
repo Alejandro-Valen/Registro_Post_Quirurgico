@@ -44,11 +44,11 @@ def evaluar_registro(registro):
         )
         alertas_creadas.append(alerta)
 
-    # Regla 3: Sin gases por 3 registros consecutivos
+    # Regla 3: Sin gases por 3 días postoperatorios consecutivos
     ultimos_registros = RegistroDiario.objects.filter(
         paciente=registro.paciente,
-        fecha_registro__lte=registro.fecha_registro
-    ).order_by('-fecha_registro')[:REGISTROS_SIN_GASES_ILEO]
+        dia_postoperatorio__lte=registro.dia_postoperatorio
+    ).order_by('-dia_postoperatorio', '-fecha_registro')[:REGISTROS_SIN_GASES_ILEO]
     if len(ultimos_registros) == REGISTROS_SIN_GASES_ILEO and all(
         not registro_diario.presencia_gases
         for registro_diario in ultimos_registros
