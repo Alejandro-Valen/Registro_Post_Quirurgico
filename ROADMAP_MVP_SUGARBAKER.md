@@ -4,7 +4,7 @@
 > **Para agentes IA:** Lee este archivo completo antes de sugerir cualquier acción.
 > Contiene el contexto clínico, el estado actual del proyecto, y los pasos pendientes.
 > El repositorio es: https://github.com/Alejandro-Valen/Registro_Post_Quirurgico
-> Rama principal: `Desarrollo` | Rama activa: `sprint-2-alertas`
+> Rama principal: `Desarrollo` | Rama activa: `Desarrollo` (Sprint 2 cerrado, Sprint 3 próximo)
 
 ---
 
@@ -26,9 +26,9 @@ dashboard en Django Admin.
 - Alejandro (Dev Full-Stack) — implementa código, trabaja con Codex CLI
 
 **Ramas Git:**
-- `Desarrollo` — rama principal estable ✅ actualizada
+- `Desarrollo` — rama principal estable ✅ actualizada (incluye Sprint 2 + fix 01b8a47)
 - `sprint-1-modelos` — rama de León ✅ completada
-- `sprint-2-alertas` — rama de Sprint 2 ⏳ implementación local
+- `sprint-2-alertas` — rama de Sprint 2 ✅ completada y mergeada a Desarrollo (PR #1)
 - `sprint-1-frontend` — rama de Alejandro ✅ activa
 
 ---
@@ -87,7 +87,7 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
         │   └── 0001_initial.py        ← ✅ tablas creadas en PostgreSQL
         ├── views.py                   ← ⏳ pendiente: webhook WhatsApp
         ├── urls.py                    ← ⏳ pendiente: rutas
-        ├── alert_engine.py            ← ⏳ pendiente: crear (Sprint 2)
+        ├── alert_engine.py            ← ✅ creado y mergeado (Sprint 2)
         └── bot.py                     ← ⏳ pendiente: crear (Sprint 3)
 ```
 
@@ -165,13 +165,13 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 - [x] Crear superusuario admin
 - [x] Verificar modelos visibles en http://127.0.0.1:8000/admin/
 - [x] Push migraciones a sprint-1-modelos
-- [ ] **⏳ PENDIENTE: Merge final sprint-1-modelos → Desarrollo**
-- [ ] **⏳ PENDIENTE: Actualizar BITACORA.md con Sprint 1 completado**
+- [x] Merge final sprint-1-modelos → Desarrollo
+- [x] Actualizar BITACORA.md con Sprint 1 completado
 
 ---
 
-### ⏳ FASE 2 — Motor de Alertas — IMPLEMENTADO LOCALMENTE
-> Rama actual: `sprint-2-alertas`
+### ✅ FASE 2 — Motor de Alertas — COMPLETADA
+> Mergeada a `Desarrollo` vía PR #1
 
 - [x] Crear archivo signos_sintomas/alert_engine.py
 - [x] Implementar función evaluar_registro(registro)
@@ -183,14 +183,15 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 - [x] Agregar pruebas de caso sano, valores límite y alertas combinadas
 - [x] python manage.py test signos_sintomas → 7 pruebas OK
 - [x] python manage.py check → 0 errores
-- [ ] Push seguro de sprint-2-alertas a GitHub
-- [ ] Revisión/aprobación del Arquitecto IA
-- [ ] Merge sprint-2-alertas → Desarrollo
-- [ ] Resolver después duplicación de modelos clínicos en home/models.py
+- [x] Push seguro de sprint-2-alertas a GitHub
+- [x] Revisión/aprobación del Arquitecto IA (post-merge — ver nota de proceso en BITACORA.md)
+- [x] Merge sprint-2-alertas → Desarrollo (PR #1)
+- [x] Resolver duplicación de modelos clínicos en home/models.py
+- [x] Fix post-merge Regla 3 (dia_postoperatorio) — commit 01b8a47
 
 ---
 
-### ⏳ FASE 3 — Bot WhatsApp — PENDIENTE
+### ⏳ FASE 3 — Bot WhatsApp — SIGUIENTE
 > Crear rama: `git checkout -b sprint-3-whatsapp`
 
 - [ ] Crear cuenta Twilio y activar sandbox WhatsApp
@@ -319,5 +320,5 @@ DB_PORT=5432
 
 ---
 
-*Última actualización: Sprint 2 implementado localmente — Motor de alertas con 4 reglas clínicas y 7 pruebas OK*
-*Siguiente paso: push seguro de `sprint-2-alertas`, revisión del Arquitecto IA y merge posterior a `Desarrollo`*
+*Última actualización: Sprint 2 completado y mergeado a `Desarrollo` (PR #1) — Motor de alertas con 4 reglas clínicas, 7 pruebas OK y fix post-merge de Regla 3 (commit `01b8a47`)*
+*Siguiente paso: Sprint 3 — Bot WhatsApp (Twilio)*

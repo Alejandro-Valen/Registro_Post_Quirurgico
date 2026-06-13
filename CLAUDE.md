@@ -70,7 +70,7 @@ Capturadas una vez al día por WhatsApp:
 
 ## Reglas del Motor de Alertas (alert_engine.py)
 
-**Archivo:** `signos_sintomas/alert_engine.py` — implementado localmente en Sprint 2
+**Archivo:** `signos_sintomas/alert_engine.py` — implementado en Sprint 2, mergeado a `Desarrollo` (PR #1), con fix post-merge en commit `01b8a47`
 **Función principal:** `evaluar_registro(registro: RegistroDiario) -> list[Alerta]`
 
 | Regla | Condición exacta | Tipo Alerta | Severidad | Base clínica |
@@ -127,14 +127,16 @@ fecha_resolucion      DateTimeField null=True blank=True
 |--------|-------------|--------|
 | Sprint 0 | Configuración base y seguridad | ✅ Completado |
 | Sprint 1 | Modelos clínicos y base de datos | ✅ Completado |
-| Sprint 2 | Motor de alertas (alert_engine) | ⏳ Implementado localmente |
-| Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Pendiente |
+| Sprint 2 | Motor de alertas (alert_engine) | ✅ Completado (con fix post-merge 01b8a47) |
+| Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Siguiente |
 | Sprint 4 | Dashboard oncólogo y notificaciones | ⏳ Pendiente |
 | Sprint 5 | Producción y despliegue | ⏳ Pendiente |
 
-**Punto actual:** Sprint 2 implementado localmente en la rama `sprint-2-alertas`.
-El motor de alertas cubre las 4 reglas clínicas y tiene 7 pruebas unitarias OK.
-Pendiente push seguro, revisión del Arquitecto IA y merge posterior a `Desarrollo`.
+**Punto actual:** Sprint 2 completado y mergeado a `Desarrollo` (PR #1). El motor
+de alertas cubre las 4 reglas clínicas con 7 pruebas unitarias OK. Se detectó y
+corrigió un bug post-merge en la Regla 3 (commit `01b8a47`: ahora usa
+`dia_postoperatorio` en vez de `fecha_registro`). Siguiente paso: Sprint 3 —
+Bot WhatsApp (Twilio).
 
 ---
 
