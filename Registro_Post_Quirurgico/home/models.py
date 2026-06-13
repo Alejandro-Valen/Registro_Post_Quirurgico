@@ -1,5 +1,7 @@
-from django.db import models
+"""
+Modelos de la app home.
 
+<<<<<<< HEAD
 
 class MensajeContacto(models.Model):
     nombre = models.CharField(max_length=100)
@@ -15,3 +17,7 @@ class MensajeContacto(models.Model):
 
     def __str__(self):
         return f"{self.nombre} - {self.fecha_creacion:%Y-%m-%d %H:%M}"
+=======
+Los modelos clínicos viven exclusivamente en signos_sintomas.models.
+"""
+>>>>>>> origin/Desarrollo
