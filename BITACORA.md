@@ -137,8 +137,60 @@ detecta red flags del protocolo Sugarbaker/HIPEC.
 ---
 
 ## Sprint 3 — Bot WhatsApp
-**Fecha:** pendiente
-**Estado:** EN COLA ⏳
+**Fecha:** 13/06/2026
+**Responsable:** León (Arquitecto IA) con Claude Code
+**Estado:** EN CURSO ⏳ (pasos 1-2 completados)
+
+### Objetivo
+Implementar el bot de WhatsApp que captura la telemetría diaria del paciente
+mediante una máquina de estados, crea el `RegistroDiario` y dispara el
+`alert_engine`. El paciente nunca ve alertas, solo confirmación neutra.
+
+### Paso 1 — Modelos (commit `68950ef`)
+- Creado modelo `ConversacionWhatsApp`: persiste el estado de la máquina de
+  estados, necesario porque cada mensaje de Twilio llega como una petición HTTP
+  independiente. Guarda respuestas parciales (`temp_*`) hasta COMPLETADO.
+- Agregado campo `cantidad_drenaje` a `RegistroDiario` (escala cualitativa
+  poco/normal/mucho/sin_drenaje). `volumen_drenaje_ml` pasa a opcional para los
+  ml que el paciente agregue voluntariamente.
+- `cantidad_drenaje` quedó `null=True` SIN default (decisión del Arquitecto):
+  un registro antiguo en `null` = "dato no capturado" (honesto), no falsamente
+  "sin drenaje".
+- Migración `0002` generada y aplicada a `sugarbaker_db`.
+
+### Paso 2 — Bot (commit `109afc7`)
+- Creado `signos_sintomas/bot.py`: lógica pura `procesar_mensaje(telefono, texto)
+  -> texto`, sin acoplamiento a HTTP/Twilio (testeable directo).
+- Máquina de estados de 5 preguntas: temperatura → dolor → aspecto drenaje →
+  cantidad drenaje (se omite si no hay drenaje) → gases+náuseas → COMPLETADO.
+- Lenguaje coloquial, tuteo, tono cálido. Opciones de drenaje en lenguaje simple
+  (no términos médicos). Extracción opcional de ml ("poco, 30ml").
+- Dudas del paciente respondidas con predefinidos conservadores
+  (fiebre/comer/dolor/fallback).
+- Creado `signos_sintomas/knowledge_base.md` como placeholder (RAG diferido a
+  FASE 5).
+- **18 pruebas unitarias OK** (7 del alert_engine + 11 del bot);
+  `manage.py check` sin errores.
+
+### Decisiones tomadas
+- Gases + náuseas en una sola pregunta (formato "sí, 0"), aprobado por el
+  Arquitecto como clínicamente aceptable para pacientes en recuperación.
+- Sin bloqueo horario en `bot.py`: el envío automático 7-10 AM Bogotá se maneja
+  en FASE 4 con Celery.
+- `_parse_gases_nauseas` usa `\bno se\b` con límite de palabra: "no sé" pide
+  reintento, pero "no sentí náuseas" se acepta como respuesta válida.
+
+### Pendiente Sprint 3 (paso 3 — próxima sesión)
+- `views.py`: webhook de Twilio (validación de firma `X-Twilio-Signature`,
+  `csrf_exempt`).
+- `urls.py` de la app y del proyecto: ruta del webhook.
+- Config Twilio en `settings.py` / `.env` / `requirements.txt`.
+
+### Diferido a sprints posteriores
+- **FASE 4:** envío automático matutino 7-10 AM Bogotá (Celery/cron) y
+  notificación al médico por email/SMS.
+- **FASE 5:** capa RAG que lea el `knowledge_base.md` real (pendiente acceso al
+  Drive del médico).
 
 ---
 

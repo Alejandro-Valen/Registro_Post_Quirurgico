@@ -4,7 +4,7 @@
 > **Para agentes IA:** Lee este archivo completo antes de sugerir cualquier acción.
 > Contiene el contexto clínico, el estado actual del proyecto, y los pasos pendientes.
 > El repositorio es: https://github.com/Alejandro-Valen/Registro_Post_Quirurgico
-> Rama principal: `Desarrollo` | Rama activa: `Desarrollo` (Sprint 2 cerrado, Sprint 3 próximo)
+> Rama principal: `Desarrollo` | Rama activa: `sprint-3-whatsapp` (Sprint 3 en curso, pasos 1-2)
 
 ---
 
@@ -81,14 +81,16 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
     │       ├── index.html
     │       └── contacto.html
     └── signos_sintomas/               ← app núcleo clínico
-        ├── models.py                  ← ✅ Paciente, RegistroDiario, Alerta
+        ├── models.py                  ← ✅ Paciente, RegistroDiario, Alerta, ConversacionWhatsApp
         ├── admin.py                   ← ✅ panel del oncólogo configurado
         ├── migrations/
-        │   └── 0001_initial.py        ← ✅ tablas creadas en PostgreSQL
-        ├── views.py                   ← ⏳ pendiente: webhook WhatsApp
-        ├── urls.py                    ← ⏳ pendiente: rutas
+        │   ├── 0001_initial.py        ← ✅ tablas creadas en PostgreSQL
+        │   └── 0002_...cantidad...    ← ✅ cantidad_drenaje + ConversacionWhatsApp
+        ├── views.py                   ← ⏳ paso 3: webhook WhatsApp
+        ├── urls.py                    ← ⏳ paso 3: rutas
         ├── alert_engine.py            ← ✅ creado y mergeado (Sprint 2)
-        └── bot.py                     ← ⏳ pendiente: crear (Sprint 3)
+        ├── knowledge_base.md          ← ✅ placeholder (RAG diferido a FASE 5)
+        └── bot.py                     ← ✅ máquina de estados, 18 tests OK (Sprint 3)
 ```
 
 ---
@@ -191,21 +193,35 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 
 ---
 
-### ⏳ FASE 3 — Bot WhatsApp — SIGUIENTE
-> Crear rama: `git checkout -b sprint-3-whatsapp`
+### ⏳ FASE 3 — Bot WhatsApp — EN CURSO (pasos 1-2 completados)
+> Rama: `sprint-3-whatsapp` (pusheada a origin)
 
+**Paso 1 — Modelos (commit `68950ef`):**
+- [x] Modelo ConversacionWhatsApp (persiste estado de la máquina de estados)
+- [x] Campo cantidad_drenaje en RegistroDiario (cualitativo) + volumen_drenaje_ml opcional
+- [x] Migración 0002 generada y aplicada
+
+**Paso 2 — Bot (commit `109afc7`):**
+- [x] Crear signos_sintomas/bot.py con máquina de estados (5 preguntas, lógica pura)
+- [x] Pregunta 1: temperatura
+- [x] Pregunta 2: dolor EVA
+- [x] Pregunta 3A: aspecto drenaje / Pregunta 3B: cantidad drenaje
+- [x] Pregunta 4 (estado gases+náuseas): presencia de gases y náuseas
+- [x] Respuestas a dudas con predefinidos + knowledge_base.md placeholder
+- [x] 18 pruebas unitarias OK + manage.py check sin errores
+
+**Paso 3 — Webhook (PENDIENTE, próxima sesión):**
 - [ ] Crear cuenta Twilio y activar sandbox WhatsApp
-- [ ] Crear signos_sintomas/bot.py con máquina de estados
-- [ ] Pregunta 1: temperatura
-- [ ] Pregunta 2: dolor EVA
-- [ ] Pregunta 3: aspecto drenaje y volumen
-- [ ] Pregunta 4: presencia de gases y náuseas
-- [ ] Crear vista webhook en views.py que recibe POST de Twilio
-- [ ] Configurar URL del webhook en signos_sintomas/urls.py
+- [ ] Crear vista webhook en views.py (POST Twilio + validación firma + csrf_exempt)
+- [ ] Configurar URL del webhook en signos_sintomas/urls.py y urls.py del proyecto
+- [ ] Config Twilio en settings.py / .env / requirements.txt
 - [ ] Exponer webhook con ngrok para desarrollo local
-- [ ] Conectar: webhook → RegistroDiario → alert_engine → respuesta paciente
+- [ ] Conectar: webhook → bot.procesar_mensaje → RegistroDiario → alert_engine
 - [ ] Prueba end-to-end con WhatsApp real
 - [ ] Merge sprint-3-whatsapp → Desarrollo
+
+> **Diferido:** envío automático matutino 7-10 AM Bogotá → FASE 4 (Celery).
+> Capa RAG sobre knowledge_base.md real → FASE 5 (pendiente acceso Drive médico).
 
 ---
 
@@ -320,5 +336,5 @@ DB_PORT=5432
 
 ---
 
-*Última actualización: Sprint 2 completado y mergeado a `Desarrollo` (PR #1) — Motor de alertas con 4 reglas clínicas, 7 pruebas OK y fix post-merge de Regla 3 (commit `01b8a47`)*
-*Siguiente paso: Sprint 3 — Bot WhatsApp (Twilio)*
+*Última actualización: Sprint 3 en curso (rama `sprint-3-whatsapp`) — pasos 1-2 completados: modelo ConversacionWhatsApp, campo cantidad_drenaje, bot.py con máquina de estados (18 tests OK) y knowledge_base.md placeholder*
+*Siguiente paso: paso 3 — views.py (webhook Twilio) + urls.py + config Twilio*

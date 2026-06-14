@@ -128,15 +128,34 @@ fecha_resolucion      DateTimeField null=True blank=True
 | Sprint 0 | Configuración base y seguridad | ✅ Completado |
 | Sprint 1 | Modelos clínicos y base de datos | ✅ Completado |
 | Sprint 2 | Motor de alertas (alert_engine) | ✅ Completado (con fix post-merge 01b8a47) |
-| Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Siguiente |
+| Sprint 3 | Bot WhatsApp (Twilio) | ⏳ En curso (pasos 1-2 completados) |
 | Sprint 4 | Dashboard oncólogo y notificaciones | ⏳ Pendiente |
 | Sprint 5 | Producción y despliegue | ⏳ Pendiente |
 
-**Punto actual:** Sprint 2 completado y mergeado a `Desarrollo` (PR #1). El motor
-de alertas cubre las 4 reglas clínicas con 7 pruebas unitarias OK. Se detectó y
-corrigió un bug post-merge en la Regla 3 (commit `01b8a47`: ahora usa
-`dia_postoperatorio` en vez de `fecha_registro`). Siguiente paso: Sprint 3 —
-Bot WhatsApp (Twilio).
+**Punto actual:** Sprint 3 en curso en la rama `sprint-3-whatsapp` (pasos 1 y 2
+completados, pusheados a origin):
+
+- **Paso 1 — Modelos:** modelo `ConversacionWhatsApp` creado (persiste el estado
+  de la máquina de estados, ya que cada mensaje de Twilio llega como petición
+  HTTP independiente). Campo `cantidad_drenaje` (escala cualitativa
+  poco/normal/mucho) agregado a `RegistroDiario`; `volumen_drenaje_ml` pasa a ser
+  opcional. Migración `0002` aplicada.
+- **Paso 2 — Bot:** `signos_sintomas/bot.py` con máquina de estados de 5 preguntas
+  (lógica pura: `procesar_mensaje(telefono, texto) -> texto`, sin HTTP). El bot NO
+  diagnostica ni muestra alertas al paciente; solo captura telemetría, delega en
+  `alert_engine` y responde confirmación neutra. **18 pruebas unitarias OK.**
+  `knowledge_base.md` creado como placeholder con respuestas predefinidas
+  conservadoras (RAG diferido).
+
+**Pendiente paso 3:** `views.py` (webhook Twilio + validación de firma +
+`csrf_exempt`), `urls.py` de la app y del proyecto, config Twilio en
+`settings.py`/`.env`/`requirements.txt`.
+
+**Diferido:**
+- FASE 4 — envío automático matutino 7-10 AM Bogotá (Celery/cron) + notificación
+  al médico.
+- FASE 5 — capa RAG que lea el `knowledge_base.md` real (acceso Drive médico
+  pendiente).
 
 ---
 
