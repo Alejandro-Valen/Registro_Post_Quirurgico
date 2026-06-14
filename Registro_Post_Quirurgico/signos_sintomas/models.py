@@ -50,7 +50,7 @@ class RegistroDiario(models.Model):
     volumen_drenaje_ml = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text="Volumen del drenaje en mililitros"
+        help_text="Volumen en ml — OPCIONAL, solo si el paciente lo midió"
     )
     ASPECTO_CHOICES = [
         ('seroso',      'Seroso'),
@@ -59,10 +59,23 @@ class RegistroDiario(models.Model):
         ('fecaloide',   'Fecaloide'),
         ('sin_drenaje', 'Sin drenaje'),
     ]
+    CANTIDAD_DRENAJE_CHOICES = [
+        ('poco',        'Poco (menos de lo normal)'),
+        ('normal',      'Normal (similar a días anteriores)'),
+        ('mucho',       'Mucho (más de lo normal)'),
+        ('sin_drenaje', 'No tengo drenaje'),
+    ]
     aspecto_drenaje = models.CharField(
         max_length=20,
         choices=ASPECTO_CHOICES,
         default='sin_drenaje'
+    )
+    cantidad_drenaje = models.CharField(
+        max_length=12,
+        choices=CANTIDAD_DRENAJE_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Escala cualitativa reportada por el paciente vía WhatsApp"
     )
     presencia_gases = models.BooleanField(
         default=False,
@@ -143,3 +156,79 @@ class Alerta(models.Model):
     def __str__(self):
         estado = "Resuelta" if self.resuelta else "ACTIVA"
         return f"[{estado}] {self.get_tipo_display()} — {self.paciente.nombre_completo}"
+
+
+class ConversacionWhatsApp(models.Model):
+    """
+    Mantiene el estado de la conversación diaria del bot con un paciente.
+
+    Cada mensaje de WhatsApp (vía Twilio) llega como una petición HTTP
+    independiente, así que el estado de la máquina de estados debe persistir
+    en BD. Las respuestas se acumulan en campos 'temp_' hasta COMPLETADO,
+    momento en que bot.py crea el RegistroDiario y dispara el alert_engine.
+    """
+
+    # --- Estados de la máquina (5 preguntas) ---
+    ESTADO_INICIO            = 'INICIO'
+    ESTADO_TEMPERATURA       = 'ESPERANDO_TEMPERATURA'
+    ESTADO_DOLOR             = 'ESPERANDO_DOLOR'
+    ESTADO_ASPECTO_DRENAJE   = 'ESPERANDO_ASPECTO_DRENAJE'
+    ESTADO_CANTIDAD_DRENAJE  = 'ESPERANDO_CANTIDAD_DRENAJE'
+    ESTADO_GASES_NAUSEAS     = 'ESPERANDO_GASES_NAUSEAS'
+    ESTADO_COMPLETADO        = 'COMPLETADO'
+
+    ESTADO_CHOICES = [
+        (ESTADO_INICIO,           'Inicio'),
+        (ESTADO_TEMPERATURA,      'Esperando temperatura'),
+        (ESTADO_DOLOR,            'Esperando dolor EVA'),
+        (ESTADO_ASPECTO_DRENAJE,  'Esperando aspecto del drenaje'),
+        (ESTADO_CANTIDAD_DRENAJE, 'Esperando cantidad del drenaje'),
+        (ESTADO_GASES_NAUSEAS,    'Esperando gases y náuseas'),
+        (ESTADO_COMPLETADO,       'Completado'),
+    ]
+
+    paciente = models.OneToOneField(
+        Paciente,
+        on_delete=models.PROTECT,
+        related_name='conversacion',
+        help_text="Cada paciente tiene una sola conversación activa con el bot"
+    )
+    estado = models.CharField(
+        max_length=30,
+        choices=ESTADO_CHOICES,
+        default=ESTADO_INICIO,
+    )
+
+    # --- Respuestas parciales del día (se reinician en cada ciclo diario) ---
+    temp_temperatura = models.DecimalField(
+        max_digits=4, decimal_places=1, null=True, blank=True
+    )
+    temp_dolor_eva = models.PositiveSmallIntegerField(null=True, blank=True)
+    temp_aspecto_drenaje = models.CharField(
+        max_length=20, choices=RegistroDiario.ASPECTO_CHOICES,
+        null=True, blank=True
+    )
+    temp_cantidad_drenaje = models.CharField(
+        max_length=12, choices=RegistroDiario.CANTIDAD_DRENAJE_CHOICES,
+        null=True, blank=True
+    )
+    temp_volumen_drenaje_ml = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="ml extraídos del mensaje si el paciente los agregó (opcional)"
+    )
+    temp_presencia_gases = models.BooleanField(null=True, blank=True)
+    temp_episodios_nauseas = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    # --- Control "un registro por día" ---
+    fecha_ultimo_registro = models.DateField(
+        null=True, blank=True,
+        help_text="Día en que el paciente completó su último registro"
+    )
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Conversación WhatsApp"
+        verbose_name_plural = "Conversaciones WhatsApp"
+
+    def __str__(self):
+        return f"{self.paciente.nombre_completo} — {self.get_estado_display()}"
