@@ -235,7 +235,7 @@ fuente válida hasta tener los PDFs reales.
 | Sprint 1 | Modelos clínicos y base de datos | ✅ Completado |
 | Sprint 1 Frontend | Formulario de contacto, templates, admin home | ✅ Completado |
 | Sprint 2 | Motor de alertas (alert_engine) | ✅ Completado (fix post-merge 01b8a47) |
-| Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Funcional end-to-end — pendiente solo merge a Desarrollo |
+| Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Funcional end-to-end — merge a Desarrollo POSPUESTO a propósito (ver nota) |
 | Sprint 4 | Dashboard oncólogo y notificaciones | ⏳ Pendiente |
 | Sprint 5 | Producción, despliegue y RAG con PDFs reales | ⏳ Pendiente |
 
@@ -255,8 +255,14 @@ commit de código `de48db9`). **Prueba end-to-end real con WhatsApp exitosa.**
   reales. Prueba end-to-end exitosa: mensaje real → webhook → bot →
   `RegistroDiario` → `alert_engine` → `Alerta`, verificado en BD. Se resolvió un
   `400` (ALLOWED_HOSTS) y un `403` (firma) — ver BITACORA, sesión Twilio+ngrok.
-- ⏳ **Único pendiente Sprint 3:** merge `sprint-3-whatsapp` → `Desarrollo` con
-  aprobación del Arquitecto.
+- ⏳ **Único pendiente Sprint 3:** merge `sprint-3-whatsapp` → `Desarrollo`.
+
+> **Merge POSPUESTO deliberadamente (decisión del Arquitecto, 16/06/2026):** NO
+> mergear todavía. Los PDFs clínicos del médico llegan ~18/06/2026 y podrían
+> modificar los **umbrales del `alert_engine`** (no solo el `knowledge_base.md`).
+> Mergear ahora obligaría a hacerlo dos veces. Se espera a auditar los PDFs,
+> ajustar reglas si aplica, y recién entonces mergear. Esto es una decisión
+> consciente, no un olvido.
 
 **Lección clave de la conexión Twilio:** el Sandbox de WhatsApp firma sus webhooks
 con el **Auth Token PRIMARIO** (Twilio Console → Account Dashboard), NO con el de

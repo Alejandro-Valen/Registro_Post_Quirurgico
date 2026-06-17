@@ -332,6 +332,13 @@ alerta quedó únicamente en BD para el oncólogo.
 - Merge `sprint-3-whatsapp` → `Desarrollo` (con aprobación del Arquitecto). Es lo
   único que falta para cerrar el Sprint 3.
 
+> **Merge POSPUESTO deliberadamente (decisión del Arquitecto, 16/06/2026):** no se
+> mergea todavía. Los PDFs clínicos del médico llegan ~18/06/2026 y podrían
+> modificar los **umbrales del `alert_engine`**, no solo el `knowledge_base.md`.
+> Mergear ahora obligaría a repetir el merge tras la auditoría. Plan: esperar los
+> PDFs → auditar reglas del `alert_engine` → ajustar si aplica → luego mergear.
+> Queda registrado para que conste que es una decisión consciente, no un olvido.
+
 ---
 
 ## Sprint 4 — Dashboard y Notificaciones
