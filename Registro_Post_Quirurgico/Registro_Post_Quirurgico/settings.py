@@ -1,12 +1,20 @@
 from pathlib import Path
-from decouple import config
+from decouple import config, Csv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = []
+# Hosts permitidos: se definen por .env (separados por coma), NUNCA con wildcard
+# '*' en el código. Dev: agrega tu dominio de ngrok. Prod: el dominio real.
+# Si queda vacío y DEBUG=False, Django rechaza todo (fail-closed seguro).
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='', cast=Csv())
+
+# En desarrollo, garantizar acceso local aunque se haya definido un host de ngrok
+# en .env (definir ALLOWED_HOSTS desactiva el permiso automático de localhost).
+if DEBUG:
+    ALLOWED_HOSTS += ['localhost', '127.0.0.1']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
