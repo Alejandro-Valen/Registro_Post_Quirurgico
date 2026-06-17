@@ -235,12 +235,12 @@ fuente válida hasta tener los PDFs reales.
 | Sprint 1 | Modelos clínicos y base de datos | ✅ Completado |
 | Sprint 1 Frontend | Formulario de contacto, templates, admin home | ✅ Completado |
 | Sprint 2 | Motor de alertas (alert_engine) | ✅ Completado (fix post-merge 01b8a47) |
-| Sprint 3 | Bot WhatsApp (Twilio) | ⏳ En curso — pasos 1, 2 y 3 completados |
+| Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Funcional end-to-end — pendiente solo merge a Desarrollo |
 | Sprint 4 | Dashboard oncólogo y notificaciones | ⏳ Pendiente |
 | Sprint 5 | Producción, despliegue y RAG con PDFs reales | ⏳ Pendiente |
 
 **Punto actual:** Sprint 3, rama `sprint-3-whatsapp`, pusheada a origin (último
-commit de código `832873d`).
+commit de código `de48db9`). **Prueba end-to-end real con WhatsApp exitosa.**
 
 - ✅ **Paso 1:** modelo `ConversacionWhatsApp` + campo `cantidad_drenaje` en
   `RegistroDiario` + migración `0002` aplicada.
@@ -251,13 +251,18 @@ commit de código `832873d`).
   Twilio en `settings.py` (`TWILIO_VALIDATE_SIGNATURE` default True,
   `TWILIO_AUTH_TOKEN`, headers de proxy ngrok), `twilio==9.10.9` +
   `requirements.txt`, `.env.example`. **22 tests OK** (18 bot/alertas + 4 webhook).
-- ⏳ **Paso 4 (siguiente):** credenciales Twilio reales en `.env` local, cuenta +
-  sandbox WhatsApp, exponer webhook con ngrok, prueba end-to-end con WhatsApp
-  real, y merge `sprint-3-whatsapp` → `Desarrollo`.
+- ✅ **Paso 4 (conexión real):** sandbox WhatsApp + ngrok + `.env` con credenciales
+  reales. Prueba end-to-end exitosa: mensaje real → webhook → bot →
+  `RegistroDiario` → `alert_engine` → `Alerta`, verificado en BD. Se resolvió un
+  `400` (ALLOWED_HOSTS) y un `403` (firma) — ver BITACORA, sesión Twilio+ngrok.
+- ⏳ **Único pendiente Sprint 3:** merge `sprint-3-whatsapp` → `Desarrollo` con
+  aprobación del Arquitecto.
 
-**Riesgo conocido (paso 4):** la validación de firma detrás de ngrok exige que
-`build_absolute_uri()` coincida exactamente con la URL pública firmada por
-Twilio. Settings de proxy ya puestos, pero falta probar end-to-end.
+**Lección clave de la conexión Twilio:** el Sandbox de WhatsApp firma sus webhooks
+con el **Auth Token PRIMARIO** (Twilio Console → Account Dashboard), NO con el de
+Test Credentials; usar el de Test causa `403`. Para ngrok free, `ALLOWED_HOSTS`
+usa el comodín `.ngrok-free.dev` (el subdominio cambia en cada reinicio). Detalle
+completo en BITACORA.md.
 
 **Diferido explícitamente (no es parte del Sprint 3):**
 - FASE 4 — envío automático matutino 7:00-10:00 AM Bogotá vía Celery/cron, y

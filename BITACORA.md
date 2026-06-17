@@ -244,6 +244,96 @@ mediante una máquina de estados, crea el `RegistroDiario` y dispara el
 
 ---
 
+## Sesión: Sprint 3 - Conexión Twilio + ngrok end-to-end
+**Fecha:** 16/06/2026 — 17/06/2026
+**Responsable:** León (Arquitecto IA) con Claude Code
+**Estado:** PASO 4 funcional ✅ (prueba real exitosa; pendiente solo el merge)
+
+### Qué se logró
+Prueba real end-to-end exitosa: mensaje de WhatsApp real → webhook → bot →
+`RegistroDiario` → `alert_engine` → `Alerta`, verificado contra la base de datos.
+Las 5 preguntas funcionaron, incluyendo reintentos correctos ante respuestas
+ambiguas.
+
+### Cronología de errores y cómo se resolvieron
+
+**1. ERROR: "Invalid HTTP_HOST header" (400 Bad Request)**
+- **Causa:** `ALLOWED_HOSTS` vacío en `settings.py` rechazaba el dominio de ngrok.
+- **Solución:** `ALLOWED_HOSTS` configurable por `.env` usando `decouple` + `Csv()`,
+  con comodín de subdominio `.ngrok-free.dev` para no editar cada vez que ngrok
+  reinicia el túnel (el subdominio cambia en plan free). Commit `de48db9`.
+- **Lección:** en producción esto debe ser el dominio real, nunca un wildcard `'*'`.
+
+**2. ERROR: "403 Forbidden" en el webhook tras resolver lo anterior**
+- **Causa raíz:** `TWILIO_AUTH_TOKEN` en `.env` era el TEST Auth Token (de la
+  sección "Test Credentials" en Twilio Console), pero el Sandbox de WhatsApp firma
+  sus webhooks con el AUTH TOKEN PRIMARIO (Live), no con el de pruebas. Es una
+  confusión muy común y nada intuitiva en Twilio.
+- **Cómo se diagnosticó:** se agregó un log temporal en `_firma_twilio_valida` que
+  imprimía `build_absolute_uri()`, `scheme`, `get_host()`, `request.POST` completo
+  y los primeros 8 caracteres del token. Esto descartó los problemas de http/https
+  y de parseo del body, dejando claro que el problema era el token incorrecto.
+  (El log temporal se removió después; no dejó rastro en el código commiteado.)
+- **Solución:** usar el Auth Token primario, ubicado en Twilio Console → Account
+  Dashboard (NO en la sección de Sandbox, NI en "API keys & tokens", NI en
+  "General Settings" — ahí solo aparece a veces el Account SID).
+- **RUTA EXACTA para encontrarlo la próxima vez:** Twilio Console → clic en
+  "Twilio Home" (logo superior izquierdo) → "CONSOLE" → "Account Dashboard" en el
+  menú lateral → sección "Account Info" con el Auth Token primario y botón "Show".
+- **Lección crítica:** documentado en `.env.example` con un comentario explícito de
+  que debe ser el Auth Token PRIMARIO, nunca el de Test Credentials, para
+  conexiones con el Sandbox de WhatsApp.
+
+**3. CONFUSIÓN: navegación en Twilio Console para encontrar el Auth Token primario**
+- Se intentó sin éxito en: `/us1/account/manage-account/general-settings` (solo
+  mostró el Account SID), la sección "API keys & tokens" (mostró API Keys, no el
+  Auth Token), y búsquedas en la barra superior que devolvieron enlaces a
+  documentación en vez de la pantalla real.
+- La ruta que funcionó: **Twilio Home → Console → Account Dashboard.**
+
+### Sobre ngrok — notas para la próxima sesión
+- El plan free de ngrok genera un subdominio nuevo cada vez que se reinicia el
+  túnel (ej. `trifle-agnostic-roping.ngrok-free.dev`) — por eso el comodín
+  `.ngrok-free.dev` en `ALLOWED_HOSTS` evita tener que editar `.env` cada vez.
+- El webhook de Twilio en el Sandbox ("When a message comes in") debe configurarse
+  con la URL completa:
+  `https://[subdominio].ngrok-free.dev/signos_sintomas/webhook/whatsapp/`
+  con método POST.
+- Cada vez que se reinicia ngrok en plan free, el subdominio cambia, así que hay
+  que volver a actualizar esa URL en Twilio Console → Sandbox Settings.
+- ngrok requiere autenticación con authtoken (cuenta gratuita en ngrok.com) antes
+  de poder usar `ngrok http 8000`.
+- **IMPORTANTE:** nunca compartir el authtoken de ngrok ni el Auth Token de Twilio
+  en chats o capturas de pantalla — si esto ocurre, regenerarlos inmediatamente
+  desde sus respectivos dashboards.
+
+### Verificación final de datos clínicos
+Registro de prueba: temperatura=37.6, dolor_eva=4, aspecto=sin_drenaje (opción 5),
+gases=False, náuseas=4.
+
+| Campo / Resultado | Esperado | Guardado en BD |
+|-------------------|----------|----------------|
+| temperatura | 37.6 | 37.6 ✅ |
+| dolor_eva | 4 | 4 ✅ |
+| aspecto_drenaje | sin_drenaje | sin_drenaje ✅ |
+| cantidad_drenaje | sin_drenaje (auto, se saltó pregunta 3B) | sin_drenaje ✅ |
+| volumen_drenaje_ml | None (no se midió) | None ✅ |
+| presencia_gases | False | False ✅ |
+| episodios_nauseas | 4 | 4 ✅ |
+| dia_postoperatorio | calculado | 7 ✅ |
+| Alerta generada | ILEO_PARALITICO / MEDIA (Regla 4: náuseas>3) | 1 alerta, ILEO_PARALITICO / MEDIA ✅ |
+
+Validación cruzada (correcto que NO dispararan): temp 37.6 < 38.0 → sin SEPSIS;
+aspecto sin_drenaje → sin FUGA_ANASTOMOTICA; 1 solo registro sin gases → sin ÍLEO
+severo (Regla 3 exige 3 días). El paciente recibió solo la confirmación neutra; la
+alerta quedó únicamente en BD para el oncólogo.
+
+### Pendiente Sprint 3
+- Merge `sprint-3-whatsapp` → `Desarrollo` (con aprobación del Arquitecto). Es lo
+  único que falta para cerrar el Sprint 3.
+
+---
+
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** pendiente
 **Estado:** EN COLA ⏳
