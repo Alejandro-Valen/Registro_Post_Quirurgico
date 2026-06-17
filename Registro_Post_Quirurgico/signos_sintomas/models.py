@@ -3,8 +3,13 @@ from django.db import models
 
 class Paciente(models.Model):
     """
-    Representa a un paciente postquirúrgico del programa Sugarbaker.
+    Representa a un paciente en seguimiento postquirúrgico remoto.
     """
+    TIPO_CIRUGIA_CHOICES = [
+        ('sugarbaker_hipec',    'Sugarbaker / HIPEC'),
+        ('colectomia_electiva', 'Colectomía electiva'),
+        ('otra',                'Otra cirugía colorrectal'),
+    ]
     nombre_completo = models.CharField(max_length=200)
     telefono_whatsapp = models.CharField(
         max_length=20,
@@ -12,7 +17,15 @@ class Paciente(models.Model):
         help_text="Formato internacional: +573001234567"
     )
     fecha_cirugia = models.DateField(
-        help_text="Fecha de la cirugía Sugarbaker/HIPEC"
+        help_text="Fecha de la cirugía a la que se le da seguimiento postoperatorio."
+    )
+    tipo_cirugia = models.CharField(
+        max_length=30,
+        choices=TIPO_CIRUGIA_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Tipo de cirugía realizada — dato descriptivo para estadística "
+                  "e investigación futura. No afecta el alert_engine ni el flujo del bot."
     )
     medico_responsable = models.CharField(max_length=200)
     activo = models.BooleanField(
