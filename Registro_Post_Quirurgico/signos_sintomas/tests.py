@@ -1,7 +1,9 @@
 from datetime import timedelta
 from decimal import Decimal
 
-from django.test import TestCase
+from django.core.exceptions import ImproperlyConfigured
+from django.test import TestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone
 
 from . import bot
@@ -291,3 +293,45 @@ class BotWhatsAppTests(TestCase):
         conv = ConversacionWhatsApp.objects.get()
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_GASES_NAUSEAS)
         self.assertEqual(RegistroDiario.objects.count(), 0)
+
+
+class WebhookWhatsAppTests(TestCase):
+    def setUp(self):
+        self.url = reverse('signos_sintomas:webhook_whatsapp')
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_post_valido_devuelve_twiml(self):
+        Paciente.objects.create(
+            nombre_completo="Paciente Webhook",
+            telefono_whatsapp="+573001112233",
+            fecha_cirugia=timezone.localdate() - timedelta(days=3),
+            medico_responsable="Medico Prueba",
+        )
+        respuesta = self.client.post(
+            self.url, {'From': 'whatsapp:+573001112233', 'Body': 'hola'}
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta['Content-Type'], 'application/xml')
+        self.assertIn('temperatura', respuesta.content.decode().lower())
+
+    def test_get_no_permitido(self):
+        respuesta = self.client.get(self.url)
+        self.assertEqual(respuesta.status_code, 405)
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=True, TWILIO_AUTH_TOKEN='token_falso')
+    def test_firma_invalida_devuelve_403(self):
+        respuesta = self.client.post(
+            self.url,
+            {'From': 'whatsapp:+573001112233', 'Body': 'hola'},
+            HTTP_X_TWILIO_SIGNATURE='firma_invalida',
+        )
+        self.assertEqual(respuesta.status_code, 403)
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=True, TWILIO_AUTH_TOKEN='')
+    def test_token_faltante_falla_seguro(self):
+        # Escenario peligroso: validación activa pero token olvidado en .env.
+        # Debe fallar con error claro de configuración, no saltarse la validación.
+        with self.assertRaises(ImproperlyConfigured):
+            self.client.post(
+                self.url, {'From': 'whatsapp:+573001112233', 'Body': 'hola'}
+            )

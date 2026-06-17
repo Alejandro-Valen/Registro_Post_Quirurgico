@@ -74,3 +74,17 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# --- Twilio / WhatsApp webhook (Sprint 3) ---
+# Fail-safe: si la variable NO existe en .env, la validación queda ACTIVA.
+# Para desactivarla (solo pruebas locales) hay que escribirla explícitamente:
+#   TWILIO_VALIDATE_SIGNATURE=False
+TWILIO_VALIDATE_SIGNATURE = config('TWILIO_VALIDATE_SIGNATURE', default=True, cast=bool)
+# Secreto: vive solo en .env. default='' para no romper el arranque; la ausencia
+# real se maneja con error claro en el webhook (nunca falla abierto).
+TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
+
+# Detrás de un túnel/proxy (ngrok): que build_absolute_uri() reconstruya la URL
+# pública https que Twilio firmó (imprescindible para validar X-Twilio-Signature).
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
