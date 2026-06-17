@@ -341,6 +341,36 @@ alerta quedó únicamente en BD para el oncólogo.
 
 ---
 
+## Sesión: campo `tipo_cirugia` en Paciente
+**Fecha:** 17/06/2026
+**Responsable:** León (Arquitecto IA) con Claude Code
+**Estado:** COMPLETADO ✅ (commit `1c379f8`)
+
+### Qué se hizo
+- Agregado campo `tipo_cirugia` al modelo `Paciente`: `CharField(max_length=30,
+  null=True, blank=True)` con choices `sugarbaker_hipec` / `colectomia_electiva` /
+  `otra` (cirugía colorrectal).
+- Generalizado el docstring de `Paciente` ("paciente en seguimiento postquirúrgico
+  remoto", ya no exclusivo de Sugarbaker) y el `help_text` de `fecha_cirugia`.
+- Migración `0003_paciente_tipo_cirugia_alter_paciente_fecha_cirugia` generada y
+  aplicada a `sugarbaker_db`.
+
+### Por qué
+- `tipo_cirugia` es un **dato descriptivo para estadística e investigación futura**.
+  **No afecta el `alert_engine` ni el flujo del bot.**
+- `null=True/blank=True` SIN default: un paciente sin valor = "no capturado"
+  (honesto). El paciente de prueba existente quedó en `tipo_cirugia=None`, no se le
+  inventó un valor.
+
+### Verificación
+- Migración aplicada sin pedir default (por `null=True`).
+- 22/22 tests OK · `manage.py check` sin errores.
+
+> Nota: la actualización de alcance/afiliación institucional en CLAUDE.md y ROADMAP
+> es un paso aparte posterior; aquí solo se documenta el cambio de modelo.
+
+---
+
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** pendiente
 **Estado:** EN COLA ⏳
