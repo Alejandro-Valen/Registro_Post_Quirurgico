@@ -193,7 +193,7 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 
 ---
 
-### ⏳ FASE 3 — Bot WhatsApp — EN CURSO (pasos 1-2 completados)
+### ⏳ FASE 3 — Bot WhatsApp — EN CURSO (pasos 1-3 completados)
 > Rama: `sprint-3-whatsapp` (pusheada a origin)
 
 **Paso 1 — Modelos (commit `68950ef`):**
@@ -210,16 +210,26 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 - [x] Respuestas a dudas con predefinidos + knowledge_base.md placeholder
 - [x] 18 pruebas unitarias OK + manage.py check sin errores
 
-**Paso 3 — Webhook (PENDIENTE, próxima sesión):**
-- [ ] Crear cuenta Twilio y activar sandbox WhatsApp
-- [ ] Crear vista webhook en views.py (POST Twilio + validación firma + csrf_exempt)
-- [ ] Configurar URL del webhook en signos_sintomas/urls.py y urls.py del proyecto
-- [ ] Config Twilio en settings.py / .env / requirements.txt
-- [ ] Exponer webhook con ngrok para desarrollo local
-- [ ] Conectar: webhook → bot.procesar_mensaje → RegistroDiario → alert_engine
-- [ ] Prueba end-to-end con WhatsApp real
-- [ ] Merge sprint-3-whatsapp → Desarrollo
+**Paso 3 — Webhook (commit `832873d`):**
+- [x] Crear vista webhook en views.py (POST Twilio + validación firma + csrf_exempt)
+- [x] Validación de firma fail-safe (default validar) / fail-clear (ImproperlyConfigured si falta token)
+- [x] Configurar URL del webhook en signos_sintomas/urls.py (include del proyecto ya existía)
+- [x] Config Twilio en settings.py (toggle + token + headers proxy ngrok) / .env.example / requirements.txt
+- [x] Instalar twilio==9.10.9
+- [x] Conectar: webhook → bot.procesar_mensaje → RegistroDiario → alert_engine
+- [x] 22 pruebas unitarias OK (18 previas + 4 del webhook) + manage.py check sin errores
 
+**Paso 4 — Conexión real Twilio (PENDIENTE, próxima sesión):**
+- [ ] Crear cuenta Twilio y activar sandbox WhatsApp
+- [ ] Poner TWILIO_AUTH_TOKEN / TWILIO_ACCOUNT_SID reales en el .env local
+- [ ] Exponer webhook con ngrok y configurar la URL en la consola de Twilio
+- [ ] Prueba end-to-end con WhatsApp real (valida el riesgo de firma detrás de ngrok)
+- [ ] Merge sprint-3-whatsapp → Desarrollo (con aprobación del Arquitecto)
+
+> **Riesgo conocido:** la validación de firma detrás de ngrok exige que
+> build_absolute_uri() coincida con la URL pública firmada por Twilio. Settings
+> de proxy ya puestos; falta probar end-to-end en el paso 4.
+>
 > **Diferido:** envío automático matutino 7-10 AM Bogotá → FASE 4 (Celery).
 > Capa RAG sobre knowledge_base.md real → FASE 5 (pendiente acceso Drive médico).
 
@@ -336,5 +346,5 @@ DB_PORT=5432
 
 ---
 
-*Última actualización: Sprint 3 en curso (rama `sprint-3-whatsapp`) — pasos 1-2 completados: modelo ConversacionWhatsApp, campo cantidad_drenaje, bot.py con máquina de estados (18 tests OK) y knowledge_base.md placeholder*
-*Siguiente paso: paso 3 — views.py (webhook Twilio) + urls.py + config Twilio*
+*Última actualización: Sprint 3 en curso (rama `sprint-3-whatsapp`) — pasos 1-3 completados: modelo ConversacionWhatsApp, campo cantidad_drenaje, bot.py con máquina de estados, y webhook Twilio con validación de firma fail-safe/fail-clear (22 tests OK)*
+*Siguiente paso: paso 4 — conexión real con Twilio (cuenta + sandbox, .env real, ngrok, prueba end-to-end, merge a Desarrollo)*

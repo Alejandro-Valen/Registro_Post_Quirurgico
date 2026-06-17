@@ -235,22 +235,29 @@ fuente válida hasta tener los PDFs reales.
 | Sprint 1 | Modelos clínicos y base de datos | ✅ Completado |
 | Sprint 1 Frontend | Formulario de contacto, templates, admin home | ✅ Completado |
 | Sprint 2 | Motor de alertas (alert_engine) | ✅ Completado (fix post-merge 01b8a47) |
-| Sprint 3 | Bot WhatsApp (Twilio) | ⏳ En curso — pasos 1 y 2 completados |
+| Sprint 3 | Bot WhatsApp (Twilio) | ⏳ En curso — pasos 1, 2 y 3 completados |
 | Sprint 4 | Dashboard oncólogo y notificaciones | ⏳ Pendiente |
 | Sprint 5 | Producción, despliegue y RAG con PDFs reales | ⏳ Pendiente |
 
-**Punto actual:** Sprint 3, rama `sprint-3-whatsapp`, 3 commits pusheados a origin
-(`68950ef` modelos, `109afc7` bot, `0a89876` docs).
+**Punto actual:** Sprint 3, rama `sprint-3-whatsapp`, pusheada a origin (último
+commit de código `832873d`).
 
 - ✅ **Paso 1:** modelo `ConversacionWhatsApp` + campo `cantidad_drenaje` en
   `RegistroDiario` + migración `0002` aplicada.
 - ✅ **Paso 2:** `bot.py` completo (lógica pura) + `knowledge_base.md`
-  placeholder + 18 tests OK.
-- ⏳ **Paso 3 (siguiente):** `views.py` (webhook Twilio + validación de firma
-  `X-Twilio-Signature` + `csrf_exempt` solo en esa vista), `urls.py` de la app
-  `signos_sintomas` e inclusión en las urls del proyecto.
-- ⏳ **Paso 4:** configuración de credenciales Twilio en `settings.py` / `.env`
-  (vía `python-decouple`, nunca al repo) / `requirements.txt`.
+  placeholder.
+- ✅ **Paso 3:** `views.py` (webhook Twilio con `webhook_whatsapp` +
+  `_firma_twilio_valida` fail-safe/fail-clear), `urls.py` de la app, bloque
+  Twilio en `settings.py` (`TWILIO_VALIDATE_SIGNATURE` default True,
+  `TWILIO_AUTH_TOKEN`, headers de proxy ngrok), `twilio==9.10.9` +
+  `requirements.txt`, `.env.example`. **22 tests OK** (18 bot/alertas + 4 webhook).
+- ⏳ **Paso 4 (siguiente):** credenciales Twilio reales en `.env` local, cuenta +
+  sandbox WhatsApp, exponer webhook con ngrok, prueba end-to-end con WhatsApp
+  real, y merge `sprint-3-whatsapp` → `Desarrollo`.
+
+**Riesgo conocido (paso 4):** la validación de firma detrás de ngrok exige que
+`build_absolute_uri()` coincida exactamente con la URL pública firmada por
+Twilio. Settings de proxy ya puestos, pero falta probar end-to-end.
 
 **Diferido explícitamente (no es parte del Sprint 3):**
 - FASE 4 — envío automático matutino 7:00-10:00 AM Bogotá vía Celery/cron, y

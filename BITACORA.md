@@ -137,9 +137,9 @@ detecta red flags del protocolo Sugarbaker/HIPEC.
 ---
 
 ## Sprint 3 — Bot WhatsApp
-**Fecha:** 13/06/2026
+**Fecha:** 13/06/2026 — 16/06/2026
 **Responsable:** León (Arquitecto IA) con Claude Code
-**Estado:** EN CURSO ⏳ (pasos 1-2 completados)
+**Estado:** EN CURSO ⏳ (pasos 1-3 completados)
 
 ### Objetivo
 Implementar el bot de WhatsApp que captura la telemetría diaria del paciente
@@ -180,11 +180,61 @@ mediante una máquina de estados, crea el `RegistroDiario` y dispara el
 - `_parse_gases_nauseas` usa `\bno se\b` con límite de palabra: "no sé" pide
   reintento, pero "no sentí náuseas" se acepta como respuesta válida.
 
-### Pendiente Sprint 3 (paso 3 — próxima sesión)
-- `views.py`: webhook de Twilio (validación de firma `X-Twilio-Signature`,
-  `csrf_exempt`).
-- `urls.py` de la app y del proyecto: ruta del webhook.
-- Config Twilio en `settings.py` / `.env` / `requirements.txt`.
+### Paso 3 — Webhook Twilio (commit `832873d`)
+- Creado `signos_sintomas/views.py` con la vista `webhook_whatsapp`
+  (`@csrf_exempt` solo en esa vista + `@require_POST`): extrae `From`/`Body`,
+  delega en `bot.procesar_mensaje` y responde en TwiML.
+- Rellenado `signos_sintomas/urls.py` (`app_name='signos_sintomas'`, ruta
+  `webhook/whatsapp/`). El `include` en las urls del proyecto ya existía → URL
+  final `/signos_sintomas/webhook/whatsapp/`.
+- Instalado `twilio==9.10.9` y actualizado `requirements.txt` con su cadena de
+  dependencias (curado a mano — ver "Problemas encontrados").
+- Agregadas claves Twilio a `.env.example` (`TWILIO_AUTH_TOKEN`,
+  `TWILIO_ACCOUNT_SID`). El `.env` real nunca se commitea.
+- **22 pruebas unitarias OK** (18 previas + 4 del webhook); `check` sin errores.
+
+### Decisiones de seguridad — validación de firma (fail-safe / fail-clear)
+- **Fail-safe:** `TWILIO_VALIDATE_SIGNATURE` por default `True`. Si la variable
+  NO está en `.env`, la validación queda ACTIVA. Para desactivarla (solo pruebas
+  locales) hay que escribir explícitamente `TWILIO_VALIDATE_SIGNATURE=False`. El
+  código nunca tiene `default=False` → imposible "fallar abierto" por olvido.
+- **Fail-clear:** si la validación está activa pero falta `TWILIO_AUTH_TOKEN`,
+  `_firma_twilio_valida` levanta `ImproperlyConfigured` con un mensaje explícito,
+  en vez de saltarse la validación o devolver un `403` engañoso. Cubre el
+  escenario más peligroso: token olvidado en producción.
+- **Secretos:** `TWILIO_AUTH_TOKEN` y `TWILIO_ACCOUNT_SID` viven solo en `.env`
+  vía `python-decouple`, nunca hardcodeados en `settings.py` ni `views.py`.
+- Ajuste de proxy para ngrok: `USE_X_FORWARDED_HOST=True` y
+  `SECURE_PROXY_SSL_HEADER=('HTTP_X_FORWARDED_PROTO','https')` para que
+  `build_absolute_uri()` reconstruya la URL pública https que Twilio firmó.
+
+### Los 4 tests del webhook
+1. `test_post_valido_devuelve_twiml` — POST válido → 200 + TwiML con la pregunta.
+2. `test_get_no_permitido` — GET → 405 (`require_POST`).
+3. `test_firma_invalida_devuelve_403` — firma inválida con validación activa → 403.
+4. `test_token_faltante_falla_seguro` — token vacío con validación activa →
+   `ImproperlyConfigured` (verifica el fail-clear del escenario peligroso).
+
+### Problemas encontrados y resueltos
+- El entorno de Python es **global** (TensorFlow, Jupyter, cientos de paquetes),
+  no un virtualenv limpio. `pip freeze` habría contaminado `requirements.txt`
+  con dependencias ajenas → se curó a mano agregando solo `twilio` y su cadena
+  (aiohttp, requests, PyJWT, etc.). Pendiente: virtualenv limpio en FASE 5.
+
+### Riesgo conocido — pendiente de probar end-to-end
+- La validación de firma detrás de **ngrok** depende de que
+  `request.build_absolute_uri()` coincida EXACTAMENTE con la URL pública que
+  Twilio firmó. Los settings de proxy ya están puestos, pero esto NO se ha
+  probado contra Twilio real todavía. Verificar en la prueba end-to-end del
+  paso 4 (con ngrok + número de WhatsApp real); si la firma falla por mismatch
+  de URL, revisar host/esquema reconstruidos.
+
+### Pendiente Sprint 3 (paso 4 — próxima sesión)
+- Crear cuenta Twilio + activar sandbox WhatsApp.
+- Poner `TWILIO_AUTH_TOKEN` / `TWILIO_ACCOUNT_SID` reales en el `.env` local.
+- Exponer el webhook con ngrok y configurar la URL en la consola de Twilio.
+- Prueba end-to-end con WhatsApp real (valida también el riesgo de firma de arriba).
+- Merge `sprint-3-whatsapp` → `Desarrollo` (con aprobación del Arquitecto).
 
 ### Diferido a sprints posteriores
 - **FASE 4:** envío automático matutino 7-10 AM Bogotá (Celery/cron) y
