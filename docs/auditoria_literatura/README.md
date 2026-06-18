@@ -16,6 +16,12 @@ Contiene tres análisis de las fuentes primarias revisadas:
   institucionales y académicos complementarios (Word, PowerPoint, PDFs no
   incluidos en el lote principal).
 
+- **SINTESIS_CRUZADA_UMBRALES.md** — Tabla comparativa entre las 4 reglas
+  actuales del `alert_engine` y los hallazgos de los 9 PDFs (fiebre, gases,
+  náuseas, drenaje, dolor, PCR), más la decisión pendiente sobre frecuencia
+  de check-ins. Es el insumo de partida para la próxima fase de decisiones
+  del alert_engine.
+
 > **Nota:** este material es referencia de apoyo para decisiones de
 > arquitectura, no un contrato que el proyecto deba cumplir al pie de la
 > letra. El alcance real del sistema, los umbrales clínicos vigentes y las
