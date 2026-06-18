@@ -1,5 +1,5 @@
 """
-Lógica del bot de WhatsApp para el seguimiento postoperatorio Sugarbaker.
+Lógica del bot de WhatsApp para el seguimiento postoperatorio remoto.
 
 Diseño:
 - Lógica PURA respecto al transporte: `procesar_mensaje(telefono, texto)` recibe

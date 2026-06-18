@@ -45,7 +45,8 @@ class Paciente(models.Model):
 
 class RegistroDiario(models.Model):
     """
-    Captura la telemetría clínica diaria del paciente post-Sugarbaker.
+    Captura la telemetría clínica diaria del paciente en seguimiento
+    postoperatorio.
     """
     paciente = models.ForeignKey(
         Paciente,

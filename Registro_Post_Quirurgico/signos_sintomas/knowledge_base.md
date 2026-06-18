@@ -1,4 +1,4 @@
-# Base de Conocimiento Clínico — Bot Sugarbaker
+# Base de Conocimiento Clínico — Bot de Seguimiento Posquirúrgico
 
 > **Estado:** PLACEHOLDER. El contenido clínico real se construirá cuando el
 > equipo tenga acceso al Drive del médico (pendiente). La capa RAG está
