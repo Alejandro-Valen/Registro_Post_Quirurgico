@@ -36,7 +36,7 @@ exista una decisión formal sobre afiliación.
 ## Stack Tecnológico
 
 - **Backend:** Django 6.0.5 + Python 3.13
-- **Base de datos:** PostgreSQL 18 (local: sugarbaker_db)
+- **Base de datos:** PostgreSQL 18 (local: registro_postquirurgico_db)
 - **Interfaz paciente:** WhatsApp Bot vía Twilio API (en construcción, Sprint 3)
 - **Panel médico:** Django Admin personalizado
 - **Dependencias clave:** python-decouple, psycopg2-binary, twilio (próximo)
