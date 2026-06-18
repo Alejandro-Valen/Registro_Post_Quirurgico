@@ -1,20 +1,20 @@
-# ROADMAP MVP — Sistema de Monitoreo Post-Quirúrgico Sugarbaker
-## Clínica Somer — Medellín, Colombia
+# ROADMAP MVP — Sistema de Monitoreo Posquirúrgico Remoto
 
 > **Para agentes IA:** Lee este archivo completo antes de sugerir cualquier acción.
 > Contiene el contexto clínico, el estado actual del proyecto, y los pasos pendientes.
 > El repositorio es: https://github.com/Alejandro-Valen/Registro_Post_Quirurgico
-> Rama principal: `Desarrollo` | Rama activa: `sprint-3-whatsapp` (Sprint 3 en curso, pasos 1-2)
+> Rama principal: `Desarrollo` | Rama activa: `sprint-3-whatsapp` (funcional end-to-end, merge pendiente — ver Sprint 3.5)
 
 ---
 
 ## Contexto del Proyecto
 
-Sistema de monitoreo remoto postquirúrgico para pacientes de cirugía oncológica
-Sugarbaker/HIPEC de la Clínica Somer. El paciente interactúa exclusivamente por
-WhatsApp. Un bot le hace preguntas diarias de telemetría. El sistema clasifica los
-datos, detecta alertas rojas automáticas y notifica al oncólogo a través de un
-dashboard en Django Admin.
+Sistema de monitoreo remoto posquirúrgico para pacientes en recuperación de
+cirugía colorrectal — incluyendo casos Sugarbaker/HIPEC como uno de los tipos
+de procedimiento soportados, sin ser exclusivo de ellos. El paciente interactúa
+exclusivamente por WhatsApp. Un bot le hace preguntas diarias de telemetría. El
+sistema clasifica los datos, detecta alertas rojas automáticas y notifica al
+médico a través de un dashboard en Django Admin.
 
 **Stack:** Django 6.0.5 + PostgreSQL 18 + WhatsApp Bot (Twilio) + Python 3.13
 **OS de desarrollo:** Windows 11
@@ -102,8 +102,9 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 |-------|------|-------------|
 | nombre_completo | CharField(200) | Nombre del paciente |
 | telefono_whatsapp | CharField(20) unique | Formato: +573001234567 |
-| fecha_cirugia | DateField | Fecha cirugía Sugarbaker/HIPEC |
-| medico_responsable | CharField(200) | Oncólogo a cargo |
+| fecha_cirugia | DateField | Fecha de la cirugía a la que se le da seguimiento postoperatorio |
+| tipo_cirugia | CharField choices null=True | Dato descriptivo (sugarbaker_hipec/colectomia_electiva/otra) — no afecta alert_engine ni bot |
+| medico_responsable | CharField(200) | Médico a cargo |
 | activo | BooleanField | Desactivar al terminar seguimiento |
 | fecha_registro | DateTimeField auto | Timestamp automático |
 
@@ -237,6 +238,27 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 
 ---
 
+### ✅ FASE 3.5 — Generalización de Alcance, Marca y Documentación — COMPLETADA
+
+**Completado:**
+- [x] Agregar campo `tipo_cirugia` a `Paciente` (descriptivo, sin lógica clínica)
+- [x] Generalizar título y descripción del proyecto en CLAUDE.md (sin afiliación institucional)
+- [x] Generalizar callout de agentes IA y base clínica de Regla 1 (corregir afirmación de evidencia HIPEC específica)
+- [x] Generalizar menciones de marca Sugarbaker/Clínica Somer en código y templates de producción (models.py, bot.py, knowledge_base.md, index.html, contacto.html)
+- [x] Renombrar base de datos local a `registro_postquirurgico_db`
+- [x] Sincronizar bloque de `Paciente` en CLAUDE.md con el campo `tipo_cirugia`
+- [x] Organizar auditoría de literatura en `docs/auditoria_literatura/` (4 documentos + README)
+- [x] Reescribir sección "Auditoría de Literatura Clínica" en CLAUDE.md
+- [x] Generalizar ROADMAP_MVP_SUGARBAKER.md (este archivo)
+- [x] Actualizar tabla "Estado Actual del Proyecto" / "Punto actual" en CLAUDE.md
+
+**Pendiente (decidido, sin ejecutar — fuera de esta fase):**
+- [ ] Decidir si el archivo ROADMAP_MVP_SUGARBAKER.md (y/o el nombre del repo) cambia de nombre — pausado por el Arquitecto, sin fecha
+- [ ] Fase de decisiones de arquitectura del `alert_engine` (umbrales de fiebre, gases, náuseas, drenaje; gap de `DOLOR_AGUDO`; frecuencia de check-ins) — ver `docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md`
+- [ ] Merge `sprint-3-whatsapp` → `Desarrollo` (pospuesto hasta cerrar la fase anterior)
+
+---
+
 ### ⏳ FASE 4 — Dashboard Oncólogo y Notificaciones — PENDIENTE
 > Crear rama: `git checkout -b sprint-4-dashboard`
 
@@ -244,7 +266,7 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 - [ ] Crear vista detalle_paciente con historial y gráfica temperatura/dolor
 - [ ] Implementar notificación al médico por email/SMS cuando hay alerta roja
 - [ ] Configurar envío automático del bot cada mañana (Celery beat o cron)
-- [ ] Demo funcional con 1 paciente ficticio para equipo médico Somer
+- [ ] Demo funcional con 1 paciente ficticio para el equipo médico
 
 ---
 
@@ -255,7 +277,7 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 - [ ] Configurar HTTPS y deshabilitar DEBUG
 - [ ] Integrar capa RAG para respuestas a preguntas frecuentes del postoperatorio
 - [ ] Revisión cumplimiento HABEAS DATA Colombia
-- [ ] Entrega final al equipo médico Clínica Somer
+- [ ] Entrega final al equipo médico
 
 ---
 
@@ -319,7 +341,7 @@ git push origin nombre-de-rama
 ```env
 SECRET_KEY=clave-generada-con-get_random_secret_key
 DEBUG=True
-DB_NAME=sugarbaker_db
+DB_NAME=registro_postquirurgico_db
 DB_USER=postgres
 DB_PASSWORD=contraseña-real-de-postgresql-local
 DB_HOST=localhost
