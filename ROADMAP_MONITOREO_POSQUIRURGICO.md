@@ -253,7 +253,7 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 - [x] Actualizar tabla "Estado Actual del Proyecto" / "Punto actual" en CLAUDE.md
 
 **Pendiente (decidido, sin ejecutar — fuera de esta fase):**
-- [ ] Decidir si el archivo ROADMAP_MVP_SUGARBAKER.md (y/o el nombre del repo) cambia de nombre — pausado por el Arquitecto, sin fecha
+- [x] Decidir nombre del archivo: renombrado a `ROADMAP_MONITOREO_POSQUIRURGICO.md` (nombre del repositorio se mantiene sin cambios, decisión explícita del Arquitecto)
 - [ ] Fase de decisiones de arquitectura del `alert_engine` (umbrales de fiebre, gases, náuseas, drenaje; gap de `DOLOR_AGUDO`; frecuencia de check-ins) — ver `docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md`
 - [ ] Merge `sprint-3-whatsapp` → `Desarrollo` (pospuesto hasta cerrar la fase anterior)
 

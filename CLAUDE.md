@@ -348,11 +348,11 @@ encontrados y resueltos). Debe incluir:
 - Qué queda pendiente para la próxima sesión, indicando el paso exacto (no
   solo "Sprint 3 pendiente", sino "paso 3: views.py + urls.py + Twilio").
 
-### 2. Actualizar CLAUDE.md y ROADMAP_MVP_SUGARBAKER.md
+### 2. Actualizar CLAUDE.md y ROADMAP_MONITOREO_POSQUIRURGICO.md
 - En **CLAUDE.md**: actualizar la tabla "Estado Actual del Proyecto" y la
   sección "Punto actual" con el sprint y paso exacto donde quedó el trabajo.
-- En **ROADMAP_MVP_SUGARBAKER.md**: marcar con `[x]` los checkboxes de las
-  tareas completadas en la sesión.
+- En **ROADMAP_MONITOREO_POSQUIRURGICO.md**: marcar con `[x]` los
+  checkboxes de las tareas completadas en la sesión.
 
 ### 3. Git add, commit y push
 - Seguir la convención de commits ya definida (`feat:`, `fix:`, `docs:` +
