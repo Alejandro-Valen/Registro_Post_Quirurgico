@@ -371,6 +371,95 @@ alerta quedó únicamente en BD para el oncólogo.
 
 ---
 
+## Sesión: Generalización de Alcance, Marca y Auditoría de Literatura (Sprint 3.5)
+**Fecha:** 17/06/2026 — 18/06/2026
+**Responsable:** Alejo y León (Arquitectos IA) con Claude (chat) y Claude Code
+**Estado:** ✅ Completado
+
+### Qué se hizo
+Tras recibir y auditar 15 archivos del médico proponente (9 PDFs
+científicos sobre ERAS/alta temprana colorrectal, 2 transcripciones de
+presentaciones suyas, y 4 documentos institucionales/académicos —
+fichas técnicas de Universidad CES, preproyecto formal, slide deck), se
+resolvió la pregunta de alcance del proyecto y se generalizó todo el
+código, la documentación y el branding que asumían exclusividad
+Sugarbaker/HIPEC o afiliación institucional formal.
+
+Trabajo concreto:
+- Auditoría completa de los 15 archivos, organizada en 4 documentos de
+  referencia en `docs/auditoria_literatura/` (análisis de los 9 PDFs
+  documento por documento, análisis de las 2 transcripciones, análisis
+  de los 4 archivos institucionales restantes, y la síntesis cruzada de
+  umbrales clínicos vs. el `alert_engine` actual).
+- Campo `tipo_cirugia` agregado a `Paciente` (descriptivo, sin lógica
+  clínica — no alimenta `alert_engine` ni bot).
+- Generalización de marca y afiliación: título y descripción del
+  proyecto, callout de agentes IA, docstrings de `models.py`/`bot.py`,
+  título de `knowledge_base.md`, templates HTML públicos (`index.html`,
+  `contacto.html`), `.env.example`.
+- Base de datos local renombrada de `sugarbaker_db` a
+  `registro_postquirurgico_db`, con verificación de integridad de datos.
+- `CLAUDE.md` y `ROADMAP_MVP_SUGARBAKER.md` actualizados para reflejar
+  el alcance real y el estado actual del proyecto.
+
+### Decisiones tomadas y su justificación
+1. **Alcance ampliado a ERAS/cirugía colorrectal en general, no
+   exclusivo de Sugarbaker/HIPEC.** Respaldado por evidencia múltiple:
+   ninguno de los 9 PDFs trata HIPEC específicamente; el título oficial
+   del proyecto registrado ante el comité de ética de Universidad CES es
+   "Programa de cirugías colorrectales con seguimiento ambulatorio
+   remoto"; el criterio de inclusión formal (ECOG 0-1, sin
+   comorbilidades significativas) describe un perfil de paciente
+   distinto al típico de Sugarbaker/HIPEC. Sugarbaker se mantiene como
+   uno de los tipos de cirugía soportados (campo `tipo_cirugia`), no
+   como el único.
+2. **`tipo_cirugia` como campo descriptivo, no como clases separadas por
+   tipo de cirugía.** Se prefirió la opción de menor complejidad: un
+   campo `null=True/blank=True` que no cambia el comportamiento del bot
+   ni del `alert_engine`, pensado para estadística/investigación futura.
+3. **Sin afiliación institucional formal por ahora.** El proyecto no
+   tiene vínculo formalizado con ninguna clínica o universidad a la
+   fecha; se removieron las menciones a "Clínica Somer" del código y la
+   documentación en consecuencia.
+4. **Enfoque exclusivamente de software, sin hardware de monitoreo
+   continuo.** Respaldado por evidencia reciente (2025) de que el
+   monitoreo continuo de signos vitales por hardware no demostró valor
+   predictivo adicional sobre cuestionario + llamada telefónica.
+5. **Base de datos local renombrada a `registro_postquirurgico_db`**
+   (coincide con el nombre del repositorio), ejecutado vía `psql` con
+   verificación de integridad de datos (conteos de
+   `Paciente`/`RegistroDiario`/`Alerta` antes y después, sin pérdida).
+6. **Checkboxes históricos del ROADMAP no se reescriben** (ej. "Crear
+   base de datos sugarbaker_db en pgAdmin" se mantiene tal cual) — es
+   registro fiel de lo que pasó en su momento, no documentación de
+   estado actual.
+
+### Problemas o conflictos encontrados
+Ninguno bloqueante. Único hallazgo relevante: el código de producción
+(no solo la documentación) tenía menciones de marca Sugarbaker en
+lugares de alta visibilidad que no estaban en el radar inicial —
+específicamente el `<h2>` del header en `index.html` y `contacto.html`
+(las plantillas públicas del sitio web), además de docstrings en
+`models.py` y `bot.py`. Se corrigieron en el mismo paso que la
+generalización de documentación.
+
+### Pendiente para la próxima sesión
+**Paso exacto:** fase de decisiones de arquitectura clínica del
+`alert_engine` — punto de partida en
+`docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md`. Puntos
+concretos a decidir: umbral de fiebre (38.0 actual vs. 37.9 de
+Outersterp 2025), si la regla de "3 días sin gases" se mantiene (sin
+respaldo literal en ningún PDF), umbral de náuseas (>3 actual vs.
+cualquier episodio en estudios recientes), si `aspecto_drenaje` sigue
+siendo la variable principal de fuga anastomótica (varios ERAS modernos
+no usan drenaje), el gap de `DOLOR_AGUDO` sin regla implementada
+(candidato: EVA≥4, repetido en 3 estudios), y la frecuencia de
+check-ins (1×/día actual vs. el patrón de 2-3×/día de los estudios más
+recientes). El merge `sprint-3-whatsapp` → `Desarrollo` sigue pospuesto
+hasta cerrar esa fase.
+
+---
+
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** pendiente
 **Estado:** EN COLA ⏳
