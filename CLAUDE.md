@@ -220,29 +220,39 @@ INICIO
 
 **`knowledge_base.md`:** placeholder con la estructura final pendiente y las
 respuestas predefinidas actuales. **No completar con información clínica real
-hasta tener acceso al Drive del médico** (pendiente — ver sección PDFs abajo).
+ni cambiar las reglas del alert_engine sin que el Arquitecto lo decida
+explícitamente en sesión** — la auditoría de literatura ya está disponible
+(ver sección 'Auditoría de Literatura Clínica' abajo), pero las decisiones
+que se derivan de ella todavía no se han tomado.
 
 ---
 
-## Información Clínica Pendiente — PDFs del Médico
+## Auditoría de Literatura Clínica
 
-El médico de Somer tiene un NotebookLM con 9 PDFs sobre alta temprana, manejo
-ambulatorio y recuperación acelerada tras cirugías abdominales mayores
-(colectomías). Resumen preliminar: la evidencia respalda el alta en 1-2 días
-postoperatorios para pacientes seleccionados, con monitoreo remoto constante,
-sin aumento de readmisiones ni complicaciones — exactamente el modelo de este
-proyecto.
+La auditoría de la evidencia científica del proyecto (9 PDFs sobre
+ERAS/alta temprana en cirugía colorrectal, transcripciones de
+presentaciones del médico, y documentos institucionales/académicos
+complementarios) ya se realizó — ver `docs/auditoria_literatura/` para
+el análisis completo, documento por documento, y la síntesis cruzada de
+umbrales.
 
-**Estado:** acceso al Drive del médico aún PENDIENTE. Cuando se obtenga:
-1. Extraer la información con Gemini 2.5 Pro o el "Notebook guide" de NotebookLM.
-2. Traer el resultado a sesión con Claude para auditoría clínica cruzada contra
-   las reglas del `alert_engine` actual (pueden requerir ajuste de umbrales).
-3. Construir la versión real de `knowledge_base.md`.
-4. Conectar la capa RAG en el bot (FASE 5 del ROADMAP).
+**Resultado relevante para el alcance del proyecto:** la evidencia
+confirma que el sistema corresponde a ERAS/alta temprana en cirugía
+colorrectal en general, no a un protocolo exclusivo de Sugarbaker/HIPEC
+— ver el campo `tipo_cirugia` en `Paciente` y la sección "¿Qué es este
+proyecto?" arriba.
+
+**Pendiente:** la decisión de qué cambia en los umbrales y reglas del
+`alert_engine` a partir de esta evidencia (fiebre, gases, náuseas,
+drenaje, dolor, frecuencia de check-ins) — fase de decisiones de
+arquitectura clínica, todavía sin resolver. El detalle completo de los
+puntos abiertos está en
+`docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md`.
 
 **Mientras tanto:** nunca inventar ni suponer contenido clínico para
-`knowledge_base.md`. El placeholder con respuestas conservadoras es la única
-fuente válida hasta tener los PDFs reales.
+`knowledge_base.md`, ni cambiar ninguna regla del `alert_engine`, sin que
+el Arquitecto lo decida explícitamente en sesión. La auditoría es
+evidencia disponible, no decisiones ya tomadas.
 
 ---
 
@@ -255,11 +265,20 @@ fuente válida hasta tener los PDFs reales.
 | Sprint 1 Frontend | Formulario de contacto, templates, admin home | ✅ Completado |
 | Sprint 2 | Motor de alertas (alert_engine) | ✅ Completado (fix post-merge 01b8a47) |
 | Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Funcional end-to-end — merge a Desarrollo POSPUESTO a propósito (ver nota) |
-| Sprint 4 | Dashboard oncólogo y notificaciones | ⏳ Pendiente |
-| Sprint 5 | Producción, despliegue y RAG con PDFs reales | ⏳ Pendiente |
+| Sprint 3.5 | Auditoría de literatura, generalización de alcance/marca y documentación | ✅ Completado |
+| Sprint 4 | Dashboard médico y notificaciones | ⏳ Pendiente |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ Pendiente |
 
-**Punto actual:** Sprint 3, rama `sprint-3-whatsapp`, pusheada a origin (último
-commit de código `de48db9`). **Prueba end-to-end real con WhatsApp exitosa.**
+**Punto actual:** Sprint 3 funcional end-to-end (sin cambios desde la
+prueba real con WhatsApp — ver pasos 1-4 abajo). Sprint 3.5
+(generalización + auditoría de literatura) ya cerrado — ver
+`docs/auditoria_literatura/` y la sección "Auditoría de Literatura
+Clínica" arriba. **Próximo paso: fase de decisiones de arquitectura
+clínica del `alert_engine`** (umbrales de fiebre, gases, náuseas,
+drenaje; gap de `DOLOR_AGUDO`; frecuencia de check-ins) — ver
+`docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md` para el punto
+de partida. El merge `sprint-3-whatsapp` → `Desarrollo` sigue pospuesto
+hasta cerrar esa fase.
 
 - ✅ **Paso 1:** modelo `ConversacionWhatsApp` + campo `cantidad_drenaje` en
   `RegistroDiario` + migración `0002` aplicada.
@@ -276,12 +295,15 @@ commit de código `de48db9`). **Prueba end-to-end real con WhatsApp exitosa.**
   `400` (ALLOWED_HOSTS) y un `403` (firma) — ver BITACORA, sesión Twilio+ngrok.
 - ⏳ **Único pendiente Sprint 3:** merge `sprint-3-whatsapp` → `Desarrollo`.
 
-> **Merge POSPUESTO deliberadamente (decisión del Arquitecto, 16/06/2026):** NO
-> mergear todavía. Los PDFs clínicos del médico llegan ~18/06/2026 y podrían
-> modificar los **umbrales del `alert_engine`** (no solo el `knowledge_base.md`).
-> Mergear ahora obligaría a hacerlo dos veces. Se espera a auditar los PDFs,
-> ajustar reglas si aplica, y recién entonces mergear. Esto es una decisión
-> consciente, no un olvido.
+> **Merge sigue POSPUESTO (decisión del Arquitecto, actualizada tras
+> cierre de Sprint 3.5):** la auditoría de literatura del médico ya se
+> realizó (9 PDFs, transcripciones, documentos institucionales — ver
+> `docs/auditoria_literatura/`) y confirmó que el alcance real es
+> ERAS/cirugía colorrectal en general, no exclusivo de Sugarbaker/HIPEC.
+> Lo que falta antes de mergear es la decisión de qué cambia en los
+> **umbrales del `alert_engine`** a partir de esa evidencia. Mergear
+> ahora obligaría a hacerlo dos veces. Se mergeará una sola vez, después
+> de tomar esas decisiones.
 
 **Lección clave de la conexión Twilio:** el Sandbox de WhatsApp firma sus webhooks
 con el **Auth Token PRIMARIO** (Twilio Console → Account Dashboard), NO con el de
@@ -292,8 +314,10 @@ completo en BITACORA.md.
 **Diferido explícitamente (no es parte del Sprint 3):**
 - FASE 4 — envío automático matutino 7:00-10:00 AM Bogotá vía Celery/cron, y
   notificación al médico por email/SMS ante alerta roja.
-- FASE 5 — capa RAG real leyendo `knowledge_base.md` con contenido de los 9
-  PDFs del médico (pendiente acceso a Drive).
+- FASE 5 — capa RAG real leyendo `knowledge_base.md` con contenido
+  derivado de la auditoría de literatura ya realizada (ver
+  `docs/auditoria_literatura/`); pendiente de que se decidan primero los
+  umbrales del `alert_engine`.
 
 ---
 
@@ -347,9 +371,12 @@ mostrar un resumen breve de qué se documentó y qué se commiteó/pusheó.
 o "espera para documentar", respetar eso y ejecutar el paso correspondiente
 solo cuando lo confirme.
 
-**Nota sobre los PDFs del médico:** mientras no haya acceso al Drive del
-médico, `knowledge_base.md` permanece como placeholder. No completar con
-información clínica real, inventada o supuesta bajo ninguna circunstancia.
+**Nota sobre la evidencia clínica:** la auditoría de literatura ya se
+realizó (ver `docs/auditoria_literatura/`), pero `knowledge_base.md`
+permanece como placeholder hasta que el Arquitecto tome las decisiones de
+umbrales/reglas del `alert_engine` que se derivan de ella. No completar
+con información clínica real, inventada o supuesta, ni cambiar reglas del
+`alert_engine`, sin esa decisión explícita.
 
 ---
 
