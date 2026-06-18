@@ -10,12 +10,13 @@ Diseño:
 - El bot NO diagnostica ni muestra alertas al paciente. Solo captura telemetría,
   delega en alert_engine.evaluar_registro() y responde una confirmación neutra.
 
-Máquina de estados (5 preguntas):
+Máquina de estados (6 preguntas):
     INICIO
       -> ESPERANDO_TEMPERATURA
       -> ESPERANDO_DOLOR
-      -> ESPERANDO_ASPECTO_DRENAJE
-      -> ESPERANDO_CANTIDAD_DRENAJE   (se omite si no hay drenaje)
+      -> ESPERANDO_TIENE_DRENAJE
+      -> ESPERANDO_ASPECTO_DRENAJE    (se omite si tiene_drenaje=False)
+      -> ESPERANDO_CANTIDAD_DRENAJE   (se omite si tiene_drenaje=False)
       -> ESPERANDO_GASES_NAUSEAS
       -> COMPLETADO
 """
@@ -63,20 +64,29 @@ MSG_REINTENTO_DOLOR = (
     "Por favor envíame un número del 1 al 10 para indicar tu dolor."
 )
 
+MSG_PREGUNTA_TIENE_DRENAJE = (
+    "3️⃣ ¿Tienes drenaje activo en este momento? Responde *sí* o *no*."
+)
+MSG_REINTENTO_TIENE_DRENAJE = (
+    "No entendí tu respuesta. "
+    "Por favor responde *sí* si tienes drenaje, o *no* si no tienes. "
+    "Ejemplo: sí / no"
+)
+
 MSG_PREGUNTA_ASPECTO = (
-    "3️⃣ ¿Cómo se ve el líquido del drenaje hoy? Responde con el número:\n"
+    "4️⃣ ¿Cómo se ve el líquido del drenaje hoy? Responde con el número:\n"
     "1. Amarillo claro o rosado\n"
     "2. Rojo con sangre\n"
-    "3. Amarillo turbio o verde\n"
-    "4. Café oscuro o con olor muy fuerte\n"
-    "5. No tengo drenaje"
+    "3. Amarillo turbio\n"
+    "4. Amarillo verdoso o con pus\n"
+    "5. Café oscuro o con olor muy fuerte"
 )
 MSG_REINTENTO_ASPECTO = (
     "Por favor responde con un número del 1 al 5 según cómo se ve tu drenaje."
 )
 
 MSG_PREGUNTA_CANTIDAD = (
-    "4️⃣ ¿Cuánto líquido salió por el drenaje hoy?\n"
+    "5️⃣ ¿Cuánto líquido salió por el drenaje hoy?\n"
     "Responde: poco, normal o mucho.\n"
     "Si puedes medirlo, agrega los ml (ej: 'poco, 30ml')"
 )
@@ -86,7 +96,7 @@ MSG_REINTENTO_CANTIDAD = (
 )
 
 MSG_PREGUNTA_GASES_NAUSEAS = (
-    "5️⃣ Últimas preguntas 🌿\n"
+    "6️⃣ Últimas preguntas 🌿\n"
     "¿Has podido pasar gases o ir al baño hoy? (sí/no)\n"
     "Y ¿cuántas veces has tenido náuseas o vómito hoy? (si ninguna, 0)\n"
     "Puedes responder así: 'sí, 0'"
@@ -180,9 +190,26 @@ def _procesar_respuesta_flujo(conv, paciente, texto, hoy):
         if valor is None:
             return MSG_REINTENTO_DOLOR
         conv.temp_dolor_eva = valor
-        conv.estado = ConversacionWhatsApp.ESTADO_ASPECTO_DRENAJE
+        conv.estado = ConversacionWhatsApp.ESTADO_TIENE_DRENAJE
         conv.save()
-        return MSG_PREGUNTA_ASPECTO
+        return MSG_PREGUNTA_TIENE_DRENAJE
+
+    if estado == ConversacionWhatsApp.ESTADO_TIENE_DRENAJE:
+        respuesta_lower = _sin_acentos(texto.strip().lower())
+        if respuesta_lower in ('si', 's', 'yes', 'si.', 'claro', 'si tengo'):
+            conv.temp_tiene_drenaje = True
+            conv.estado = ConversacionWhatsApp.ESTADO_ASPECTO_DRENAJE
+            conv.save()
+            return MSG_PREGUNTA_ASPECTO
+        elif respuesta_lower in ('no', 'no.', 'n', 'no tengo'):
+            conv.temp_tiene_drenaje = False
+            conv.temp_aspecto_drenaje = 'sin_drenaje'
+            conv.temp_cantidad_drenaje = 'sin_drenaje'
+            conv.estado = ConversacionWhatsApp.ESTADO_GASES_NAUSEAS
+            conv.save()
+            return MSG_PREGUNTA_GASES_NAUSEAS
+        else:
+            return MSG_REINTENTO_TIENE_DRENAJE
 
     if estado == ConversacionWhatsApp.ESTADO_ASPECTO_DRENAJE:
         aspecto = _parse_aspecto(texto)
@@ -234,6 +261,7 @@ def _crear_registro(conv, paciente):
         paciente=paciente,
         temperatura=conv.temp_temperatura,
         dolor_eva=conv.temp_dolor_eva,
+        tiene_drenaje=conv.temp_tiene_drenaje,
         aspecto_drenaje=conv.temp_aspecto_drenaje,
         cantidad_drenaje=conv.temp_cantidad_drenaje,
         volumen_drenaje_ml=conv.temp_volumen_drenaje_ml,
@@ -299,9 +327,9 @@ def _parse_aspecto(texto):
     mapa = {
         '1': 'seroso',
         '2': 'hematico',
-        '3': 'purulento',
-        '4': 'fecaloide',
-        '5': 'sin_drenaje',
+        '3': 'turbio',
+        '4': 'purulento',
+        '5': 'fecaloide',
     }
     match = re.search(r'[1-5]', texto)
     if not match:
@@ -377,6 +405,7 @@ def _sin_acentos(cadena):
 def _limpiar_temporales(conv):
     conv.temp_temperatura = None
     conv.temp_dolor_eva = None
+    conv.temp_tiene_drenaje = None
     conv.temp_aspecto_drenaje = None
     conv.temp_cantidad_drenaje = None
     conv.temp_volumen_drenaje_ml = None

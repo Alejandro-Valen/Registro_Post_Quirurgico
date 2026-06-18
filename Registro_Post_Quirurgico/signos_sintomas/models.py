@@ -69,6 +69,7 @@ class RegistroDiario(models.Model):
     ASPECTO_CHOICES = [
         ('seroso',      'Seroso'),
         ('hematico',    'Hemático'),
+        ('turbio',      'Turbio'),
         ('purulento',   'Purulento'),
         ('fecaloide',   'Fecaloide'),
         ('sin_drenaje', 'Sin drenaje'),
@@ -79,6 +80,15 @@ class RegistroDiario(models.Model):
         ('mucho',       'Mucho (más de lo normal)'),
         ('sin_drenaje', 'No tengo drenaje'),
     ]
+    tiene_drenaje = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text=(
+            "¿El paciente tiene drenaje activo? "
+            "null = no capturado (registros anteriores a esta versión). "
+            "False = confirmado sin drenaje. True = tiene drenaje."
+        )
+    )
     aspecto_drenaje = models.CharField(
         max_length=20,
         choices=ASPECTO_CHOICES,
@@ -182,10 +192,11 @@ class ConversacionWhatsApp(models.Model):
     momento en que bot.py crea el RegistroDiario y dispara el alert_engine.
     """
 
-    # --- Estados de la máquina (5 preguntas) ---
+    # --- Estados de la máquina (6 preguntas) ---
     ESTADO_INICIO            = 'INICIO'
     ESTADO_TEMPERATURA       = 'ESPERANDO_TEMPERATURA'
     ESTADO_DOLOR             = 'ESPERANDO_DOLOR'
+    ESTADO_TIENE_DRENAJE     = 'ESPERANDO_TIENE_DRENAJE'
     ESTADO_ASPECTO_DRENAJE   = 'ESPERANDO_ASPECTO_DRENAJE'
     ESTADO_CANTIDAD_DRENAJE  = 'ESPERANDO_CANTIDAD_DRENAJE'
     ESTADO_GASES_NAUSEAS     = 'ESPERANDO_GASES_NAUSEAS'
@@ -195,6 +206,7 @@ class ConversacionWhatsApp(models.Model):
         (ESTADO_INICIO,           'Inicio'),
         (ESTADO_TEMPERATURA,      'Esperando temperatura'),
         (ESTADO_DOLOR,            'Esperando dolor EVA'),
+        (ESTADO_TIENE_DRENAJE,    'Esperando si tiene drenaje'),
         (ESTADO_ASPECTO_DRENAJE,  'Esperando aspecto del drenaje'),
         (ESTADO_CANTIDAD_DRENAJE, 'Esperando cantidad del drenaje'),
         (ESTADO_GASES_NAUSEAS,    'Esperando gases y náuseas'),
@@ -218,6 +230,7 @@ class ConversacionWhatsApp(models.Model):
         max_digits=4, decimal_places=1, null=True, blank=True
     )
     temp_dolor_eva = models.PositiveSmallIntegerField(null=True, blank=True)
+    temp_tiene_drenaje = models.BooleanField(null=True, blank=True)
     temp_aspecto_drenaje = models.CharField(
         max_length=20, choices=RegistroDiario.ASPECTO_CHOICES,
         null=True, blank=True
