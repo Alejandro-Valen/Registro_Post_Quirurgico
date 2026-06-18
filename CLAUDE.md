@@ -91,11 +91,18 @@ Capturadas una vez al día por WhatsApp:
 | Regla | Condición exacta | Tipo Alerta | Severidad | Base clínica |
 |-------|-----------------|-------------|-----------|--------------|
 | 1 | temperatura >= 38.0 | SEPSIS | ALTA | Riesgo de sepsis postoperatoria |
-| 2 | aspecto_drenaje in ['purulento','fecaloide'] | FUGA_ANASTOMOTICA | ALTA | Fuga anastomótica |
+| 2a | tiene_drenaje is True AND aspecto in ['purulento','fecaloide'] | FUGA_ANASTOMOTICA | ALTA | Fuga anastomótica confirmada |
+| 2b | tiene_drenaje is True AND aspecto in ['turbio','hematico'] | FUGA_ANASTOMOTICA | MEDIA | Drenaje sospechoso — seguimiento |
+| 2c | tiene_drenaje is True AND aspecto == 'seroso' | FUGA_ANASTOMOTICA | BAJA | Drenaje dentro de lo esperado |
 | 3 | sin gases 3 días consecutivos (por dia_postoperatorio) | ILEO_PARALITICO | ALTA | Íleo paralítico severo |
 | 4 | episodios_nauseas > 3 | ILEO_PARALITICO | MEDIA | Íleo paralítico moderado |
 
-**Nota:** la Regla 3 usa `dia_postoperatorio` (no timestamp) para determinar
+**Nota Regla 2:** si `tiene_drenaje` es `None` (registro legado anterior a
+migración 0004) o `False` (paciente sin drenaje), la Regla 2 no evalúa —
+no genera ninguna alerta de drenaje. Decisión de Arquitectos, jun 2026.
+Base literaria: Lee 2022, Gignoux 2018, Coeckelberghs 2025.
+
+**Nota Regla 3:** usa `dia_postoperatorio` (no timestamp) para determinar
 "3 días consecutivos" — corregido en el fix post-merge `01b8a47` tras auditoría
 de Claude Code, que detectó que usar `fecha_registro` no garantizaba el orden
 correcto en casos de timestamps coincidentes.
@@ -125,7 +132,8 @@ a todos los pacientes igual sin importar su valor.
 paciente              ForeignKey(Paciente, PROTECT)
 temperatura           DecimalField(4,1)
 dolor_eva             PositiveSmallIntegerField  # 1-10
-aspecto_drenaje       CharField choices=[seroso,hematico,purulento,fecaloide,sin_drenaje]
+tiene_drenaje         BooleanField null=True  # null=legado, False=sin drenaje, True=con drenaje
+aspecto_drenaje       CharField choices=[seroso,hematico,turbio,purulento,fecaloide,sin_drenaje]
 cantidad_drenaje      CharField choices=[poco,normal,mucho,sin_drenaje] null=True blank=True
 volumen_drenaje_ml    PositiveIntegerField nullable  # opcional, complemento de cantidad_drenaje
 presencia_gases       BooleanField
@@ -152,15 +160,17 @@ fecha_alerta          DateTimeField auto_now_add=True
 fecha_resolucion      DateTimeField null=True blank=True
 ```
 
-### ConversacionWhatsApp (Sprint 3)
+### ConversacionWhatsApp (Sprint 3, ampliado en Sprint 3.5)
 ```python
 paciente                  OneToOneField(Paciente, PROTECT)
 estado                     CharField choices=[INICIO, ESPERANDO_TEMPERATURA,
-                           ESPERANDO_DOLOR, ESPERANDO_ASPECTO_DRENAJE,
+                           ESPERANDO_DOLOR, ESPERANDO_TIENE_DRENAJE,
+                           ESPERANDO_ASPECTO_DRENAJE,
                            ESPERANDO_CANTIDAD_DRENAJE, ESPERANDO_GASES_NAUSEAS,
                            COMPLETADO]
 temp_temperatura           DecimalField nullable  # respuesta parcial del día
 temp_dolor_eva              PositiveSmallIntegerField nullable
+temp_tiene_drenaje          BooleanField nullable
 temp_aspecto_drenaje        CharField nullable
 temp_cantidad_drenaje       CharField nullable
 temp_volumen_drenaje_ml     PositiveIntegerField nullable
@@ -183,15 +193,16 @@ la base de datos en lugar de en memoria.
 
 Diseño: lógica **pura**, sin conocimiento de HTTP ni Twilio. La vista
 (`views.py`, pendiente) traduce HTTP ↔ esta función. Esto permite testear el
-bot completo sin mockear peticiones web — actualmente **18 tests unitarios OK**.
+bot completo sin mockear peticiones web — actualmente **27 tests unitarios OK**.
 
-**Máquina de estados (5 preguntas):**
+**Máquina de estados (6 preguntas):**
 ```
 INICIO
   → ESPERANDO_TEMPERATURA       "¿Cuál es tu temperatura? ej: 37.5"
   → ESPERANDO_DOLOR             "Del 1 al 10, ¿cuánto dolor sientes?"
-  → ESPERANDO_ASPECTO_DRENAJE   menú 1-5 en lenguaje no médico
-  → ESPERANDO_CANTIDAD_DRENAJE  poco/normal/mucho (+ ml opcional) — se OMITE si aspecto=sin_drenaje
+  → ESPERANDO_TIENE_DRENAJE     "¿Tienes drenaje activo? sí/no"
+  → ESPERANDO_ASPECTO_DRENAJE   menú 1-5 en lenguaje no médico — se OMITE si tiene_drenaje=False
+  → ESPERANDO_CANTIDAD_DRENAJE  poco/normal/mucho (+ ml opcional) — se OMITE si tiene_drenaje=False
   → ESPERANDO_GASES_NAUSEAS     "¿pasaste gases? (sí/no), ¿náuseas? (número)" en un solo mensaje
   → COMPLETADO                  crea RegistroDiario, llama evaluar_registro(), confirmación neutra
 ```
@@ -269,16 +280,17 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 4 | Dashboard médico y notificaciones | ⏳ Pendiente |
 | Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ Pendiente |
 
-**Punto actual:** Sprint 3 funcional end-to-end (sin cambios desde la
-prueba real con WhatsApp — ver pasos 1-4 abajo). Sprint 3.5
-(generalización + auditoría de literatura) ya cerrado — ver
-`docs/auditoria_literatura/` y la sección "Auditoría de Literatura
-Clínica" arriba. **Próximo paso: fase de decisiones de arquitectura
-clínica del `alert_engine`** (umbrales de fiebre, gases, náuseas,
-drenaje; gap de `DOLOR_AGUDO`; frecuencia de check-ins) — ver
-`docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md` para el punto
-de partida. El merge `sprint-3-whatsapp` → `Desarrollo` sigue pospuesto
-hasta cerrar esa fase.
+**Punto actual:** Sprint 3 funcional end-to-end + **primera decisión de
+arquitectura clínica implementada** (campo `tiene_drenaje` + escalera
+BAJA/MEDIA/ALTA en Regla 2, migración 0004 aplicada, 27 tests OK). Sprint
+3.5 (generalización + auditoría de literatura) ya cerrado. **Próximos
+pasos de arquitectura clínica del `alert_engine`** pendientes: umbral de
+fiebre (38.0 vs. 37.9 de Outersterp 2025), regla de "3 días sin gases"
+(sin respaldo literal en PDFs), umbral de náuseas (>3 actual vs.
+cualquier episodio), gap de `DOLOR_AGUDO` (candidato: EVA≥4), frecuencia
+de check-ins (1×/día vs. 2-3×/día recientes). Ver
+`docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md`. El merge
+`sprint-3-whatsapp` → `Desarrollo` sigue pospuesto hasta cerrar esa fase.
 
 - ✅ **Paso 1:** modelo `ConversacionWhatsApp` + campo `cantidad_drenaje` en
   `RegistroDiario` + migración `0002` aplicada.

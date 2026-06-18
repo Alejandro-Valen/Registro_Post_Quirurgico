@@ -460,6 +460,100 @@ hasta cerrar esa fase.
 
 ---
 
+## Sesión: Implementación campo tiene_drenaje + escalera BAJA/MEDIA/ALTA alert_engine
+**Fecha:** 18/06/2026
+**Responsable:** Alejo y León (Arquitectos IA) con Claude Code
+**Estado:** COMPLETADO ✅ (3 commits, push a sprint-3-whatsapp)
+
+### Qué se hizo
+Implementación completa del campo `tiene_drenaje` y de la escalera de severidad
+por aspecto de drenaje en el `alert_engine` — primera decisión de arquitectura
+clínica que surge de la auditoría de literatura (Sprint 3.5).
+
+**PASO 1 — models.py:**
+- Agrega choice `'turbio'` a `ASPECTO_CHOICES` en `RegistroDiario` (entre
+  hemático y purulento).
+- Agrega campo `tiene_drenaje = BooleanField(null=True, blank=True)` ANTES de
+  `aspecto_drenaje` en `RegistroDiario`. Semántica: null=no capturado (registros
+  anteriores a esta versión), False=confirmado sin drenaje, True=tiene drenaje.
+- Agrega constante `ESTADO_TIENE_DRENAJE = 'ESPERANDO_TIENE_DRENAJE'` a
+  `ConversacionWhatsApp`.
+- Agrega `(ESTADO_TIENE_DRENAJE, 'Esperando si tiene drenaje')` a `ESTADO_CHOICES`
+  (entre DOLOR y ASPECTO_DRENAJE).
+- Agrega campo `temp_tiene_drenaje = BooleanField(null=True, blank=True)` a
+  `ConversacionWhatsApp` (antes de `temp_aspecto_drenaje`).
+- Migración `0004` generada y aplicada a `registro_postquirurgico_db`.
+
+**PASO 2 — alert_engine.py (Regla 2 reescrita):**
+- Reemplaza `DRENAJES_FUGA_ANASTOMOTICA` por tres constantes:
+  `DRENAJES_ALTA = ('purulento', 'fecaloide')`,
+  `DRENAJES_MEDIA = ('turbio', 'hematico')`,
+  `DRENAJES_BAJA = ('seroso',)`.
+- La Regla 2 evalúa SOLO si `registro.tiene_drenaje is True`. Si `tiene_drenaje`
+  es `None` (registro legado) o `False` (sin drenaje), no genera ninguna alerta.
+- Escalera: seroso→BAJA, turbio/hemático→MEDIA, purulento/fecaloide→ALTA.
+
+**PASO 3 — bot.py (nuevo estado en máquina de estados):**
+- Máquina pasa de 5 a 6 preguntas.
+- Nuevo bloque `ESTADO_TIENE_DRENAJE` entre DOLOR y ASPECTO_DRENAJE.
+- Si el paciente responde "no": `temp_tiene_drenaje=False`, `temp_aspecto_drenaje=
+  'sin_drenaje'`, `temp_cantidad_drenaje='sin_drenaje'`, y salta directamente a
+  GASES_NAUSEAS (se omiten preguntas 4 y 5 sobre drenaje).
+- Si responde "sí": `temp_tiene_drenaje=True`, avanza a ASPECTO_DRENAJE.
+- `_parse_aspecto` actualizado: 1=seroso, 2=hemático, 3=turbio, 4=purulento,
+  5=fecaloide (el nuevo menú ya no incluye "sin drenaje" como opción).
+- Mensajes renumerados (3️⃣→6️⃣).
+- `tiene_drenaje` agregado al `RegistroDiario.objects.create()` y a
+  `_limpiar_temporales()`.
+
+**PASO 4 — tests.py (suite de 22 → 27 tests):**
+- 4 tests existentes actualizados con `tiene_drenaje=True/False` explícito.
+- `_completar_flujo` actualizado a 6 pasos.
+- `test_sin_drenaje_salta_pregunta_cantidad` reescrito: ahora envía "no" en el
+  estado `TIENE_DRENAJE` (antes enviaba "5" en ASPECTO_DRENAJE).
+- `test_gases_nauseas_ambiguo_reintenta` actualizado con el paso "sí" nuevo.
+- `test_flujo_completo_crea_registro` verifica `registro.tiene_drenaje is True`.
+- 5 tests nuevos en `AlertEngineTests`:
+  `test_drenaje_seroso_con_tiene_drenaje_crea_baja`,
+  `test_drenaje_hematico_crea_media`,
+  `test_drenaje_turbio_crea_media`,
+  `test_sin_drenaje_no_genera_alerta_drenaje`,
+  `test_tiene_drenaje_null_no_genera_alerta_drenaje`.
+
+### Decisiones tomadas y su justificación
+1. **`tiene_drenaje` como campo separado (BooleanField nullable) en lugar de
+   depender de `aspecto_drenaje='sin_drenaje'.`** Razón: la pregunta de si el
+   paciente tiene drenaje es clínicamente distinta de cómo se ve ese drenaje. Un
+   campo dedicado hace la semántica explícita y permite que el `alert_engine`
+   tenga una guarda limpia (`is True`) sin parsear el valor de aspecto.
+2. **`null=True` para backward compatibility.** Los registros legados (anteriores
+   a esta versión) quedaron con `tiene_drenaje=None`. El motor de alertas trata
+   `None` igual que `False`: sin alerta. Honesto y sin efecto en datos clínicos ya
+   existentes.
+3. **Escalera de severidad por aspecto:** seroso→BAJA, turbio/hemático→MEDIA,
+   purulento/fecaloide→ALTA. Base: Lee 2022, Gignoux 2018, Coeckelberghs 2025
+   (citados en `SINTESIS_CRUZADA_UMBRALES.md`).
+4. **Menú de aspecto rediseñado (5 opciones sin "sin drenaje"):** como la pregunta
+   de aspecto solo se muestra si `tiene_drenaje=True`, la opción "No tengo drenaje"
+   ya no tiene sentido en ese contexto. Se rediseñó el menú para incluir 'turbio'
+   como opción 3 y quedar con 5 opciones clínicas claras.
+
+### Verificación
+- 27/27 tests OK · `manage.py check` 0 errores · `migrate` OK.
+
+### Pendiente para la próxima sesión
+**Próximo paso:** continuar con las decisiones de arquitectura clínica del
+`alert_engine` según `SINTESIS_CRUZADA_UMBRALES.md`:
+- Umbral de fiebre (38.0 actual vs. 37.9 de Outersterp 2025).
+- Regla de "3 días sin gases": ¿mantener o ajustar?
+- Umbral de náuseas: >3 actual vs. cualquier episodio en estudios recientes.
+- Gap de `DOLOR_AGUDO`: sin regla implementada (candidato: EVA≥4).
+- Frecuencia de check-ins: 1×/día vs. 2-3×/día de estudios recientes.
+- Merge `sprint-3-whatsapp` → `Desarrollo` (sigue pospuesto hasta cerrar
+  las decisiones del `alert_engine`).
+
+---
+
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** pendiente
 **Estado:** EN COLA ⏳
