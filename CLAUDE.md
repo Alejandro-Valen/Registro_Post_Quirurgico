@@ -3,7 +3,10 @@
 > **Para agentes IA:** Lee este archivo COMPLETO antes de sugerir cualquier
 > cambio al proyecto. Toda decisión técnica debe ser compatible con el contexto
 > clínico descrito aquí. Las reglas del alert_engine no son negociables —
-> tienen base en protocolos médicos reales de postoperatorio HIPEC/Sugarbaker.
+> tienen base en evidencia clínica de recuperación postoperatoria colorrectal
+> (protocolos ERAS). La auditoría de literatura confirmó que ningún estudio
+> revisado trata HIPEC/Sugarbaker de forma específica; los umbrales se derivan
+> de cirugía colorrectal electiva en general, no de ensayos HIPEC.
 
 ---
 
@@ -87,7 +90,7 @@ Capturadas una vez al día por WhatsApp:
 
 | Regla | Condición exacta | Tipo Alerta | Severidad | Base clínica |
 |-------|-----------------|-------------|-----------|--------------|
-| 1 | temperatura >= 38.0 | SEPSIS | ALTA | Riesgo de sepsis post-HIPEC |
+| 1 | temperatura >= 38.0 | SEPSIS | ALTA | Riesgo de sepsis postoperatoria |
 | 2 | aspecto_drenaje in ['purulento','fecaloide'] | FUGA_ANASTOMOTICA | ALTA | Fuga anastomótica |
 | 3 | sin gases 3 días consecutivos (por dia_postoperatorio) | ILEO_PARALITICO | ALTA | Íleo paralítico severo |
 | 4 | episodios_nauseas > 3 | ILEO_PARALITICO | MEDIA | Íleo paralítico moderado |
