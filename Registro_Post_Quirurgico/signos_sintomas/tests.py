@@ -46,6 +46,7 @@ class AlertEngineTests(TestCase):
             paciente=paciente,
             temperatura=Decimal("37.0"),
             dolor_eva=3,
+            tiene_drenaje=True,
             aspecto_drenaje="purulento",
             presencia_gases=True,
             episodios_nauseas=0,
@@ -115,6 +116,7 @@ class AlertEngineTests(TestCase):
             paciente=paciente,
             temperatura=Decimal("37.0"),
             dolor_eva=2,
+            tiene_drenaje=False,
             aspecto_drenaje="seroso",
             presencia_gases=True,
             episodios_nauseas=1,
@@ -136,6 +138,7 @@ class AlertEngineTests(TestCase):
             paciente=paciente,
             temperatura=Decimal("38.5"),
             dolor_eva=4,
+            tiene_drenaje=True,
             aspecto_drenaje="purulento",
             presencia_gases=True,
             episodios_nauseas=4,
@@ -162,6 +165,7 @@ class AlertEngineTests(TestCase):
             paciente=paciente,
             temperatura=Decimal("37.9"),
             dolor_eva=2,
+            tiene_drenaje=False,
             aspecto_drenaje="seroso",
             presencia_gases=True,
             episodios_nauseas=3,
@@ -171,6 +175,117 @@ class AlertEngineTests(TestCase):
 
         self.assertEqual(alertas, [])
         self.assertEqual(Alerta.objects.count(), 0)
+
+    def test_drenaje_seroso_con_tiene_drenaje_crea_baja(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Seroso",
+            telefono_whatsapp="+573001110001",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=True,
+            aspecto_drenaje="seroso",
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+
+        alertas = evaluar_registro(registro)
+
+        self.assertEqual(len(alertas), 1)
+        self.assertEqual(alertas[0].tipo, "FUGA_ANASTOMOTICA")
+        self.assertEqual(alertas[0].severidad, "BAJA")
+
+    def test_drenaje_hematico_crea_media(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Hematico",
+            telefono_whatsapp="+573001110002",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=True,
+            aspecto_drenaje="hematico",
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+
+        alertas = evaluar_registro(registro)
+
+        self.assertEqual(len(alertas), 1)
+        self.assertEqual(alertas[0].tipo, "FUGA_ANASTOMOTICA")
+        self.assertEqual(alertas[0].severidad, "MEDIA")
+
+    def test_drenaje_turbio_crea_media(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Turbio",
+            telefono_whatsapp="+573001110003",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=True,
+            aspecto_drenaje="turbio",
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+
+        alertas = evaluar_registro(registro)
+
+        self.assertEqual(len(alertas), 1)
+        self.assertEqual(alertas[0].tipo, "FUGA_ANASTOMOTICA")
+        self.assertEqual(alertas[0].severidad, "MEDIA")
+
+    def test_sin_drenaje_no_genera_alerta_drenaje(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Sin Drenaje",
+            telefono_whatsapp="+573001110004",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            aspecto_drenaje="sin_drenaje",
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+
+        alertas = evaluar_registro(registro)
+
+        self.assertEqual(alertas, [])
+
+    def test_tiene_drenaje_null_no_genera_alerta_drenaje(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Legacy",
+            telefono_whatsapp="+573001110005",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        # tiene_drenaje=None simula un registro anterior a esta versión
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            aspecto_drenaje="purulento",
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+
+        alertas = evaluar_registro(registro)
+
+        self.assertEqual(alertas, [])
 
 
 class BotWhatsAppTests(TestCase):
@@ -186,13 +301,14 @@ class BotWhatsAppTests(TestCase):
         )
 
     def _completar_flujo(self, gases_nauseas="sí, 0", temperatura="37.0",
-                         aspecto="1", cantidad="normal"):
-        """Recorre las 5 preguntas y devuelve la respuesta final del bot."""
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")        # -> temperatura
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, temperatura)   # -> dolor
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")           # -> aspecto
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, aspecto)       # -> cantidad
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, cantidad)      # -> gases/nauseas
+                         tiene_drenaje="sí", aspecto="1", cantidad="normal"):
+        """Recorre las 6 preguntas y devuelve la respuesta final del bot."""
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")          # -> temperatura
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, temperatura)     # -> dolor
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")             # -> tiene_drenaje
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, tiene_drenaje)   # -> aspecto (si sí)
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, aspecto)         # -> cantidad
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, cantidad)        # -> gases/nauseas
         return bot.procesar_mensaje(self.TELEFONO_TWILIO, gases_nauseas)
 
     def test_paciente_no_registrado(self):
@@ -217,6 +333,7 @@ class BotWhatsAppTests(TestCase):
         registro = RegistroDiario.objects.get()
         self.assertEqual(registro.temperatura, Decimal("37.0"))
         self.assertEqual(registro.dolor_eva, 3)
+        self.assertTrue(registro.tiene_drenaje)
         self.assertEqual(registro.aspecto_drenaje, "seroso")  # opción "1"
         self.assertEqual(registro.cantidad_drenaje, "normal")
         self.assertTrue(registro.presencia_gases)
@@ -248,11 +365,12 @@ class BotWhatsAppTests(TestCase):
         self._crear_paciente()
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "37.0")
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")
-        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "5")  # no tengo drenaje
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")           # dolor -> tiene_drenaje
+        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "no")  # no tiene drenaje
         self.assertEqual(respuesta, bot.MSG_PREGUNTA_GASES_NAUSEAS)
         conv = ConversacionWhatsApp.objects.get()
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_GASES_NAUSEAS)
+        self.assertFalse(conv.temp_tiene_drenaje)
         self.assertEqual(conv.temp_aspecto_drenaje, "sin_drenaje")
         self.assertEqual(conv.temp_cantidad_drenaje, "sin_drenaje")
 
@@ -285,9 +403,10 @@ class BotWhatsAppTests(TestCase):
         self._crear_paciente()
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "37.0")
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, "1")
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, "normal")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")      # dolor -> tiene_drenaje
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "sí")     # tiene_drenaje -> aspecto
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "1")      # aspecto -> cantidad
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "normal") # cantidad -> gases/nauseas
         respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "no sé")
         self.assertEqual(respuesta, bot.MSG_REINTENTO_GASES_NAUSEAS)
         conv = ConversacionWhatsApp.objects.get()
