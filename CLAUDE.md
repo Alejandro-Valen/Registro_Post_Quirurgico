@@ -104,15 +104,21 @@ correcto en casos de timestamps coincidentes.
 
 ## Modelos de Base de Datos
 
-### Paciente (Sprint 1)
+### Paciente (Sprint 1, ampliado en fase de generalización)
 ```python
 nombre_completo       CharField(200)
 telefono_whatsapp     CharField(20) unique  # identificador para el bot
 fecha_cirugia         DateField
+tipo_cirugia          CharField choices=[sugarbaker_hipec,colectomia_electiva,otra] null=True blank=True
 medico_responsable    CharField(200)
 activo                BooleanField default=True
 fecha_registro        DateTimeField auto_now_add=True
 ```
+
+**Decisión de diseño (fase de generalización):** `tipo_cirugia` es un dato
+puramente descriptivo — no alimenta el `alert_engine` ni cambia el flujo
+del bot. Existe para estadística e investigación futura; el sistema trata
+a todos los pacientes igual sin importar su valor.
 
 ### RegistroDiario (Sprint 1, ampliado en Sprint 3)
 ```python
