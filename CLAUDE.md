@@ -1,4 +1,4 @@
-# Contexto del Proyecto — MVP Sugarbaker / Clínica Somer
+# Contexto del Proyecto — Sistema de Monitoreo Posquirúrgico Remoto
 
 > **Para agentes IA:** Lee este archivo COMPLETO antes de sugerir cualquier
 > cambio al proyecto. Toda decisión técnica debe ser compatible con el contexto
@@ -9,14 +9,24 @@
 
 ## ¿Qué es este proyecto?
 
-Sistema de monitoreo remoto postquirúrgico para pacientes de cirugía oncológica
-Sugarbaker (HIPEC) de la Clínica Somer, Medellín, Colombia. El paciente interactúa
-exclusivamente por WhatsApp. Un bot le hace preguntas diarias de telemetría. El
-sistema clasifica los datos, detecta alertas rojas y notifica al oncólogo a través
-de un dashboard en Django Admin.
+Sistema de monitoreo remoto posquirúrgico para pacientes en recuperación de
+cirugía colorrectal — incluyendo casos Sugarbaker/HIPEC como uno de los
+tipos de procedimiento soportados, sin ser exclusivo de ellos (ver campo
+`tipo_cirugia` en el modelo `Paciente`). El paciente interactúa
+exclusivamente por WhatsApp. Un bot le hace preguntas diarias de telemetría.
+El sistema clasifica los datos, detecta alertas rojas y notifica al médico
+a través de un dashboard en Django Admin.
 
 **La IA NO diagnostica.** Funciona bajo un sistema de reglas clínicas fijas
-(alert_engine) para clasificar, resumir telemetría y generar alertas tempranas.
+(alert_engine) para clasificar, resumir telemetría y generar alertas
+tempranas.
+
+**Nota sobre alcance y afiliación:** este proyecto no tiene afiliación
+institucional formal a la fecha — es trabajo directo con el médico que
+originó la idea, sin vínculo formalizado a una clínica o universidad. No
+usar nombres de instituciones ni el nombre "Sugarbaker" como marca del
+sistema en código, documentación o el nombre del repositorio, hasta que
+exista una decisión formal sobre afiliación.
 
 ---
 
