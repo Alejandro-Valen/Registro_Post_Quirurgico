@@ -80,26 +80,46 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas[0].tipo, "ILEO_PARALITICO")
         self.assertEqual(alertas[0].severidad, "MEDIA")
 
-    def test_tres_registros_sin_gases_crea_alerta_ileo_alta(self):
+    def test_tres_dias_consecutivos_sin_gases_crea_alerta_ileo_alta(self):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Sin Gases",
             telefono_whatsapp="+573006661122",
             fecha_cirugia=timezone.now().date(),
             medico_responsable="Medico Prueba",
         )
-        registros = [
-            RegistroDiario.objects.create(
-                paciente=paciente,
-                temperatura=Decimal("37.0"),
-                dolor_eva=3,
-                aspecto_drenaje="seroso",
-                presencia_gases=False,
-                episodios_nauseas=0,
-            )
-            for _ in range(3)
-        ]
+        anteayer = timezone.now() - timedelta(days=2)
+        ayer = timezone.now() - timedelta(days=1)
 
-        alertas = evaluar_registro(registros[-1])
+        r1 = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            aspecto_drenaje="seroso",
+            presencia_gases=False,
+            episodios_nauseas=0,
+        )
+        RegistroDiario.objects.filter(pk=r1.pk).update(fecha_registro=anteayer)
+
+        r2 = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            aspecto_drenaje="seroso",
+            presencia_gases=False,
+            episodios_nauseas=0,
+        )
+        RegistroDiario.objects.filter(pk=r2.pk).update(fecha_registro=ayer)
+
+        r3 = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            aspecto_drenaje="seroso",
+            presencia_gases=False,
+            episodios_nauseas=0,
+        )
+
+        alertas = evaluar_registro(r3)
 
         self.assertEqual(len(alertas), 1)
         self.assertEqual(alertas[0].tipo, "ILEO_PARALITICO")
@@ -375,6 +395,118 @@ class AlertEngineTests(TestCase):
         )
         alertas = evaluar_registro(registro)
         self.assertEqual(alertas, [])
+
+    def test_un_dia_sin_gases_crea_alerta_baja(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Sin Gases Un Dia",
+            telefono_whatsapp="+573008880010",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=False,
+            episodios_nauseas=0,
+        )
+        alertas = evaluar_registro(registro)
+        alertas_gases = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(alertas_gases), 1)
+        self.assertEqual(alertas_gases[0].severidad, "BAJA")
+
+    def test_dos_dias_consecutivos_sin_gases_crea_alerta_media(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Sin Gases Dos Dias",
+            telefono_whatsapp="+573008880011",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        ayer = timezone.now() - timedelta(days=1)
+        registro_ayer = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=False,
+            episodios_nauseas=0,
+        )
+        RegistroDiario.objects.filter(pk=registro_ayer.pk).update(
+            fecha_registro=ayer
+        )
+        registro_hoy = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=False,
+            episodios_nauseas=0,
+        )
+        alertas = evaluar_registro(registro_hoy)
+        alertas_gases = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(alertas_gases), 1)
+        self.assertEqual(alertas_gases[0].severidad, "MEDIA")
+
+    def test_dos_registros_mismo_dia_sin_gases_cuenta_como_un_dia(self):
+        # Caso clave del nuevo modelo de 2 check-ins/día: 2 registros del
+        # MISMO día sin gases deben contar como 1 día, no como "2 días".
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Dos Checkins Mismo Dia",
+            telefono_whatsapp="+573008880012",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=False,
+            episodios_nauseas=0,
+        )
+        registro_2 = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=False,
+            episodios_nauseas=0,
+        )
+        alertas = evaluar_registro(registro_2)
+        alertas_gases = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(alertas_gases), 1)
+        self.assertEqual(alertas_gases[0].severidad, "BAJA")
+
+    def test_gases_en_un_checkin_del_dia_anula_alerta_ese_dia(self):
+        # Si hubo al menos un positivo en el día, ese día cuenta como
+        # "con gases" — sin importar que otro check-in del mismo día
+        # haya sido negativo.
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Gases Parcial",
+            telefono_whatsapp="+573008880013",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=False,
+            episodios_nauseas=0,
+        )
+        registro_2 = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        alertas = evaluar_registro(registro_2)
+        alertas_gases = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(alertas_gases), 0)
 
 
 class BotWhatsAppTests(TestCase):
