@@ -68,44 +68,60 @@ que fue eliminada en el Sprint 1.
 
 ## Variables Clínicas que Registra el Sistema
 
-Capturadas una vez al día por WhatsApp:
+Capturadas 2 veces al día por WhatsApp (decisión jun 2026 — Gignoux 2018
+como referencia parcial; **pendiente de implementar en bot.py**, hoy el
+bot sigue capturando 1 vez/día):
 
 | # | Variable | Tipo | Unidad |
 |---|----------|------|--------|
 | 1 | Temperatura corporal | Decimal | °C |
 | 2 | Dolor EVA | Entero | Escala 1-10 |
-| 3 | Aspecto del drenaje | Choices | seroso/hemático/purulento/fecaloide/sin_drenaje |
-| 4 | Cantidad del drenaje | Choices | poco/normal/mucho/sin_drenaje (cualitativo, lo captura el bot) |
-| 5 | Volumen del drenaje | Entero opcional | ml — solo si el paciente lo mide y lo reporta |
-| 6 | Presencia de gases | Booleano | sí/no |
-| 7 | Episodios de náuseas/vómito | Entero | cantidad en 24h |
+| 3 | ¿Tiene drenaje activo? | Booleano nullable | sí/no/no capturado |
+| 4 | Aspecto del drenaje | Choices | seroso/hemático/turbio/purulento/fecaloide/sin_drenaje |
+| 5 | Cantidad del drenaje | Choices | poco/normal/mucho/sin_drenaje (cualitativo) |
+| 6 | Volumen del drenaje | Entero opcional | ml — solo si el paciente lo mide |
+| 7 | Presencia de gases | Booleano | sí/no |
+| 8 | Episodios de náuseas/vómito | Entero | cantidad por check-in |
 
 ---
 
 ## Reglas del Motor de Alertas (alert_engine.py)
 
-**Archivo:** `signos_sintomas/alert_engine.py` — implementado en Sprint 2, mergeado a
-`Desarrollo` (PR #1), con fix post-merge en commit `01b8a47`
+**Archivo:** `signos_sintomas/alert_engine.py`
 **Función principal:** `evaluar_registro(registro: RegistroDiario) -> list[Alerta]`
+**Principio de diseño (decisión jun 2026):** modelo de alta sensibilidad
+(Lee 2022, Outersterp 2025) — escalera BAJA/MEDIA/ALTA en vez de un solo
+nivel de alerta. 4 de 5 variables reescritas bajo este modelo; Dolor
+(Regla 5) decidido pero aún no implementado.
 
 | Regla | Condición exacta | Tipo Alerta | Severidad | Base clínica |
 |-------|-----------------|-------------|-----------|--------------|
-| 1 | temperatura >= 38.0 | SEPSIS | ALTA | Riesgo de sepsis postoperatoria |
+| 1a | temperatura >= 37.9°C (cualquier registro del día) | SEPSIS | ALTA | Outersterp 2025 — umbral de notificación domiciliaria |
+| 1b | temperatura 37.5–37.8°C en 2 días calendario consecutivos | SEPSIS | MEDIA | Subfebrícula persistente — construcción propia |
 | 2a | tiene_drenaje is True AND aspecto in ['purulento','fecaloide'] | FUGA_ANASTOMOTICA | ALTA | Fuga anastomótica confirmada |
 | 2b | tiene_drenaje is True AND aspecto in ['turbio','hematico'] | FUGA_ANASTOMOTICA | MEDIA | Drenaje sospechoso — seguimiento |
 | 2c | tiene_drenaje is True AND aspecto == 'seroso' | FUGA_ANASTOMOTICA | BAJA | Drenaje dentro de lo esperado |
-| 3 | sin gases 3 días consecutivos (por dia_postoperatorio) | ILEO_PARALITICO | ALTA | Íleo paralítico severo |
-| 4 | episodios_nauseas > 3 | ILEO_PARALITICO | MEDIA | Íleo paralítico moderado |
+| 3a | sin gases 1 día calendario | ILEO_PARALITICO | BAJA | Gases = criterio de alta ERAS; ausencia = regresión |
+| 3b | sin gases 2 días calendario consecutivos | ILEO_PARALITICO | MEDIA | ídem |
+| 3c | sin gases 3 días calendario consecutivos | ILEO_PARALITICO | ALTA | ídem — umbral histórico del proyecto |
+| 4a | suma episodios_nauseas del día: 1-2 | ILEO_PARALITICO | BAJA | Lee 2022, Outersterp 2025 — cualquier episodio es señal |
+| 4b | suma episodios_nauseas del día: 3-4 | ILEO_PARALITICO | MEDIA | ídem |
+| 4c | suma episodios_nauseas del día: 5+ | ILEO_PARALITICO | ALTA | ídem |
+| 4d | náuseas (≥1 episodio/día) en 2 días calendario consecutivos | ILEO_PARALITICO | MEDIA (mínimo) | Persistencia — solo sube severidad, nunca la baja |
+| 4e | náuseas (≥1 episodio/día) en 4 días calendario consecutivos | ILEO_PARALITICO | ALTA | Delaney 2008 — íleo en 27.8% con estancia 4+ días vs 11% general |
+| 5 | Pendiente — ver nota abajo | DOLOR_AGUDO | — | **DECIDIDO, NO IMPLEMENTADO** |
 
-**Nota Regla 2:** si `tiene_drenaje` es `None` (registro legado anterior a
-migración 0004) o `False` (paciente sin drenaje), la Regla 2 no evalúa —
-no genera ninguna alerta de drenaje. Decisión de Arquitectos, jun 2026.
-Base literaria: Lee 2022, Gignoux 2018, Coeckelberghs 2025.
+**Nota sobre lógica de días calendario (Reglas 1, 3, 4):** agrupan
+registros por `fecha_registro__date`, no por número de registro — el
+sistema captura 2 check-ins/día, así que 2 registros del mismo día
+cuentan como 1 día, no como 2.
 
-**Nota Regla 3:** usa `dia_postoperatorio` (no timestamp) para determinar
-"3 días consecutivos" — corregido en el fix post-merge `01b8a47` tras auditoría
-de Claude Code, que detectó que usar `fecha_registro` no garantizaba el orden
-correcto en casos de timestamps coincidentes.
+**Nota Regla 5 (Dolor/DOLOR_AGUDO — pendiente de implementar):** escalera
+por `dia_postoperatorio` (POD 1-2: BAJA 5-6/MEDIA 7-8/ALTA 9-10; POD 3-5:
+BAJA 4-5/MEDIA 6-7/ALTA 8-10; POD 6+: BAJA 3-4/MEDIA 5-6/ALTA 7-10) +
+capa de tendencia alcista (promedio últimos 2 días sube ≥3 puntos vs.
+promedio 2 días anteriores → sube un nivel de severidad). Base: Delaney
+2008, Lee 2022, Outersterp 2025, Coeckelberghs 2025.
 
 ---
 
@@ -193,7 +209,7 @@ la base de datos en lugar de en memoria.
 
 Diseño: lógica **pura**, sin conocimiento de HTTP ni Twilio. La vista
 (`views.py`, pendiente) traduce HTTP ↔ esta función. Esto permite testear el
-bot completo sin mockear peticiones web — actualmente **27 tests unitarios OK**.
+bot completo sin mockear peticiones web — actualmente **41 tests unitarios OK**.
 
 **Máquina de estados (6 preguntas):**
 ```
@@ -277,20 +293,20 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 2 | Motor de alertas (alert_engine) | ✅ Completado (fix post-merge 01b8a47) |
 | Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Funcional end-to-end — merge a Desarrollo POSPUESTO a propósito (ver nota) |
 | Sprint 3.5 | Auditoría de literatura, generalización de alcance/marca y documentación | ✅ Completado |
+| Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ⏳ 4/5 variables completadas (falta dolor) |
 | Sprint 4 | Dashboard médico y notificaciones | ⏳ Pendiente |
 | Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ Pendiente |
 
-**Punto actual:** Sprint 3 funcional end-to-end + **primera decisión de
-arquitectura clínica implementada** (campo `tiene_drenaje` + escalera
-BAJA/MEDIA/ALTA en Regla 2, migración 0004 aplicada, 27 tests OK). Sprint
-3.5 (generalización + auditoría de literatura) ya cerrado. **Próximos
-pasos de arquitectura clínica del `alert_engine`** pendientes: umbral de
-fiebre (38.0 vs. 37.9 de Outersterp 2025), regla de "3 días sin gases"
-(sin respaldo literal en PDFs), umbral de náuseas (>3 actual vs.
-cualquier episodio), gap de `DOLOR_AGUDO` (candidato: EVA≥4), frecuencia
-de check-ins (1×/día vs. 2-3×/día recientes). Ver
-`docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md`. El merge
-`sprint-3-whatsapp` → `Desarrollo` sigue pospuesto hasta cerrar esa fase.
+**Punto actual:** Sprint 3 funcional end-to-end. Fase de decisiones de
+arquitectura clínica del `alert_engine` en curso — **4 de 5 variables
+reescritas** bajo el modelo de alta sensibilidad: drenaje, temperatura,
+gases y náuseas (41 tests OK). Falta solo dolor (Regla 5,
+`DOLOR_AGUDO`), ya decidido pero sin implementar. También decidida —
+pero sin implementar en `bot.py` todavía — la frecuencia de check-ins:
+2×/día fijo. Ver `docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md`
+para el detalle original. El merge `sprint-3-whatsapp` → `Desarrollo`
+sigue pospuesto hasta cerrar dolor + la implementación de 2×/día en el
+bot.
 
 - ✅ **Paso 1:** modelo `ConversacionWhatsApp` + campo `cantidad_drenaje` en
   `RegistroDiario` + migración `0002` aplicada.
@@ -365,6 +381,20 @@ encontrados y resueltos). Debe incluir:
   sección "Punto actual" con el sprint y paso exacto donde quedó el trabajo.
 - En **ROADMAP_MONITOREO_POSQUIRURGICO.md**: marcar con `[x]` los
   checkboxes de las tareas completadas en la sesión.
+
+  **Regla de sincronización inmediata (no diferible):** si la sesión
+  modificó cualquier regla, umbral, constante, campo de modelo, o
+  estructura de datos que tenga su reflejo en una tabla de referencia
+  técnica de CLAUDE.md o ROADMAP_MONITOREO_POSQUIRURGICO.md (ej. "Reglas
+  del Motor de Alertas", "Variables Clínicas", "Modelos de Base de
+  Datos", la máquina de estados del bot), esas tablas se actualizan en el
+  mismo lote de commits que el cambio de código — esto NUNCA se difiere,
+  ni siquiera si el Arquitecto pidió esperar para escribir en
+  BITACORA.md. La narrativa de BITACORA (qué se hizo, por qué, qué
+  queda pendiente) sí puede acumularse en una sola entrada al cierre de
+  una fase completa; las tablas de referencia técnica no — deben reflejar
+  el código real en todo momento, porque son lo primero que cualquier
+  agente IA lee para entender el estado actual del proyecto.
 
 ### 3. Git add, commit y push
 - Seguir la convención de commits ya definida (`feat:`, `fix:`, `docs:` +
