@@ -554,6 +554,62 @@ clínica que surge de la auditoría de literatura (Sprint 3.5).
 
 ---
 
+## Sprint 3.6 — Reescritura Alert Engine: Temperatura, Gases y Náuseas
+**Fecha:** 18-19/06/2026
+**Responsable:** León (Arquitecto IA) + Claude Code
+**Estado:** COMPLETADO ✅ (Dolor pendiente)
+
+### Qué se construyó
+
+**Regla 1 — Temperatura (Regla 1 reescrita):**
+- Escalera ALTA (≥37.9°C) / MEDIA (subfebrícula 37.5–37.8°C persistente 2 días calendario).
+- Lógica de días calendario: agrupa por `fecha_registro__date`, no por número de registro.
+- Constantes: `TEMPERATURA_ALTA=37.9`, `TEMPERATURA_SUBFEBRICULA_MIN=37.5`, `DIAS_SUBFEBRICULA_PERSISTENTE=2`.
+- 4 tests nuevos; `test_valores_limite_no_crean_alertas` actualizado (37.9→37.4).
+
+**Regla 3 — Gases (Regla 3 reescrita):**
+- Escalera BAJA/MEDIA/ALTA por 1/2/3 días calendario consecutivos sin gases.
+- While-loop hacia atrás: cuenta días sin gases, se detiene al encontrar gases o ausencia total de registro.
+- Constantes: `DIAS_SIN_GASES_BAJA=1`, `DIAS_SIN_GASES_MEDIA=2`, `DIAS_SIN_GASES_ALTA=3`.
+- 4 tests nuevos; `test_tres_registros_sin_gases_...` renombrado y reescrito para usar 3 días calendario distintos.
+
+**Regla 4 — Náuseas (Regla 4 reescrita):**
+- Suma diaria de episodios (1-2→BAJA, 3-4→MEDIA, 5+→ALTA).
+- Capa de persistencia: 2 días calendario consecutivos → MEDIA mínimo; 4 días → ALTA.
+- Severidad final = max(suma, persistencia) vía `ORDEN_SEVERIDAD`.
+- Usa `models.Sum('episodios_nauseas')` para agrupar check-ins del mismo día.
+- Constantes: `NAUSEAS_BAJA_MIN=1`, `NAUSEAS_MEDIA_MIN=3`, `NAUSEAS_ALTA_MIN=5`, `DIAS_NAUSEAS_MEDIA=2`, `DIAS_NAUSEAS_ALTA=4`.
+- 6 tests nuevos; `test_registro_sin_red_flags_no_crea_alertas` corregido (episodios_nauseas 1→0).
+
+**Suite:** 41 tests OK (27 previos + 14 nuevos de este sprint).
+
+### Decisiones tomadas
+
+1. **Umbral de temperatura: 37.9°C (Outersterp 2025).** El estudio usa ≥37.9°C como umbral de notificación domiciliaria — más conservador que el 38.0°C histórico del proyecto. Adoptado para ALTA. La subfebrícula (37.5–37.8°C) se considera MEDIA solo si persiste 2 días calendario.
+
+2. **Gases como escalera de 3 niveles.** El paciente ya demostró función intestinal al ser dado de alta (criterio ERAS estándar); no tener gases en casa es una regresión. 1 día sin gases → BAJA (señal temprana), 2 días → MEDIA, 3 días → ALTA. El umbral ALTA de 3 días no tiene respaldo literal en los PDFs revisados pero se mantiene por consistencia clínica.
+
+3. **Náuseas: cualquier episodio es señal (BAJA desde 1).** Lee 2022 y Outersterp 2025 tratan cualquier episodio como dato relevante en monitoreo domiciliario. El umbral anterior (>3) era demasiado conservador para detección temprana.
+
+4. **Persistencia de náuseas: escalón en 4 días (ALTA).** Delaney 2008: pacientes con estancia ≥4 días tenían íleo en 27.8% vs. 11% general. Ese orden de magnitud justifica un escalón ALTA independiente del conteo diario.
+
+5. **Frecuencia de check-ins: 2×/día (decisión de arquitectura).** Todos los modelos de días (Reglas 1, 3, 4) agrupan por `fecha_registro__date`. Si el bot hace 2 preguntas por día, los 2 registros del mismo día cuentan como 1 día, no como 2. La lógica ya está implementada anticipando ese modelo (FASE 4).
+
+6. **Import `from django.db import models`:** necesario para `models.Sum()` en Regla 4. Añadido al `alert_engine.py`.
+
+### Problemas encontrados y resueltos
+
+- **`test_registro_sin_red_flags_no_crea_alertas` fallaba:** con `NAUSEAS_BAJA_MIN=1`, un registro con `episodios_nauseas=1` ya genera BAJA. Solución: cambiar a 0 (Opción A del Arquitecto) — el test de "sin alertas" usa 0 episodios, lo que es coherente con la nueva regla.
+- **Namespace `hoy` vs `hoy_gases`:** Regla 1 usa `hoy` dentro de su bloque `elif`; Regla 3 usa `hoy_gases`. No es una colisión de ámbito (son bloques secuenciales) pero se nombró diferente para claridad de lectura.
+- **`auto_now_add` en tests:** `fecha_registro` no se puede setear en `.create()`. Solución ya establecida: `RegistroDiario.objects.filter(pk=...).update(fecha_registro=past_datetime)` inmediatamente después de crear.
+
+### Próximo paso
+
+- Implementar Regla 5 — `DOLOR_AGUDO` (escalera por `dia_postoperatorio` + tendencia alcista). Decidida, no implementada.
+- Merge `sprint-3-whatsapp` → `Desarrollo` (pospuesto hasta implementar DOLOR_AGUDO para hacer un solo merge).
+
+---
+
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** pendiente
 **Estado:** EN COLA ⏳
