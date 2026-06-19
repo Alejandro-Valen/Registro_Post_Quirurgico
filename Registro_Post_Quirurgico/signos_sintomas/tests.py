@@ -665,6 +665,133 @@ class AlertEngineTests(TestCase):
         self.assertEqual(len(alertas_nauseas), 1)
         self.assertEqual(alertas_nauseas[0].severidad, "ALTA")
 
+    def test_dolor_pod1_eva6_crea_alerta_baja(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Dolor POD1",
+            telefono_whatsapp="+573008880030",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=6,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        alertas = evaluar_registro(registro)
+        alertas_dolor = [a for a in alertas if a.tipo == "DOLOR_AGUDO"]
+        self.assertEqual(len(alertas_dolor), 1)
+        self.assertEqual(alertas_dolor[0].severidad, "BAJA")
+
+    def test_dolor_pod1_eva9_crea_alerta_alta(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Dolor POD1 Alto",
+            telefono_whatsapp="+573008880031",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=9,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        alertas = evaluar_registro(registro)
+        alertas_dolor = [a for a in alertas if a.tipo == "DOLOR_AGUDO"]
+        self.assertEqual(len(alertas_dolor), 1)
+        self.assertEqual(alertas_dolor[0].severidad, "ALTA")
+
+    def test_dolor_pod6_eva6_crea_alerta_media(self):
+        # En POD6+, EVA 6 cae en rango MEDIA (5-6), distinto a POD1-2
+        # donde EVA 6 sería BAJA. Verifica que la ventana correcta aplique.
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Dolor POD6",
+            telefono_whatsapp="+573008880032",
+            fecha_cirugia=timezone.localdate() - timedelta(days=6),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=6,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        alertas = evaluar_registro(registro)
+        alertas_dolor = [a for a in alertas if a.tipo == "DOLOR_AGUDO"]
+        self.assertEqual(len(alertas_dolor), 1)
+        self.assertEqual(alertas_dolor[0].severidad, "MEDIA")
+
+    def test_dolor_pod6_eva2_no_crea_alerta(self):
+        # EVA 2 en POD6+ está por debajo del umbral BAJA (3) — sin alerta.
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Dolor POD6 Bajo",
+            telefono_whatsapp="+573008880033",
+            fecha_cirugia=timezone.localdate() - timedelta(days=6),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        alertas = evaluar_registro(registro)
+        alertas_dolor = [a for a in alertas if a.tipo == "DOLOR_AGUDO"]
+        self.assertEqual(len(alertas_dolor), 0)
+
+    def test_dolor_tendencia_alcista_escala_severidad(self):
+        # POD5: EVA 2 y 2 (promedio 2) hace 3-4 días, luego EVA 5 hoy y
+        # ayer (promedio 5) -> delta = 3, debe escalar un nivel sobre lo
+        # que daría la tabla sola (POD3-5, EVA5 = BAJA por tabla -> sube
+        # a MEDIA por tendencia).
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Dolor Tendencia",
+            telefono_whatsapp="+573008880034",
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),
+            medico_responsable="Medico Prueba",
+        )
+        for dias_atras, eva in [(3, 2), (2, 2)]:
+            fecha = timezone.now() - timedelta(days=dias_atras)
+            reg = RegistroDiario.objects.create(
+                paciente=paciente,
+                temperatura=Decimal("37.0"),
+                dolor_eva=eva,
+                tiene_drenaje=False,
+                presencia_gases=True,
+                episodios_nauseas=0,
+            )
+            RegistroDiario.objects.filter(pk=reg.pk).update(fecha_registro=fecha)
+        fecha_ayer = timezone.now() - timedelta(days=1)
+        reg_ayer = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=5,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        RegistroDiario.objects.filter(pk=reg_ayer.pk).update(fecha_registro=fecha_ayer)
+        registro_hoy = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=5,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        alertas = evaluar_registro(registro_hoy)
+        alertas_dolor = [a for a in alertas if a.tipo == "DOLOR_AGUDO"]
+        self.assertEqual(len(alertas_dolor), 1)
+        self.assertEqual(alertas_dolor[0].severidad, "MEDIA")
+
 
 class BotWhatsAppTests(TestCase):
     TELEFONO = "+573001112233"
