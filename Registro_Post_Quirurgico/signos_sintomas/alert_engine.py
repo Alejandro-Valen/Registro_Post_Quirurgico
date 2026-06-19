@@ -15,7 +15,9 @@ DRENAJES_MEDIA = ('turbio', 'hematico')
 DRENAJES_BAJA  = ('seroso',)
 
 EPISODIOS_NAUSEAS_ILEO = 3
-REGISTROS_SIN_GASES_ILEO = 3
+DIAS_SIN_GASES_BAJA  = 1
+DIAS_SIN_GASES_MEDIA = 2
+DIAS_SIN_GASES_ALTA  = 3
 
 def evaluar_registro(registro):
     alertas_creadas = []
@@ -118,21 +120,68 @@ def evaluar_registro(registro):
         )
         alertas_creadas.append(alerta)
 
-    # Regla 3: Sin gases por 3 días postoperatorios consecutivos
-    ultimos_registros = RegistroDiario.objects.filter(
-        paciente=registro.paciente,
-        dia_postoperatorio__lte=registro.dia_postoperatorio
-    ).order_by('-dia_postoperatorio', '-fecha_registro')[:REGISTROS_SIN_GASES_ILEO]
-    if len(ultimos_registros) == REGISTROS_SIN_GASES_ILEO and all(
-        not registro_diario.presencia_gases
-        for registro_diario in ultimos_registros
-    ):
+    # Regla 3: Ausencia de gases — escalera por días calendario consecutivos.
+    # Decisión Arquitecto, jun 2026. El paciente ya demostró función
+    # intestinal al momento del alta (criterio ERAS estándar); dejar de
+    # tener gases en casa es una regresión, no un estado normal. Un día
+    # cuenta como "con gases" si hubo al menos un registro positivo en
+    # cualquier check-in de ese día.
+    hoy_gases = registro.fecha_registro.date()
+    dias_sin_gases_consecutivos = 0
+    dia_revisado = hoy_gases
+    while True:
+        hubo_gases_ese_dia = RegistroDiario.objects.filter(
+            paciente=registro.paciente,
+            fecha_registro__date=dia_revisado,
+            presencia_gases=True,
+        ).exists()
+        existe_registro_ese_dia = RegistroDiario.objects.filter(
+            paciente=registro.paciente,
+            fecha_registro__date=dia_revisado,
+        ).exists()
+        if not existe_registro_ese_dia:
+            break
+        if hubo_gases_ese_dia:
+            break
+        dias_sin_gases_consecutivos += 1
+        if dias_sin_gases_consecutivos >= DIAS_SIN_GASES_ALTA:
+            break
+        dia_revisado = dia_revisado - timedelta(days=1)
+
+    if dias_sin_gases_consecutivos >= DIAS_SIN_GASES_ALTA:
         alerta = Alerta.objects.create(
             paciente=registro.paciente,
             registro_origen=registro,
             tipo='ILEO_PARALITICO',
             severidad='ALTA',
-            mensaje="Paciente sin gases por 3 registros consecutivos. Posible íleo paralítico severo."
+            mensaje=(
+                f"Paciente sin gases por {dias_sin_gases_consecutivos} días "
+                "consecutivos. Posible íleo paralítico severo — ir a urgencias."
+            )
+        )
+        alertas_creadas.append(alerta)
+    elif dias_sin_gases_consecutivos >= DIAS_SIN_GASES_MEDIA:
+        alerta = Alerta.objects.create(
+            paciente=registro.paciente,
+            registro_origen=registro,
+            tipo='ILEO_PARALITICO',
+            severidad='MEDIA',
+            mensaje=(
+                f"Paciente sin gases por {dias_sin_gases_consecutivos} días "
+                "consecutivos. Llamar al médico."
+            )
+        )
+        alertas_creadas.append(alerta)
+    elif dias_sin_gases_consecutivos >= DIAS_SIN_GASES_BAJA:
+        alerta = Alerta.objects.create(
+            paciente=registro.paciente,
+            registro_origen=registro,
+            tipo='ILEO_PARALITICO',
+            severidad='BAJA',
+            mensaje=(
+                f"Paciente sin gases por {dias_sin_gases_consecutivos} día(s). "
+                "Monitorear."
+            )
         )
         alertas_creadas.append(alerta)
 
