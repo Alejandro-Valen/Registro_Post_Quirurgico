@@ -288,30 +288,36 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 - [x] Generalizar ROADMAP_MVP_SUGARBAKER.md (este archivo)
 - [x] Actualizar tabla "Estado Actual del Proyecto" / "Punto actual" en CLAUDE.md
 
-**Pendiente (decidido, sin ejecutar — fuera de esta fase):**
-- [x] Decidir nombre del archivo: renombrado a `ROADMAP_MONITOREO_POSQUIRURGICO.md` (nombre del repositorio se mantiene sin cambios, decisión explícita del Arquitecto)
-- [x] Fase de decisiones de arquitectura del `alert_engine` (umbrales de fiebre, gases, náuseas) — implementada en Sprint 3.6 (ver FASE 3.6 abajo)
-- [ ] Merge `sprint-3-whatsapp` → `Desarrollo` (pospuesto hasta cerrar gap DOLOR_AGUDO)
-
 ---
 
-### ⏳ FASE 3.6 — Reescritura Alert Engine: Temperatura, Gases y Náuseas — EN CURSO
+### ⏳ FASE 3.6 — Decisiones de Arquitectura Clínica del alert_engine — EN CURSO
+> Basado en `docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md`.
+> Workflow: decidir → implementar → verificar → documentar → repetir,
+> una variable a la vez. Principio de diseño general: modelo de alta
+> sensibilidad (Lee 2022, Outersterp 2025) — escalera BAJA/MEDIA/ALTA
+> en vez de un solo nivel de alerta.
 
-**Contexto:** Decisiones de arquitectura clínica tomadas tras auditoría de literatura
-(Outersterp 2025, Lee 2022, Delaney 2008, Coeckelberghs 2025). Principio guía: modelo
-de alta sensibilidad — escalera BAJA/MEDIA/ALTA en vez de un solo nivel. El sistema
-capturará 2 check-ins/día en FASE 4; la lógica de días calendario ya fue implementada
-anticipando ese modelo.
-
-**Completado:**
-- [x] **Temperatura (Regla 1):** escalera ALTA (≥37.9°C) / MEDIA (subfebrícula 37.5-37.8°C persistente 2 días calendario). Base: Outersterp 2025.
-- [x] **Gases (Regla 3):** escalera BAJA/MEDIA/ALTA por 1/2/3 días calendario consecutivos sin gases. Lógica de días calendario (no por número de registros).
-- [x] **Náuseas (Regla 4):** suma diaria (1-2→BAJA, 3-4→MEDIA, 5+→ALTA) + persistencia (2 días→MEDIA mínimo, 4 días→ALTA). Base: Lee 2022, Outersterp 2025, Delaney 2008.
-- [x] Suite de tests: 41 tests OK (14 nuevos en Sprint 3.6 + fix tests existentes).
-
-**Pendiente:**
-- [ ] **Dolor (Regla 5 — DOLOR_AGUDO):** escalera por dia_postoperatorio + capa de tendencia alcista. Decidido, no implementado.
-- [ ] Merge `sprint-3-whatsapp` → `Desarrollo` (pospuesto hasta implementar Dolor).
+- [x] Drenaje — campo `tiene_drenaje` + escalera por aspecto (commits
+  `3d98637`, `40ecbf8`, `552e419`, `38774c9`)
+- [x] Temperatura — escalera ALTA/MEDIA por días calendario (commits
+  `7c6817f`, `62aacbc`)
+- [x] Gases — escalera BAJA/MEDIA/ALTA por días calendario consecutivos
+  (commits `98c2bc6`, `c1b9ef3`)
+- [x] Náuseas — suma diaria + persistencia en dos escalones (commits
+  `edc2baa`, `9ee8e33`)
+- [ ] Dolor / gap `DOLOR_AGUDO` — decidido (ventanas por
+  `dia_postoperatorio` + tendencia alcista delta≥3), **pendiente de
+  implementar**
+- [x] Frecuencia de check-ins: decidido 2×/día fijo (Gignoux 2018 como
+  referencia parcial) — **pendiente de implementar en bot.py** (requiere
+  campo nuevo en `ConversacionWhatsApp` para distinguir check-in de
+  mañana/tarde)
+- [ ] Variables nuevas de la literatura (FC/FR, RH/antecedentes) —
+  pausado, sin abordar
+- [ ] Repaso final de `alert_engine.py` completo antes de cerrar esta
+  fase
+- [ ] Merge `sprint-3-whatsapp` → `Desarrollo` (pospuesto hasta cerrar
+  Dolor y la implementación de 2×/día en el bot)
 
 ---
 
@@ -444,4 +450,10 @@ DB_PORT=5432
 
 ---
 
-*Última actualización: Sprint 3.6 — reescritura alert_engine completada para temperatura, gases y náuseas (41 tests OK, rama `sprint-3-whatsapp`). Próximo paso: implementar Regla 5 DOLOR_AGUDO, luego merge a `Desarrollo` y Sprint 4.*
+*Última actualización: Fase 3.6 en curso — 4/5 reglas del alert_engine
+reescritas bajo modelo de alta sensibilidad (drenaje, temperatura,
+gases, náuseas — 41 tests OK). Frecuencia de check-ins decidida
+(2×/día) pendiente de implementar en bot.py.*
+*Siguiente paso: implementar Regla 5 (Dolor/DOLOR_AGUDO), luego 2×/día
+en bot.py, luego merge `sprint-3-whatsapp` → `Desarrollo` con
+aprobación del Arquitecto.*
