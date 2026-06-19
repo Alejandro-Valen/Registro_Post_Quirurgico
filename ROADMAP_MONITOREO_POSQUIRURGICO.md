@@ -268,6 +268,24 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 - [ ] Configurar envío automático del bot cada mañana (Celery beat o cron)
 - [ ] Demo funcional con 1 paciente ficticio para el equipo médico
 
+**Decisiones de diseño pendientes (anotadas durante la implementación
+del alert_engine, jun 2026):**
+- [ ] Mecanismo de escalamiento automático: si una alerta MEDIA lleva
+  mucho tiempo sin marcarse `resuelta`, ¿debería escalar sola a ALTA?
+  Depende de los campos `resuelta`/`fecha_resolucion` que ya existen en
+  el modelo `Alerta` pero no se usan activamente todavía.
+- [ ] Campo de "motivo de resolución" en `Alerta` para diferenciar caso
+  real vs. falso positivo — útil si se quiere ajustar umbrales del
+  alert_engine con datos reales en el futuro, no indispensable para el
+  primer dashboard.
+- [ ] Duración del seguimiento del bot por paciente: ¿cuándo se
+  desactiva automáticamente `Paciente.activo`? Hoy nada lo cambia solo
+  — definir si es un número fijo de días postoperatorios, o si el
+  médico lo cierra manualmente desde el dashboard.
+- [ ] Interfaz del médico para gestionar alertas: cómo marcar
+  `resuelta`, cómo distinguir falsos positivos de casos reales, y cómo
+  se visualiza la escalera de severidad BAJA/MEDIA/ALTA en pantalla.
+
 ---
 
 ### ⏳ FASE 5 — Producción — PENDIENTE
