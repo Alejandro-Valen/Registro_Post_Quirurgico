@@ -139,7 +139,7 @@ class AlertEngineTests(TestCase):
             tiene_drenaje=False,
             aspecto_drenaje="seroso",
             presencia_gases=True,
-            episodios_nauseas=1,
+            episodios_nauseas=0,
         )
 
         alertas = evaluar_registro(registro)
@@ -182,6 +182,8 @@ class AlertEngineTests(TestCase):
             medico_responsable="Medico Prueba",
         )
         # 37.4°C: justo por debajo del umbral de subfebrícula (37.5°C)
+        # episodios_nauseas=0: con la regla nueva cualquier episodio >= 1
+        # genera alerta, se usa 0 para mantener la intención original del test
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.4"),
@@ -189,7 +191,7 @@ class AlertEngineTests(TestCase):
             tiene_drenaje=False,
             aspecto_drenaje="seroso",
             presencia_gases=True,
-            episodios_nauseas=3,
+            episodios_nauseas=0,
         )
 
         alertas = evaluar_registro(registro)
@@ -507,6 +509,161 @@ class AlertEngineTests(TestCase):
         alertas = evaluar_registro(registro_2)
         alertas_gases = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
         self.assertEqual(len(alertas_gases), 0)
+
+    def test_un_episodio_nausea_crea_alerta_baja(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Nausea Baja",
+            telefono_whatsapp="+573008880020",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=1,
+        )
+        alertas = evaluar_registro(registro)
+        alertas_nauseas = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(alertas_nauseas), 1)
+        self.assertEqual(alertas_nauseas[0].severidad, "BAJA")
+
+    def test_cinco_episodios_nausea_crea_alerta_alta(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Nausea Alta",
+            telefono_whatsapp="+573008880021",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=5,
+        )
+        alertas = evaluar_registro(registro)
+        alertas_nauseas = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(alertas_nauseas), 1)
+        self.assertEqual(alertas_nauseas[0].severidad, "ALTA")
+
+    def test_nauseas_suma_dos_checkins_mismo_dia(self):
+        # Caso clave del modelo de 2 check-ins/día: 2 registros del mismo
+        # día con 2 episodios cada uno deben SUMAR 4 → MEDIA, no contarse
+        # por separado como 2+2 sin sumar.
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Nausea Suma Dia",
+            telefono_whatsapp="+573008880022",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=2,
+        )
+        registro_2 = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=2,
+        )
+        alertas = evaluar_registro(registro_2)
+        alertas_nauseas = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(alertas_nauseas), 1)
+        self.assertEqual(alertas_nauseas[0].severidad, "MEDIA")
+
+    def test_nauseas_persistencia_dos_dias_escala_a_media(self):
+        # 1 episodio ayer + 1 episodio hoy (cada uno solo daría BAJA por
+        # suma) → la persistencia de 2 días consecutivos escala a MEDIA.
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Nausea Persistente",
+            telefono_whatsapp="+573008880023",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        ayer = timezone.now() - timedelta(days=1)
+        registro_ayer = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=1,
+        )
+        RegistroDiario.objects.filter(pk=registro_ayer.pk).update(
+            fecha_registro=ayer
+        )
+        registro_hoy = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=1,
+        )
+        alertas = evaluar_registro(registro_hoy)
+        alertas_nauseas = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(alertas_nauseas), 1)
+        self.assertEqual(alertas_nauseas[0].severidad, "MEDIA")
+
+    def test_sin_nauseas_no_crea_alerta(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Sin Nauseas",
+            telefono_whatsapp="+573008880024",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        alertas = evaluar_registro(registro)
+        alertas_nauseas = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(alertas_nauseas), 0)
+
+    def test_nauseas_persistencia_cuatro_dias_escala_a_alta(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Nausea Persistente Larga",
+            telefono_whatsapp="+573008880025",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        for dias_atras in [3, 2, 1]:
+            fecha = timezone.now() - timedelta(days=dias_atras)
+            reg = RegistroDiario.objects.create(
+                paciente=paciente,
+                temperatura=Decimal("37.0"),
+                dolor_eva=3,
+                tiene_drenaje=False,
+                presencia_gases=True,
+                episodios_nauseas=1,
+            )
+            RegistroDiario.objects.filter(pk=reg.pk).update(fecha_registro=fecha)
+        registro_hoy = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=1,
+        )
+        alertas = evaluar_registro(registro_hoy)
+        alertas_nauseas = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(alertas_nauseas), 1)
+        self.assertEqual(alertas_nauseas[0].severidad, "ALTA")
 
 
 class BotWhatsAppTests(TestCase):
