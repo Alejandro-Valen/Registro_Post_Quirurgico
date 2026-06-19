@@ -1,9 +1,12 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from .models import Alerta, RegistroDiario
 
 
-TEMPERATURA_SEPSIS = Decimal('38.0')
+TEMPERATURA_ALTA = Decimal('37.9')           # Outersterp 2025
+TEMPERATURA_SUBFEBRICULA_MIN = Decimal('37.5')
+DIAS_SUBFEBRICULA_PERSISTENTE = 2
 
 # Escalera de severidad por aspecto de drenaje (decisión Arquitectos jun 2026)
 # Base: Lee 2022, Gignoux 2018, Coeckelberghs 2025
@@ -17,16 +20,50 @@ REGISTROS_SIN_GASES_ILEO = 3
 def evaluar_registro(registro):
     alertas_creadas = []
 
-    # Regla 1: Fiebre alta (Riesgo de Sepsis)
-    if registro.temperatura >= TEMPERATURA_SEPSIS:
+    # Regla 1: Temperatura — escalera por días calendario.
+    # Decisión Arquitecto, jun 2026. Base: Outersterp 2025 (>37.9°C umbral
+    # de notificación en monitoreo domiciliario, no solo criterio de alta
+    # hospitalaria como en otros estudios).
+    if registro.temperatura >= TEMPERATURA_ALTA:
         alerta = Alerta.objects.create(
             paciente=registro.paciente,
             registro_origen=registro,
             tipo='SEPSIS',
             severidad='ALTA',
-            mensaje=f"Temperatura de {registro.temperatura}°C detectada. Posible cuadro de sepsis."
+            mensaje=(
+                f"Temperatura de {registro.temperatura}°C detectada. "
+                "Posible cuadro de sepsis — ir a urgencias."
+            )
         )
         alertas_creadas.append(alerta)
+    elif TEMPERATURA_SUBFEBRICULA_MIN <= registro.temperatura < TEMPERATURA_ALTA:
+        hoy = registro.fecha_registro.date()
+        dias_con_subfebricula = set()
+        for offset in range(DIAS_SUBFEBRICULA_PERSISTENTE):
+            dia = hoy - timedelta(days=offset)
+            existe = RegistroDiario.objects.filter(
+                paciente=registro.paciente,
+                fecha_registro__date=dia,
+                temperatura__gte=TEMPERATURA_SUBFEBRICULA_MIN,
+                temperatura__lt=TEMPERATURA_ALTA,
+            ).exists()
+            if existe:
+                dias_con_subfebricula.add(dia)
+        if len(dias_con_subfebricula) >= DIAS_SUBFEBRICULA_PERSISTENTE:
+            alerta = Alerta.objects.create(
+                paciente=registro.paciente,
+                registro_origen=registro,
+                tipo='SEPSIS',
+                severidad='MEDIA',
+                mensaje=(
+                    f"Subfebrícula ({registro.temperatura}°C) persistente "
+                    f"por {DIAS_SUBFEBRICULA_PERSISTENTE} días consecutivos. "
+                    "Llamar al médico."
+                )
+            )
+            alertas_creadas.append(alerta)
+    # < 37.5°C: sin alerta, el valor queda en RegistroDiario para el
+    # dashboard del médico.
 
     # Regla 2: Drenaje anormal — solo evalúa si el paciente tiene drenaje activo.
     # tiene_drenaje=None → registro anterior a esta versión, no se evalúa.
