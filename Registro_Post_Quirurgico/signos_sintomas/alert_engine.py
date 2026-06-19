@@ -1,6 +1,8 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.db import models
+
 from .models import Alerta, RegistroDiario
 
 
@@ -14,7 +16,11 @@ DRENAJES_ALTA  = ('purulento', 'fecaloide')
 DRENAJES_MEDIA = ('turbio', 'hematico')
 DRENAJES_BAJA  = ('seroso',)
 
-EPISODIOS_NAUSEAS_ILEO = 3
+NAUSEAS_BAJA_MIN = 1
+NAUSEAS_MEDIA_MIN = 3
+NAUSEAS_ALTA_MIN = 5
+DIAS_NAUSEAS_MEDIA = 2
+DIAS_NAUSEAS_ALTA  = 4
 DIAS_SIN_GASES_BAJA  = 1
 DIAS_SIN_GASES_MEDIA = 2
 DIAS_SIN_GASES_ALTA  = 3
@@ -109,14 +115,76 @@ def evaluar_registro(registro):
             alertas_creadas.append(alerta)
     # tiene_drenaje=False o None → sin alerta de drenaje.
 
-    # Regla 4: Más de 3 episodios de náuseas o vómito en 24h
-    if registro.episodios_nauseas > EPISODIOS_NAUSEAS_ILEO:
+    # Regla 4: Náuseas/vómito — suma diaria + persistencia entre días.
+    # Decisión Arquitecto, jun 2026. Suma: Lee 2022 y Outersterp 2025
+    # tratan cualquier episodio como señal (no se espera acumulación de
+    # 3+ como la regla anterior). Persistencia 4+ días: Delaney 2008
+    # (íleo en 27.8% de pacientes con estancia 4+ días vs 11% general) —
+    # mismo orden de magnitud que el umbral ALTA de la Regla 3 (gases).
+    hoy_nauseas = registro.fecha_registro.date()
+    total_episodios_hoy = RegistroDiario.objects.filter(
+        paciente=registro.paciente,
+        fecha_registro__date=hoy_nauseas,
+    ).aggregate(total=models.Sum('episodios_nauseas'))['total'] or 0
+
+    severidad_por_suma = None
+    if total_episodios_hoy >= NAUSEAS_ALTA_MIN:
+        severidad_por_suma = 'ALTA'
+    elif total_episodios_hoy >= NAUSEAS_MEDIA_MIN:
+        severidad_por_suma = 'MEDIA'
+    elif total_episodios_hoy >= NAUSEAS_BAJA_MIN:
+        severidad_por_suma = 'BAJA'
+
+    dias_con_nauseas_consecutivos = 0
+    dia_revisado = hoy_nauseas
+    while True:
+        hubo_nauseas_ese_dia = RegistroDiario.objects.filter(
+            paciente=registro.paciente,
+            fecha_registro__date=dia_revisado,
+            episodios_nauseas__gte=1,
+        ).exists()
+        if not hubo_nauseas_ese_dia:
+            break
+        dias_con_nauseas_consecutivos += 1
+        if dias_con_nauseas_consecutivos >= DIAS_NAUSEAS_ALTA:
+            break
+        dia_revisado = dia_revisado - timedelta(days=1)
+
+    severidad_por_persistencia = None
+    if dias_con_nauseas_consecutivos >= DIAS_NAUSEAS_ALTA:
+        severidad_por_persistencia = 'ALTA'
+    elif dias_con_nauseas_consecutivos >= DIAS_NAUSEAS_MEDIA:
+        severidad_por_persistencia = 'MEDIA'
+
+    ORDEN_SEVERIDAD = {'BAJA': 1, 'MEDIA': 2, 'ALTA': 3, None: 0}
+    severidad_final = max(
+        severidad_por_suma, severidad_por_persistencia,
+        key=lambda s: ORDEN_SEVERIDAD[s]
+    )
+
+    if severidad_final is not None:
+        mensaje = f"{total_episodios_hoy} episodios de náuseas/vómito hoy."
+        gano_por_persistencia = (
+            ORDEN_SEVERIDAD[severidad_por_persistencia]
+            > ORDEN_SEVERIDAD[severidad_por_suma]
+        )
+        if gano_por_persistencia and severidad_por_persistencia == 'ALTA':
+            mensaje += (
+                f" Náuseas persistentes por {dias_con_nauseas_consecutivos} "
+                "días consecutivos. Posible complicación progresiva — "
+                "ir a urgencias."
+            )
+        elif gano_por_persistencia and severidad_por_persistencia == 'MEDIA':
+            mensaje += (
+                f" Náuseas persistentes por {dias_con_nauseas_consecutivos} "
+                "días consecutivos. Llamar al médico."
+            )
         alerta = Alerta.objects.create(
             paciente=registro.paciente,
             registro_origen=registro,
             tipo='ILEO_PARALITICO',
-            severidad='MEDIA',
-            mensaje=f"{registro.episodios_nauseas} episodios de náuseas/vómito en 24h. Posible íleo paralítico."
+            severidad=severidad_final,
+            mensaje=mensaje
         )
         alertas_creadas.append(alerta)
 
