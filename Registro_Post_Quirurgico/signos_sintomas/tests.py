@@ -161,9 +161,10 @@ class AlertEngineTests(TestCase):
             fecha_cirugia=timezone.now().date(),
             medico_responsable="Medico Prueba",
         )
+        # 37.4°C: justo por debajo del umbral de subfebrícula (37.5°C)
         registro = RegistroDiario.objects.create(
             paciente=paciente,
-            temperatura=Decimal("37.9"),
+            temperatura=Decimal("37.4"),
             dolor_eva=2,
             tiene_drenaje=False,
             aspecto_drenaje="seroso",
@@ -285,6 +286,94 @@ class AlertEngineTests(TestCase):
 
         alertas = evaluar_registro(registro)
 
+        self.assertEqual(alertas, [])
+
+    def test_temperatura_379_crea_alerta_sepsis_alta(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Temp Alta",
+            telefono_whatsapp="+573008880001",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.9"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        alertas = evaluar_registro(registro)
+        self.assertEqual(len(alertas), 1)
+        self.assertEqual(alertas[0].tipo, "SEPSIS")
+        self.assertEqual(alertas[0].severidad, "ALTA")
+
+    def test_subfebricula_un_solo_dia_no_crea_alerta(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Subfebricula Un Dia",
+            telefono_whatsapp="+573008880002",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.6"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        alertas = evaluar_registro(registro)
+        self.assertEqual(alertas, [])
+
+    def test_subfebricula_dos_dias_consecutivos_crea_alerta_media(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Subfebricula Persistente",
+            telefono_whatsapp="+573008880003",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        ayer = timezone.now() - timedelta(days=1)
+        registro_ayer = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.6"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        RegistroDiario.objects.filter(pk=registro_ayer.pk).update(
+            fecha_registro=ayer
+        )
+        registro_hoy = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.7"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        alertas = evaluar_registro(registro_hoy)
+        self.assertEqual(len(alertas), 1)
+        self.assertEqual(alertas[0].tipo, "SEPSIS")
+        self.assertEqual(alertas[0].severidad, "MEDIA")
+
+    def test_temperatura_normal_no_crea_alerta(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Temp Normal",
+            telefono_whatsapp="+573008880004",
+            fecha_cirugia=timezone.now().date(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("36.8"),
+            dolor_eva=3,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        alertas = evaluar_registro(registro)
         self.assertEqual(alertas, [])
 
 
