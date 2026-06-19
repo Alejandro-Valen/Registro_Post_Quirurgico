@@ -25,6 +25,35 @@ DIAS_SIN_GASES_BAJA  = 1
 DIAS_SIN_GASES_MEDIA = 2
 DIAS_SIN_GASES_ALTA  = 3
 
+# Escalera de dolor (EVA) por ventana de dia_postoperatorio.
+# Decisión Arquitecto, jun 2026. Base: Delaney 2008, Lee 2022,
+# Outersterp 2025, Coeckelberghs 2025.
+VENTANAS_DOLOR = [
+    # (dia_postoperatorio_max_inclusive, eva_baja_min, eva_media_min, eva_alta_min)
+    (2,    5, 7, 9),   # POD 1-2
+    (5,    4, 6, 8),   # POD 3-5
+    (None, 3, 5, 7),   # POD 6+ (None = sin límite superior)
+]
+DOLOR_DIAS_TENDENCIA = 2
+DOLOR_DELTA_TENDENCIA = 3
+
+
+def _severidad_dolor_por_ventana(dia_postoperatorio, dolor_eva):
+    """Devuelve 'ALTA', 'MEDIA', 'BAJA' o None según la ventana de
+    dia_postoperatorio y el valor de dolor_eva."""
+    for dia_max, eva_baja, eva_media, eva_alta in VENTANAS_DOLOR:
+        if dia_max is None or dia_postoperatorio <= dia_max:
+            if dolor_eva >= eva_alta:
+                return 'ALTA'
+            elif dolor_eva >= eva_media:
+                return 'MEDIA'
+            elif dolor_eva >= eva_baja:
+                return 'BAJA'
+            else:
+                return None
+    return None
+
+
 def evaluar_registro(registro):
     alertas_creadas = []
 
@@ -250,6 +279,71 @@ def evaluar_registro(registro):
                 f"Paciente sin gases por {dias_sin_gases_consecutivos} día(s). "
                 "Monitorear."
             )
+        )
+        alertas_creadas.append(alerta)
+
+    # Regla 5: Dolor (DOLOR_AGUDO) — escalera por ventana de
+    # dia_postoperatorio + capa de tendencia alcista.
+    # Decisión Arquitecto, jun 2026. La tolerancia de dolor esperado baja
+    # con el tiempo (Coeckelberghs 2025); EVA>=4 replicado en 3 estudios
+    # independientes (Delaney 2008, Lee 2022, Outersterp 2025) como
+    # umbral de atención. La tendencia captura subidas que la tabla por
+    # sí sola no vería (ej. EVA 5 en POD5 es "BAJA" por tabla, pero si
+    # ayer era EVA 2, el salto de 3 puntos es señal real).
+    severidad_por_tabla = _severidad_dolor_por_ventana(
+        registro.dia_postoperatorio, registro.dolor_eva
+    )
+
+    hoy_dolor = registro.fecha_registro.date()
+    promedio_reciente = RegistroDiario.objects.filter(
+        paciente=registro.paciente,
+        fecha_registro__date__gte=hoy_dolor - timedelta(days=DOLOR_DIAS_TENDENCIA - 1),
+        fecha_registro__date__lte=hoy_dolor,
+    ).aggregate(promedio=models.Avg('dolor_eva'))['promedio']
+
+    promedio_anterior = RegistroDiario.objects.filter(
+        paciente=registro.paciente,
+        fecha_registro__date__gte=hoy_dolor - timedelta(days=(DOLOR_DIAS_TENDENCIA * 2) - 1),
+        fecha_registro__date__lt=hoy_dolor - timedelta(days=DOLOR_DIAS_TENDENCIA - 1),
+    ).aggregate(promedio=models.Avg('dolor_eva'))['promedio']
+
+    severidad_por_tendencia = None
+    delta_tendencia = None
+    if promedio_reciente is not None and promedio_anterior is not None:
+        delta_tendencia = float(promedio_reciente) - float(promedio_anterior)
+        if delta_tendencia >= DOLOR_DELTA_TENDENCIA:
+            ORDEN_SEVERIDAD_DOLOR = {'BAJA': 1, 'MEDIA': 2, 'ALTA': 3, None: 0}
+            severidad_base = severidad_por_tabla or 'BAJA'
+            siguiente_nivel = {
+                'BAJA': 'MEDIA', 'MEDIA': 'ALTA', 'ALTA': 'ALTA',
+            }
+            severidad_por_tendencia = siguiente_nivel[severidad_base]
+
+    ORDEN_SEVERIDAD_DOLOR = {'BAJA': 1, 'MEDIA': 2, 'ALTA': 3, None: 0}
+    severidad_dolor_final = max(
+        severidad_por_tabla, severidad_por_tendencia,
+        key=lambda s: ORDEN_SEVERIDAD_DOLOR[s]
+    )
+
+    if severidad_dolor_final is not None:
+        mensaje = (
+            f"Dolor EVA {registro.dolor_eva}/10 en día postoperatorio "
+            f"{registro.dia_postoperatorio}."
+        )
+        if severidad_por_tendencia is not None and (
+            ORDEN_SEVERIDAD_DOLOR[severidad_por_tendencia]
+            > ORDEN_SEVERIDAD_DOLOR[severidad_por_tabla]
+        ):
+            mensaje += (
+                f" Tendencia al alza detectada (delta {delta_tendencia:.1f} "
+                "puntos vs. periodo anterior)."
+            )
+        alerta = Alerta.objects.create(
+            paciente=registro.paciente,
+            registro_origen=registro,
+            tipo='DOLOR_AGUDO',
+            severidad=severidad_dolor_final,
+            mensaje=mensaje
         )
         alertas_creadas.append(alerta)
 
