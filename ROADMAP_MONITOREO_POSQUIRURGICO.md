@@ -35,25 +35,60 @@ médico a través de un dashboard en Django Admin.
 
 ## Variables Clínicas que Registra el Sistema
 
-Capturadas una vez al día por WhatsApp:
+Capturadas 2 veces al día por WhatsApp (decisión jun 2026 — Gignoux 2018
+como referencia parcial; **pendiente de implementar en bot.py**, hoy el
+bot sigue capturando 1 vez/día):
 
-1. **Temperatura corporal** (°C) — alerta si >= 38.0°C
-2. **Dolor EVA** (escala 1-10) — alerta si dolor agudo repentino
-3. **Volumen de drenaje** (ml) — cantidad de líquido en drenajes
-4. **Aspecto del drenaje** — seroso / hemático / purulento / fecaloide
-5. **Tránsito intestinal** — presencia de gases (sí/no)
-6. **Náuseas o vómito** — episodios en las últimas 24 horas
+| # | Variable | Tipo | Unidad |
+|---|----------|------|--------|
+| 1 | Temperatura corporal | Decimal | °C |
+| 2 | Dolor EVA | Entero | Escala 1-10 |
+| 3 | ¿Tiene drenaje activo? | Booleano nullable | sí/no/no capturado |
+| 4 | Aspecto del drenaje | Choices | seroso/hemático/turbio/purulento/fecaloide/sin_drenaje |
+| 5 | Cantidad del drenaje | Choices | poco/normal/mucho/sin_drenaje (cualitativo) |
+| 6 | Volumen del drenaje | Entero opcional | ml — solo si el paciente lo mide |
+| 7 | Presencia de gases | Booleano | sí/no |
+| 8 | Episodios de náuseas/vómito | Entero | cantidad por check-in |
 
 ---
 
 ## Reglas del Motor de Alertas (alert_engine.py)
 
-| Regla | Condición | Tipo de Alerta | Severidad |
-|-------|-----------|----------------|-----------|
-| 1 | Temperatura >= 38.0°C | SEPSIS | ALTA |
-| 2 | Drenaje purulento o fecaloide | FUGA_ANASTOMOTICA | ALTA |
-| 3 | Sin gases por 3 días consecutivos | ILEO_PARALITICO | ALTA |
-| 4 | Vómito > 3 episodios en 24h | ILEO_PARALITICO | MEDIA |
+**Archivo:** `signos_sintomas/alert_engine.py`
+**Función principal:** `evaluar_registro(registro: RegistroDiario) -> list[Alerta]`
+**Principio de diseño (decisión jun 2026):** modelo de alta sensibilidad
+(Lee 2022, Outersterp 2025) — escalera BAJA/MEDIA/ALTA en vez de un solo
+nivel de alerta. 4 de 5 variables reescritas bajo este modelo; Dolor
+(Regla 5) decidido pero aún no implementado.
+
+| Regla | Condición exacta | Tipo Alerta | Severidad | Base clínica |
+|-------|-----------------|-------------|-----------|--------------|
+| 1a | temperatura >= 37.9°C (cualquier registro del día) | SEPSIS | ALTA | Outersterp 2025 — umbral de notificación domiciliaria |
+| 1b | temperatura 37.5–37.8°C en 2 días calendario consecutivos | SEPSIS | MEDIA | Subfebrícula persistente — construcción propia |
+| 2a | tiene_drenaje is True AND aspecto in ['purulento','fecaloide'] | FUGA_ANASTOMOTICA | ALTA | Fuga anastomótica confirmada |
+| 2b | tiene_drenaje is True AND aspecto in ['turbio','hematico'] | FUGA_ANASTOMOTICA | MEDIA | Drenaje sospechoso — seguimiento |
+| 2c | tiene_drenaje is True AND aspecto == 'seroso' | FUGA_ANASTOMOTICA | BAJA | Drenaje dentro de lo esperado |
+| 3a | sin gases 1 día calendario | ILEO_PARALITICO | BAJA | Gases = criterio de alta ERAS; ausencia = regresión |
+| 3b | sin gases 2 días calendario consecutivos | ILEO_PARALITICO | MEDIA | ídem |
+| 3c | sin gases 3 días calendario consecutivos | ILEO_PARALITICO | ALTA | ídem — umbral histórico del proyecto |
+| 4a | suma episodios_nauseas del día: 1-2 | ILEO_PARALITICO | BAJA | Lee 2022, Outersterp 2025 — cualquier episodio es señal |
+| 4b | suma episodios_nauseas del día: 3-4 | ILEO_PARALITICO | MEDIA | ídem |
+| 4c | suma episodios_nauseas del día: 5+ | ILEO_PARALITICO | ALTA | ídem |
+| 4d | náuseas (≥1 episodio/día) en 2 días calendario consecutivos | ILEO_PARALITICO | MEDIA (mínimo) | Persistencia — solo sube severidad, nunca la baja |
+| 4e | náuseas (≥1 episodio/día) en 4 días calendario consecutivos | ILEO_PARALITICO | ALTA | Delaney 2008 — íleo en 27.8% con estancia 4+ días vs 11% general |
+| 5 | Pendiente — ver nota abajo | DOLOR_AGUDO | — | **DECIDIDO, NO IMPLEMENTADO** |
+
+**Nota sobre lógica de días calendario (Reglas 1, 3, 4):** agrupan
+registros por `fecha_registro__date`, no por número de registro — el
+sistema captura 2 check-ins/día, así que 2 registros del mismo día
+cuentan como 1 día, no como 2.
+
+**Nota Regla 5 (Dolor/DOLOR_AGUDO — pendiente de implementar):** escalera
+por `dia_postoperatorio` (POD 1-2: BAJA 5-6/MEDIA 7-8/ALTA 9-10; POD 3-5:
+BAJA 4-5/MEDIA 6-7/ALTA 8-10; POD 6+: BAJA 3-4/MEDIA 5-6/ALTA 7-10) +
+capa de tendencia alcista (promedio últimos 2 días sube ≥3 puntos vs.
+promedio 2 días anteriores → sube un nivel de severidad). Base: Delaney
+2008, Lee 2022, Outersterp 2025, Coeckelberghs 2025.
 
 ---
 
@@ -115,7 +150,8 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 | temperatura | DecimalField(4,1) | °C — alerta si >= 38.0 |
 | dolor_eva | PositiveSmallIntegerField | Escala 1-10 |
 | volumen_drenaje_ml | PositiveIntegerField nullable | ml |
-| aspecto_drenaje | CharField choices | seroso/hemático/purulento/fecaloide/sin_drenaje |
+| tiene_drenaje | BooleanField nullable | null=no capturado, False=sin drenaje, True=con drenaje |
+| aspecto_drenaje | CharField choices | seroso/hemático/turbio/purulento/fecaloide/sin_drenaje |
 | presencia_gases | BooleanField | Tránsito intestinal |
 | episodios_nauseas | PositiveSmallIntegerField | Episodios en 24h |
 | fecha_registro | DateTimeField auto | Timestamp automático |
@@ -254,8 +290,28 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 
 **Pendiente (decidido, sin ejecutar — fuera de esta fase):**
 - [x] Decidir nombre del archivo: renombrado a `ROADMAP_MONITOREO_POSQUIRURGICO.md` (nombre del repositorio se mantiene sin cambios, decisión explícita del Arquitecto)
-- [ ] Fase de decisiones de arquitectura del `alert_engine` (umbrales de fiebre, gases, náuseas, drenaje; gap de `DOLOR_AGUDO`; frecuencia de check-ins) — ver `docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md`
-- [ ] Merge `sprint-3-whatsapp` → `Desarrollo` (pospuesto hasta cerrar la fase anterior)
+- [x] Fase de decisiones de arquitectura del `alert_engine` (umbrales de fiebre, gases, náuseas) — implementada en Sprint 3.6 (ver FASE 3.6 abajo)
+- [ ] Merge `sprint-3-whatsapp` → `Desarrollo` (pospuesto hasta cerrar gap DOLOR_AGUDO)
+
+---
+
+### ⏳ FASE 3.6 — Reescritura Alert Engine: Temperatura, Gases y Náuseas — EN CURSO
+
+**Contexto:** Decisiones de arquitectura clínica tomadas tras auditoría de literatura
+(Outersterp 2025, Lee 2022, Delaney 2008, Coeckelberghs 2025). Principio guía: modelo
+de alta sensibilidad — escalera BAJA/MEDIA/ALTA en vez de un solo nivel. El sistema
+capturará 2 check-ins/día en FASE 4; la lógica de días calendario ya fue implementada
+anticipando ese modelo.
+
+**Completado:**
+- [x] **Temperatura (Regla 1):** escalera ALTA (≥37.9°C) / MEDIA (subfebrícula 37.5-37.8°C persistente 2 días calendario). Base: Outersterp 2025.
+- [x] **Gases (Regla 3):** escalera BAJA/MEDIA/ALTA por 1/2/3 días calendario consecutivos sin gases. Lógica de días calendario (no por número de registros).
+- [x] **Náuseas (Regla 4):** suma diaria (1-2→BAJA, 3-4→MEDIA, 5+→ALTA) + persistencia (2 días→MEDIA mínimo, 4 días→ALTA). Base: Lee 2022, Outersterp 2025, Delaney 2008.
+- [x] Suite de tests: 41 tests OK (14 nuevos en Sprint 3.6 + fix tests existentes).
+
+**Pendiente:**
+- [ ] **Dolor (Regla 5 — DOLOR_AGUDO):** escalera por dia_postoperatorio + capa de tendencia alcista. Decidido, no implementado.
+- [ ] Merge `sprint-3-whatsapp` → `Desarrollo` (pospuesto hasta implementar Dolor).
 
 ---
 
@@ -388,5 +444,4 @@ DB_PORT=5432
 
 ---
 
-*Última actualización: Sprint 3 funcional end-to-end (rama `sprint-3-whatsapp`) — pasos 1-4 completados: modelo ConversacionWhatsApp, campo cantidad_drenaje, bot.py con máquina de estados, webhook Twilio (22 tests OK) y prueba real con WhatsApp exitosa (RegistroDiario + Alerta verificados en BD)*
-*Siguiente paso: merge `sprint-3-whatsapp` → `Desarrollo` con aprobación del Arquitecto; luego Sprint 4 (dashboard + notificaciones)*
+*Última actualización: Sprint 3.6 — reescritura alert_engine completada para temperatura, gases y náuseas (41 tests OK, rama `sprint-3-whatsapp`). Próximo paso: implementar Regla 5 DOLOR_AGUDO, luego merge a `Desarrollo` y Sprint 4.*
