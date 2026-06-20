@@ -16,7 +16,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Prueba",
             telefono_whatsapp="+573001112233",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -39,7 +39,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Drenaje",
             telefono_whatsapp="+573004445566",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -62,7 +62,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Nauseas",
             telefono_whatsapp="+573007778899",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -84,7 +84,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Sin Gases",
             telefono_whatsapp="+573006661122",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         anteayer = timezone.now() - timedelta(days=2)
@@ -129,7 +129,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Estable",
             telefono_whatsapp="+573005551234",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -151,7 +151,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Multiple",
             telefono_whatsapp="+573005550000",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -178,7 +178,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Limite",
             telefono_whatsapp="+573005559999",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         # 37.4°C: justo por debajo del umbral de subfebrícula (37.5°C)
@@ -203,7 +203,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Seroso",
             telefono_whatsapp="+573001110001",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -226,7 +226,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Hematico",
             telefono_whatsapp="+573001110002",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -249,7 +249,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Turbio",
             telefono_whatsapp="+573001110003",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -272,7 +272,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Sin Drenaje",
             telefono_whatsapp="+573001110004",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -293,7 +293,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Legacy",
             telefono_whatsapp="+573001110005",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         # tiene_drenaje=None simula un registro anterior a esta versión
@@ -314,7 +314,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Temp Alta",
             telefono_whatsapp="+573008880001",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -334,7 +334,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Subfebricula Un Dia",
             telefono_whatsapp="+573008880002",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -352,7 +352,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Subfebricula Persistente",
             telefono_whatsapp="+573008880003",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         ayer = timezone.now() - timedelta(days=1)
@@ -384,7 +384,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Temp Normal",
             telefono_whatsapp="+573008880004",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -402,7 +402,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Sin Gases Un Dia",
             telefono_whatsapp="+573008880010",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -422,7 +422,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Sin Gases Dos Dias",
             telefono_whatsapp="+573008880011",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         ayer = timezone.now() - timedelta(days=1)
@@ -456,7 +456,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Dos Checkins Mismo Dia",
             telefono_whatsapp="+573008880012",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         RegistroDiario.objects.create(
@@ -487,7 +487,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Gases Parcial",
             telefono_whatsapp="+573008880013",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         RegistroDiario.objects.create(
@@ -514,7 +514,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Nausea Baja",
             telefono_whatsapp="+573008880020",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -534,7 +534,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Nausea Alta",
             telefono_whatsapp="+573008880021",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -557,7 +557,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Nausea Suma Dia",
             telefono_whatsapp="+573008880022",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         RegistroDiario.objects.create(
@@ -587,7 +587,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Nausea Persistente",
             telefono_whatsapp="+573008880023",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         ayer = timezone.now() - timedelta(days=1)
@@ -619,7 +619,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Sin Nauseas",
             telefono_whatsapp="+573008880024",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         registro = RegistroDiario.objects.create(
@@ -638,7 +638,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Nausea Persistente Larga",
             telefono_whatsapp="+573008880025",
-            fecha_cirugia=timezone.now().date(),
+            fecha_cirugia=timezone.localdate(),
             medico_responsable="Medico Prueba",
         )
         for dias_atras in [3, 2, 1]:
@@ -791,6 +791,63 @@ class AlertEngineTests(TestCase):
         alertas_dolor = [a for a in alertas if a.tipo == "DOLOR_AGUDO"]
         self.assertEqual(len(alertas_dolor), 1)
         self.assertEqual(alertas_dolor[0].severidad, "MEDIA")
+
+
+class RegistroDiarioModelTests(TestCase):
+    """Cálculo de dia_postoperatorio en RegistroDiario.save().
+    El campo es PositiveSmallIntegerField (CHECK >= 0): el save nunca debe
+    producir un valor negativo, ni siquiera con fecha_cirugia futura."""
+
+    def _crear_registro(self, paciente):
+        # Valores neutros: ninguna regla del alert_engine se dispara,
+        # así el único factor bajo prueba es dia_postoperatorio.
+        return RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+
+    def test_fecha_cirugia_futura_no_crashea_y_da_dia_cero(self):
+        # Regresión del bug de producción: paciente pre-registrado con
+        # cirugía programada a futuro. (hoy - mañana).days = -1 violaría el
+        # CHECK del PositiveSmallIntegerField y haría crashear el save().
+        # El clamp a 0 lo evita y conserva el registro para el médico.
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Cirugia Futura",
+            telefono_whatsapp="+573009990001",
+            fecha_cirugia=timezone.localdate() + timedelta(days=1),
+            medico_responsable="Medico Prueba",
+        )
+        registro = self._crear_registro(paciente)
+        self.assertEqual(registro.dia_postoperatorio, 0)
+
+    def test_fecha_cirugia_hoy_da_dia_cero(self):
+        # Borde exacto: cirugía hoy → POD 0 (el día de la cirugía).
+        # Aquí el .days ya es 0 natural, sin intervención del clamp.
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Cirugia Hoy",
+            telefono_whatsapp="+573009990002",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = self._crear_registro(paciente)
+        self.assertEqual(registro.dia_postoperatorio, 0)
+
+    def test_fecha_cirugia_pasada_calcula_dia_correcto(self):
+        # Camino normal: el clamp NO debe alterar el cálculo positivo.
+        # Operado hace 5 días → POD 5. Guarda contra un max(0, ...) mal
+        # escrito que aplastara también los valores válidos.
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente POD5",
+            telefono_whatsapp="+573009990003",
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),
+            medico_responsable="Medico Prueba",
+        )
+        registro = self._crear_registro(paciente)
+        self.assertEqual(registro.dia_postoperatorio, 5)
 
 
 class BotWhatsAppTests(TestCase):

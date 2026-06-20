@@ -2,6 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.db import models
+from django.utils import timezone
 
 from .models import Alerta, RegistroDiario
 
@@ -74,7 +75,7 @@ def evaluar_registro(registro):
         )
         alertas_creadas.append(alerta)
     elif TEMPERATURA_SUBFEBRICULA_MIN <= registro.temperatura < TEMPERATURA_ALTA:
-        hoy = registro.fecha_registro.date()
+        hoy = timezone.localdate(registro.fecha_registro)
         dias_con_subfebricula = set()
         for offset in range(DIAS_SUBFEBRICULA_PERSISTENTE):
             dia = hoy - timedelta(days=offset)
@@ -150,7 +151,7 @@ def evaluar_registro(registro):
     # 3+ como la regla anterior). Persistencia 4+ días: Delaney 2008
     # (íleo en 27.8% de pacientes con estancia 4+ días vs 11% general) —
     # mismo orden de magnitud que el umbral ALTA de la Regla 3 (gases).
-    hoy_nauseas = registro.fecha_registro.date()
+    hoy_nauseas = timezone.localdate(registro.fecha_registro)
     total_episodios_hoy = RegistroDiario.objects.filter(
         paciente=registro.paciente,
         fecha_registro__date=hoy_nauseas,
@@ -223,7 +224,7 @@ def evaluar_registro(registro):
     # tener gases en casa es una regresión, no un estado normal. Un día
     # cuenta como "con gases" si hubo al menos un registro positivo en
     # cualquier check-in de ese día.
-    hoy_gases = registro.fecha_registro.date()
+    hoy_gases = timezone.localdate(registro.fecha_registro)
     dias_sin_gases_consecutivos = 0
     dia_revisado = hoy_gases
     while True:
@@ -294,7 +295,8 @@ def evaluar_registro(registro):
         registro.dia_postoperatorio, registro.dolor_eva
     )
 
-    hoy_dolor = registro.fecha_registro.date()
+    hoy_dolor = timezone.localdate(registro.fecha_registro)
+    ORDEN_SEVERIDAD_DOLOR = {'BAJA': 1, 'MEDIA': 2, 'ALTA': 3, None: 0}
     promedio_reciente = RegistroDiario.objects.filter(
         paciente=registro.paciente,
         fecha_registro__date__gte=hoy_dolor - timedelta(days=DOLOR_DIAS_TENDENCIA - 1),
@@ -312,14 +314,12 @@ def evaluar_registro(registro):
     if promedio_reciente is not None and promedio_anterior is not None:
         delta_tendencia = float(promedio_reciente) - float(promedio_anterior)
         if delta_tendencia >= DOLOR_DELTA_TENDENCIA:
-            ORDEN_SEVERIDAD_DOLOR = {'BAJA': 1, 'MEDIA': 2, 'ALTA': 3, None: 0}
             severidad_base = severidad_por_tabla or 'BAJA'
             siguiente_nivel = {
                 'BAJA': 'MEDIA', 'MEDIA': 'ALTA', 'ALTA': 'ALTA',
             }
             severidad_por_tendencia = siguiente_nivel[severidad_base]
 
-    ORDEN_SEVERIDAD_DOLOR = {'BAJA': 1, 'MEDIA': 2, 'ALTA': 3, None: 0}
     severidad_dolor_final = max(
         severidad_por_tabla, severidad_por_tendencia,
         key=lambda s: ORDEN_SEVERIDAD_DOLOR[s]

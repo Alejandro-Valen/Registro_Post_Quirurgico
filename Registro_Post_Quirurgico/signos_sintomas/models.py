@@ -122,8 +122,13 @@ class RegistroDiario(models.Model):
 
     def save(self, *args, **kwargs):
         from django.utils import timezone
-        hoy = timezone.now().date()
-        self.dia_postoperatorio = (hoy - self.paciente.fecha_cirugia).days
+        hoy = timezone.localdate()
+        # Piso en 0: un registro en el día de la cirugía o anterior (paciente
+        # pre-registrado con cirugía a futuro, o typo en fecha_cirugia) nunca
+        # debe producir un dia_postoperatorio negativo — violaría el CHECK del
+        # PositiveSmallIntegerField y haría crashear el save() del bot. Se
+        # conserva el dato para revisión del médico en vez de rechazarlo.
+        self.dia_postoperatorio = max(0, (hoy - self.paciente.fecha_cirugia).days)
         super().save(*args, **kwargs)
 
     def __str__(self):
