@@ -91,8 +91,8 @@ bot sigue capturando 1 vez/día):
 **Función principal:** `evaluar_registro(registro: RegistroDiario) -> list[Alerta]`
 **Principio de diseño (decisión jun 2026):** modelo de alta sensibilidad
 (Lee 2022, Outersterp 2025) — escalera BAJA/MEDIA/ALTA en vez de un solo
-nivel de alerta. 4 de 5 variables reescritas bajo este modelo; Dolor
-(Regla 5) decidido pero aún no implementado.
+nivel de alerta. **Las 5 variables están reescritas bajo este
+modelo — fase de decisiones de arquitectura clínica completa.**
 
 | Regla | Condición exacta | Tipo Alerta | Severidad | Base clínica |
 |-------|-----------------|-------------|-----------|--------------|
@@ -109,19 +109,22 @@ nivel de alerta. 4 de 5 variables reescritas bajo este modelo; Dolor
 | 4c | suma episodios_nauseas del día: 5+ | ILEO_PARALITICO | ALTA | ídem |
 | 4d | náuseas (≥1 episodio/día) en 2 días calendario consecutivos | ILEO_PARALITICO | MEDIA (mínimo) | Persistencia — solo sube severidad, nunca la baja |
 | 4e | náuseas (≥1 episodio/día) en 4 días calendario consecutivos | ILEO_PARALITICO | ALTA | Delaney 2008 — íleo en 27.8% con estancia 4+ días vs 11% general |
-| 5 | Pendiente — ver nota abajo | DOLOR_AGUDO | — | **DECIDIDO, NO IMPLEMENTADO** |
+| 5a | dolor_eva >= umbral según ventana de dia_postoperatorio (ver nota) | DOLOR_AGUDO | BAJA/MEDIA/ALTA según ventana | Delaney 2008, Lee 2022, Outersterp 2025, Coeckelberghs 2025 |
+| 5b | promedio dolor_eva últimos 2 días - promedio 2 días anteriores >= 3 | DOLOR_AGUDO | sube un nivel sobre 5a (techo ALTA) | Tendencia alcista — construcción propia |
 
 **Nota sobre lógica de días calendario (Reglas 1, 3, 4):** agrupan
 registros por `fecha_registro__date`, no por número de registro — el
 sistema captura 2 check-ins/día, así que 2 registros del mismo día
 cuentan como 1 día, no como 2.
 
-**Nota Regla 5 (Dolor/DOLOR_AGUDO — pendiente de implementar):** escalera
-por `dia_postoperatorio` (POD 1-2: BAJA 5-6/MEDIA 7-8/ALTA 9-10; POD 3-5:
-BAJA 4-5/MEDIA 6-7/ALTA 8-10; POD 6+: BAJA 3-4/MEDIA 5-6/ALTA 7-10) +
-capa de tendencia alcista (promedio últimos 2 días sube ≥3 puntos vs.
-promedio 2 días anteriores → sube un nivel de severidad). Base: Delaney
-2008, Lee 2022, Outersterp 2025, Coeckelberghs 2025.
+**Nota Regla 5 (Dolor/DOLOR_AGUDO — implementado):** escalera por
+`dia_postoperatorio`: POD 1-2 → BAJA 5-6/MEDIA 7-8/ALTA 9-10; POD 3-5
+→ BAJA 4-5/MEDIA 6-7/ALTA 8-10; POD 6+ → BAJA 3-4/MEDIA 5-6/ALTA
+7-10. Capa de tendencia: si el promedio de los últimos 2 días
+calendario sube >=3 puntos vs. el promedio de los 2 días anteriores,
+escala un nivel de severidad sobre el valor de la tabla (nunca baja
+una severidad ya alcanzada). Base: Delaney 2008, Lee 2022, Outersterp
+2025, Coeckelberghs 2025.
 
 ---
 
@@ -209,7 +212,7 @@ la base de datos en lugar de en memoria.
 
 Diseño: lógica **pura**, sin conocimiento de HTTP ni Twilio. La vista
 (`views.py`, pendiente) traduce HTTP ↔ esta función. Esto permite testear el
-bot completo sin mockear peticiones web — actualmente **41 tests unitarios OK**.
+bot completo sin mockear peticiones web — actualmente **46 tests unitarios OK**.
 
 **Máquina de estados (6 preguntas):**
 ```
@@ -293,20 +296,20 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 2 | Motor de alertas (alert_engine) | ✅ Completado (fix post-merge 01b8a47) |
 | Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Funcional end-to-end — merge a Desarrollo POSPUESTO a propósito (ver nota) |
 | Sprint 3.5 | Auditoría de literatura, generalización de alcance/marca y documentación | ✅ Completado |
-| Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ⏳ 4/5 variables completadas (falta dolor) |
+| Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables completadas |
 | Sprint 4 | Dashboard médico y notificaciones | ⏳ Pendiente |
 | Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ Pendiente |
 
-**Punto actual:** Sprint 3 funcional end-to-end. Fase de decisiones de
-arquitectura clínica del `alert_engine` en curso — **4 de 5 variables
-reescritas** bajo el modelo de alta sensibilidad: drenaje, temperatura,
-gases y náuseas (41 tests OK). Falta solo dolor (Regla 5,
-`DOLOR_AGUDO`), ya decidido pero sin implementar. También decidida —
-pero sin implementar en `bot.py` todavía — la frecuencia de check-ins:
-2×/día fijo. Ver `docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md`
-para el detalle original. El merge `sprint-3-whatsapp` → `Desarrollo`
-sigue pospuesto hasta cerrar dolor + la implementación de 2×/día en el
-bot.
+**Punto actual:** Sprint 3 funcional end-to-end. **Fase de decisiones
+de arquitectura clínica del `alert_engine` COMPLETA — las 5 variables
+reescritas** bajo el modelo de alta sensibilidad: drenaje,
+temperatura, gases, náuseas y dolor (46 tests OK). Pendiente antes
+del merge: implementar en `bot.py` la frecuencia de check-ins ya
+decidida (2×/día fijo) y hacer un repaso final de `alert_engine.py`
+completo. Ver `docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md`
+para el detalle original de la auditoría. El merge
+`sprint-3-whatsapp` → `Desarrollo` sigue pospuesto hasta cerrar esos
+2 pendientes.
 
 - ✅ **Paso 1:** modelo `ConversacionWhatsApp` + campo `cantidad_drenaje` en
   `RegistroDiario` + migración `0002` aplicada.
