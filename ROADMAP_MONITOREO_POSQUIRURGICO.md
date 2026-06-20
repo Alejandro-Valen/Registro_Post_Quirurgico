@@ -326,12 +326,23 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
     reglas post-operatorias, lo cual es clínicamente vacío. Definir si
     el bot debe filtrar por `activo`/estado antes de llamar al
     alert_engine, o si el engine debe saltar la evaluación en ese caso.
-- [ ] Variables nuevas de la literatura (FC/FR, RH/antecedentes) —
-  pausado, sin abordar
-- [ ] Repaso final de `alert_engine.py` completo antes de cerrar esta
-  fase
-- [ ] Merge `sprint-3-whatsapp` → `Desarrollo` (pospuesto hasta cerrar
-  Dolor y la implementación de 2×/día en el bot)
+**Camino de cierre del Sprint 3 (orden acordado, una decisión/acción a
+la vez):**
+- [ ] **Paso 1 — Bot 2×/día + 2 gatings:** implementar frecuencia de
+  check-ins (campo nuevo en ConversacionWhatsApp para mañana/tarde),
+  resolviendo de paso: evitar alertas duplicadas con 2 check-ins/día, y
+  gating pre-operatorio (no evaluar con reglas post-op a paciente con
+  dia_postoperatorio=0). Incluye mini-revisión de seguridad del
+  webhook/secretos al entrar a ese código.
+- [ ] **Paso 2 — Variables nuevas (FC/FR, RH/antecedentes):** decidir
+  primero si van antes o después del merge; si después, mover a un
+  sprint posterior y no bloquear el merge.
+- [ ] **Paso 3 — Revisión de cierre en dos frentes:** Claude Code audita
+  coherencia interna y deuda técnica del alert_engine/modelos; Codex
+  hace pasada adversarial de seguridad + check de escalabilidad. Claude
+  (chat) sintetiza ambos reportes en una lista priorizada.
+- [ ] **Paso 4 — Resolver lo bloqueante de la síntesis, luego merge**
+  `sprint-3-whatsapp` → `Desarrollo` con aprobación del Arquitecto.
 
 ---
 
