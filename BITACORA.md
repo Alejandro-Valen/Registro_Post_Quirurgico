@@ -672,6 +672,69 @@ RH/antecedentes) siguen pausadas, sin fecha.
 
 ---
 
+## Bug corregido: zona horaria en cálculo de fechas + clamp de dia_postoperatorio
+**Fecha:** 19/06/2026 (detectado en sesión nocturna, ~9pm Bogotá)
+**Severidad:** Alta — dos bugs de fechas, ambos por confundir UTC con
+America/Bogota (TIME_ZONE del proyecto, USE_TZ=True)
+**Commit:** `ff8bdc4`
+
+### Bug 1 — Zona horaria en reglas de días calendario
+`registro.fecha_registro.date()` y `timezone.now().date()` devuelven la
+fecha en UTC, pero los filtros `fecha_registro__date` de Django operan
+en America/Bogota. Durante la ventana ~19:00–23:59 hora Bogotá (cuando
+UTC ya cambió de día pero Bogotá no), las reglas de días calendario de
+temperatura, gases, náuseas y dolor no encontraban los registros del
+día actual — generando 0 alertas donde debía haber 1 o más. Silencioso
+y dependiente de la hora: por eso pasó desapercibido en sesiones
+diurnas (UTC y Bogotá coinciden en fecha de día).
+
+### Bug 2 — dia_postoperatorio negativo (bug de producción)
+`dia_postoperatorio = (hoy - fecha_cirugia).days` puede dar negativo si
+`fecha_cirugia` es futura (paciente pre-registrado con cirugía
+programada, o error de captura en el admin), violando el CHECK de
+`PositiveSmallIntegerField` y crasheando el `save()` — el bot se caería
+y se perdería el reporte del paciente. Destapado al unificar la zona
+horaria del modelo con la de los tests.
+
+### Cómo se detectó
+Durante la verificación final de la sincronización de documentación de
+Dolor (Sprint 3.6), en horario nocturno, 12 tests fallaron de forma
+sistemática (0 alertas donde se esperaba 1+). Claude Code diagnosticó
+la causa raíz antes de modificar nada; el análisis del bug 2 surgió
+como consecuencia del fix del bug 1.
+
+### Fix
+- `timezone.localdate()` en vez de `.date()` directo o
+  `timezone.now().date()`, en las 4 reglas de `alert_engine.py` y en el
+  cálculo de `dia_postoperatorio` de `models.py`.
+- Clamp `max(0, (hoy - fecha_cirugia).days)`: un registro en el día de
+  la cirugía o anterior queda en día 0, conservándose para revisión del
+  médico en vez de rechazarse (decisión de diseño: en un sistema de
+  telemetría, preservar el dato del paciente le gana a proteger la
+  invariante del campo descartándolo).
+- Limpieza de paso: definición redundante de `ORDEN_SEVERIDAD_DOLOR` en
+  la Regla 5 (estaba dos veces, idéntica).
+- Tests: 26 ocurrencias de `fecha_cirugia=timezone.now().date()` →
+  `timezone.localdate()`; nueva clase `RegistroDiarioModelTests` con 3
+  tests de regresión (cirugía futura, cirugía hoy, cirugía pasada).
+
+### Verificación
+49/49 tests OK, corridos en el mismo horario nocturno donde el bug se
+manifestaba (condiciones reales). `manage.py check` limpio.
+
+### Lección para el equipo
+Todo cálculo de "fecha de hoy" en este proyecto usa
+`timezone.localdate()`, nunca `.date()` sobre datetime aware ni
+`timezone.now().date()`. Quedó registrado como norma en el Protocolo de
+Cierre de CLAUDE.md.
+
+### Pendientes que surgieron de este fix (registrados en ROADMAP, FASE 3.6, para la etapa del bot)
+- Evitar alertas duplicadas con 2 check-ins/día.
+- Gating pre-operatorio: no evaluar registros de pacientes aún no
+  operados (dia_postoperatorio=0 por clamp) con reglas post-op.
+
+---
+
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** pendiente
 **Estado:** EN COLA ⏳
