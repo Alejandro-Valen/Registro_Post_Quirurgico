@@ -314,6 +314,18 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
   referencia parcial) — **pendiente de implementar en bot.py** (requiere
   campo nuevo en `ConversacionWhatsApp` para distinguir check-in de
   mañana/tarde)
+- [ ] **Gating del alert_engine — pendientes para la etapa del bot
+  (2×/día):** dos decisiones de política que surgieron durante la
+  implementación, a resolver cuando se toque `bot.py`:
+  - Evitar alertas duplicadas: con 2 check-ins/día, una misma condición
+    (ej. subfebrícula) puede generar 2 alertas idénticas el mismo día.
+    Definir si es una alerta por condición por día, o una por cada
+    check-in que la detecte.
+  - Gating pre-operatorio: un registro de un paciente que aún no se
+    opera (dia_postoperatorio=0 por el clamp) hoy sería evaluado por
+    reglas post-operatorias, lo cual es clínicamente vacío. Definir si
+    el bot debe filtrar por `activo`/estado antes de llamar al
+    alert_engine, o si el engine debe saltar la evaluación en ese caso.
 - [ ] Variables nuevas de la literatura (FC/FR, RH/antecedentes) —
   pausado, sin abordar
 - [ ] Repaso final de `alert_engine.py` completo antes de cerrar esta
@@ -453,9 +465,13 @@ DB_PORT=5432
 ---
 
 *Última actualización: Fase 3.6 — las 5 reglas del alert_engine
-completas (drenaje, temperatura, gases, náuseas, dolor — 46 tests
-OK). Pendiente: implementar 2×/día en bot.py y repaso final de
-alert_engine.py antes del merge.*
+completas (drenaje, temperatura, gases, náuseas, dolor — 49 tests
+OK). Corregido un bug de zona horaria (UTC vs America/Bogota) que
+afectaba las reglas de días calendario en horario nocturno, más un
+clamp para dia_postoperatorio negativo (commit ff8bdc4). Pendiente:
+implementar 2×/día en bot.py (con los 2 gatings pendientes) y repaso
+final de alert_engine.py antes del merge.*
 *Siguiente paso: implementar frecuencia de check-ins (2×/día) en
-bot.py, luego repaso final de alert_engine.py completo, luego merge
-`sprint-3-whatsapp` → `Desarrollo` con aprobación del Arquitecto.*
+bot.py resolviendo los 2 pendientes de gating, luego repaso final de
+alert_engine.py completo, luego merge `sprint-3-whatsapp` →
+`Desarrollo` con aprobación del Arquitecto.*
