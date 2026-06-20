@@ -610,6 +610,68 @@ clínica que surge de la auditoría de literatura (Sprint 3.5).
 
 ---
 
+## Sesión: Dolor (DOLOR_AGUDO) — cierre de las 5 reglas del alert_engine
+**Fecha:** 19/06/2026
+**Responsable:** León (Arquitecto IA) con Claude (chat) y Claude Code
+**Estado:** COMPLETADO ✅ (commits `acd0d64`, `f0ba511`, push a sprint-3-whatsapp)
+
+### Qué se hizo
+Se implementó la Regla 5 (Dolor/`DOLOR_AGUDO`) — la última de las 5
+variables de la fase de decisiones de arquitectura clínica del
+`alert_engine` (Sprint 3.6). A diferencia de las otras 4 reglas (que
+usan días calendario), esta usa `dia_postoperatorio` como base, ya que
+la tolerancia de dolor esperado disminuye con el tiempo de recuperación.
+
+Combina dos capas: (1) escalera por ventana de `dia_postoperatorio`
+(POD 1-2, POD 3-5, POD 6+, cada una con su propio umbral BAJA/MEDIA/
+ALTA), y (2) una capa de tendencia alcista que compara el promedio de
+dolor de los últimos 2 días contra el promedio de los 2 días
+anteriores — si sube 3+ puntos, escala un nivel de severidad sobre lo
+que diera la tabla, sin bajar nunca una severidad ya alcanzada (mismo
+patrón ya usado en Náuseas).
+
+Con esto se cierran las 5 reglas clínicas del `alert_engine` bajo el
+modelo de alta sensibilidad: drenaje, temperatura, gases, náuseas y
+dolor.
+
+### Decisiones tomadas y su justificación
+1. **Ventanas decrecientes por `dia_postoperatorio` en vez de un
+   umbral fijo:** un EVA de 6 es normal en POD1 pero anómalo en POD7;
+   Coeckelberghs 2025 documenta la trayectoria descendente esperada
+   del dolor con el tiempo, lo cual respalda umbrales más estrictos a
+   medida que avanza la recuperación.
+2. **EVA>=4/5 como referencia central de los umbrales BAJA:** valor
+   replicado en 3 estudios independientes (Delaney 2008, Lee 2022,
+   Outersterp 2025) — el dato más consistente de toda la auditoría de
+   literatura.
+3. **Capa de tendencia con delta>=3, sobre promedio de 2 días (no
+   valor aislado):** decisión explícita del Arquitecto para evitar
+   sobre-sensibilidad a picos momentáneos de dolor (un solo reporte
+   "dramático" no dispara la tendencia); el promedio de 2 días actúa
+   como filtro natural. Sin respaldo literal en los PDFs — es
+   construcción propia, igual que el escalón de persistencia de 4 días
+   en Náuseas.
+
+### Verificación
+46/46 tests OK (41 anteriores + 5 nuevos de dolor) · `manage.py check`
+sin errores. Verificado a mano el cálculo de las ventanas de promedio
+móvil (sin solape, sin hueco entre periodo reciente y periodo
+anterior). Confirmado que ningún test existente de las otras 4 reglas
+colisiona con la nueva Regla 5 (todos usan `dolor_eva` ≤ 4, por debajo
+del umbral BAJA mínimo de cualquier ventana).
+
+### Pendiente para la próxima sesión
+**Las 5 reglas clínicas del alert_engine están completas.** Quedan 2
+pasos antes del merge a `Desarrollo`: (1) implementar en `bot.py` la
+frecuencia de check-ins ya decidida (2×/día fijo — requiere campo
+nuevo en `ConversacionWhatsApp` para distinguir check-in de
+mañana/tarde); (2) repaso final de `alert_engine.py` completo (las 5
+reglas juntas — legibilidad, consistencia, posible refactor si el
+archivo creció demasiado). Variables nuevas de la literatura (FC/FR,
+RH/antecedentes) siguen pausadas, sin fecha.
+
+---
+
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** pendiente
 **Estado:** EN COLA ⏳
