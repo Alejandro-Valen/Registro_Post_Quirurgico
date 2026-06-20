@@ -212,7 +212,7 @@ la base de datos en lugar de en memoria.
 
 Diseño: lógica **pura**, sin conocimiento de HTTP ni Twilio. La vista
 (`views.py`, pendiente) traduce HTTP ↔ esta función. Esto permite testear el
-bot completo sin mockear peticiones web — actualmente **46 tests unitarios OK**.
+bot completo sin mockear peticiones web — actualmente **49 tests unitarios OK**.
 
 **Máquina de estados (6 preguntas):**
 ```
@@ -303,7 +303,7 @@ evidencia disponible, no decisiones ya tomadas.
 **Punto actual:** Sprint 3 funcional end-to-end. **Fase de decisiones
 de arquitectura clínica del `alert_engine` COMPLETA — las 5 variables
 reescritas** bajo el modelo de alta sensibilidad: drenaje,
-temperatura, gases, náuseas y dolor (46 tests OK). Pendiente antes
+temperatura, gases, náuseas y dolor (49 tests OK). Pendiente antes
 del merge: implementar en `bot.py` la frecuencia de check-ins ya
 decidida (2×/día fijo) y hacer un repaso final de `alert_engine.py`
 completo. Ver `docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md`
@@ -398,6 +398,12 @@ encontrados y resueltos). Debe incluir:
   una fase completa; las tablas de referencia técnica no — deben reflejar
   el código real en todo momento, porque son lo primero que cualquier
   agente IA lee para entender el estado actual del proyecto.
+
+  **Norma de zona horaria:** todo cálculo de 'fecha de hoy' usa
+  `timezone.localdate()`, nunca `.date()` sobre un datetime aware ni
+  `timezone.now().date()` — con USE_TZ=True y TIME_ZONE=America/Bogota,
+  esos dos devuelven la fecha en UTC, no en la zona del proyecto, y
+  rompen las reglas de días calendario en horario nocturno.
 
 ### 3. Git add, commit y push
 - Seguir la convención de commits ya definida (`feat:`, `fix:`, `docs:` +
