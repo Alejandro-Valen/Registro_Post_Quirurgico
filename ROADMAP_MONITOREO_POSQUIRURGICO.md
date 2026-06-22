@@ -310,39 +310,82 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
   `edc2baa`, `9ee8e33`)
 - [x] Dolor / gap `DOLOR_AGUDO` — escalera por `dia_postoperatorio` +
   tendencia alcista delta≥3 (commits `acd0d64`, `f0ba511`)
-- [x] Frecuencia de check-ins: decidido 2×/día fijo (Gignoux 2018 como
-  referencia parcial) — **pendiente de implementar en bot.py** (requiere
-  campo nuevo en `ConversacionWhatsApp` para distinguir check-in de
-  mañana/tarde)
-- [ ] **Gating del alert_engine — pendientes para la etapa del bot
-  (2×/día):** dos decisiones de política que surgieron durante la
-  implementación, a resolver cuando se toque `bot.py`:
-  - Evitar alertas duplicadas: con 2 check-ins/día, una misma condición
-    (ej. subfebrícula) puede generar 2 alertas idénticas el mismo día.
-    Definir si es una alerta por condición por día, o una por cada
-    check-in que la detecte.
-  - Gating pre-operatorio: un registro de un paciente que aún no se
-    opera (dia_postoperatorio=0 por el clamp) hoy sería evaluado por
-    reglas post-operatorias, lo cual es clínicamente vacío. Definir si
-    el bot debe filtrar por `activo`/estado antes de llamar al
-    alert_engine, o si el engine debe saltar la evaluación en ese caso.
-**Camino de cierre del Sprint 3 (orden acordado, una decisión/acción a
-la vez):**
-- [ ] **Paso 1 — Bot 2×/día + 2 gatings:** implementar frecuencia de
-  check-ins (campo nuevo en ConversacionWhatsApp para mañana/tarde),
-  resolviendo de paso: evitar alertas duplicadas con 2 check-ins/día, y
-  gating pre-operatorio (no evaluar con reglas post-op a paciente con
-  dia_postoperatorio=0). Incluye mini-revisión de seguridad del
-  webhook/secretos al entrar a ese código.
-- [ ] **Paso 2 — Variables nuevas (FC/FR, RH/antecedentes):** decidir
-  primero si van antes o después del merge; si después, mover a un
-  sprint posterior y no bloquear el merge.
-- [ ] **Paso 3 — Revisión de cierre en dos frentes:** Claude Code audita
-  coherencia interna y deuda técnica del alert_engine/modelos; Codex
-  hace pasada adversarial de seguridad + check de escalabilidad. Claude
-  (chat) sintetiza ambos reportes en una lista priorizada.
-- [ ] **Paso 4 — Resolver lo bloqueante de la síntesis, luego merge**
-  `sprint-3-whatsapp` → `Desarrollo` con aprobación del Arquitecto.
+- [x] **Frecuencia de check-ins 2×/día — ARQUITECTURA CERRADA (Sprint 3).
+  IMPLEMENTACIÓN → SPRINT 4.**
+  La idea original ("un campo en ConversacionWhatsApp para mañana/tarde")
+  se DESCARTÓ por insuficiente tras análisis de robustez (respuestas
+  tardías, cruce de medianoche, mezcla AM/PM, escalar a N chequeos).
+
+  DECISIONES CERRADAS — no se re-discuten en Sprint 4, se implementan:
+  D1. El check-in es un EVENTO de primera clase → modelo nuevo
+      `CheckInProgramado`, NO un campo en ConversacionWhatsApp.
+  D2. El turno se etiqueta POR EVENTO (lo fija el prompt que el sistema
+      envía), nunca por la hora en que el paciente responde. Chequeo 1 =
+      mañana, chequeo 2 = tarde. El paciente responde cuando sea; la
+      etiqueta no cambia.
+  D3. Solo se persiste DATO CRUDO: `hora_programada` y `fecha_respuesta`.
+      NO se hornea 'a tiempo/tarde'. Latencia, % tardío y promedios se
+      DERIVAN en el dashboard (FASE 4) con umbrales parametrizables.
+  D4. `estado` SÍ se persiste (PENDIENTE/COMPLETADO/NO_RESPONDIDO): el
+      silencio es un hecho cualitativo, no una franja de latencia.
+  D5. Escalable a N chequeos vía campo `orden` (1, 2, 3…). La etiqueta
+      legible es para el humano; `orden` es la clave robusta del sistema.
+
+  ESQUEMA ACORDADO de `CheckInProgramado` (especificación para Sprint 4):
+      paciente         FK
+      fecha_dia        DateField   (día calendario del evento; congelado
+                                    al crear, NO recalculado en save —
+                                    evita el bug de cruce de medianoche)
+      orden            PositiveSmallInteger  (1, 2, …)
+      etiqueta         CharField   ('MAÑANA' / 'TARDE')
+      hora_programada  DateTimeField  (cuándo el sistema disparó el prompt)
+      fecha_respuesta  DateTimeField null  (cuándo respondió el paciente)
+      estado           CharField   ('PENDIENTE'/'COMPLETADO'/'NO_RESPONDIDO')
+      registro         OneToOne→RegistroDiario, null
+      Constraint: UniqueConstraint(paciente, fecha_dia, orden)
+  Todo cálculo de fecha usa timezone.localdate() (regla del proyecto).
+
+  DEPENDE DE SCHEDULER (Celery beat / cron): quien crea los eventos del
+  día y cierra los vencidos (PENDIENTE→NO_RESPONDIDO) es una tarea
+  programada, no el bot (el bot solo reacciona a mensajes entrantes).
+  Por eso modelo + scheduler se construyen como UNA unidad en Sprint 4.
+  → Handoff de implementación detallado en FASE 4.
+
+- [ ] **NUEVA alerta clínica: silencio del paciente.** Si un
+  CheckInProgramado pasa a NO_RESPONDIDO, generar alerta para que el
+  equipo médico contacte al paciente. DEPENDE del scheduler (solo una
+  tarea programada detecta la ausencia de respuesta) → SPRINT 4.
+  DECISIÓN ABIERTA (resolver en Sprint 4): severidad, y si dispara con
+  un silencio o con dos consecutivos.
+
+- [ ] **Gating del alert_engine — 2 políticas (se deciden CON el código
+  del bot en Sprint 4, no antes):**
+  - DECISIÓN ABIERTA: alertas duplicadas con 2 check-ins/día — ¿una
+    alerta por condición por día, o una por cada check-in que la detecte?
+  - DECISIÓN ABIERTA: gating pre-operatorio (dia_postoperatorio=0) —
+    ¿filtra el bot antes de llamar al engine, o el engine salta la
+    evaluación?
+
+**Camino de cierre del Sprint 3 (REVISADO — entregable del Paso 1 = la
+DECISIÓN de arquitectura documentada, no el código de frecuencia):**
+- [x] **Paso 1 (REDEFINIDO) — Arquitectura 2×/día cerrada y documentada.**
+  Decisiones D1–D5 + esquema `CheckInProgramado` congelados arriba e
+  trasladados a FASE 4 como ítems ejecutables. Implementación (modelo +
+  scheduler + alerta de silencio + 2 gatings) → Sprint 4 por dependencia
+  con Celery.
+- [ ] **Paso 1b — Mini-revisión de seguridad webhook/secretos Twilio.**
+  SÍ va en Sprint 3: es el endpoint que ya existe, no depende del
+  scheduler. Revisar validación de firma del webhook y manejo de
+  secretos en views.py / settings.
+- [ ] **Paso 2 — Variables nuevas (FC/FR, RH/antecedentes).** Analizar
+  artículos en /docs, decidir cuáles entran y si van antes o después del
+  merge; si después, mover a sprint posterior sin bloquear el merge.
+- [ ] **Paso 3 — Revisión de cierre en dos frentes.** Claude Code audita
+  coherencia interna y deuda técnica (alert_engine/modelos); Codex hace
+  pasada adversarial de seguridad + escalabilidad; Claude (chat)
+  sintetiza ambos en lista priorizada.
+- [ ] **Paso 4 — Resolver lo bloqueante, luego merge** sprint-3-whatsapp
+  → Desarrollo con aprobación del Arquitecto.
 
 ---
 
@@ -352,7 +395,18 @@ la vez):**
 - [ ] Personalizar Django Admin con colores según severidad de alertas
 - [ ] Crear vista detalle_paciente con historial y gráfica temperatura/dolor
 - [ ] Implementar notificación al médico por email/SMS cuando hay alerta roja
-- [ ] Configurar envío automático del bot cada mañana (Celery beat o cron)
+- [ ] **Implementación 2×/día (arquitectura CERRADA en FASE 3.6 — leer D1–D5
+  y el esquema de `CheckInProgramado` ahí; aquí NO se re-decide, se ejecuta):**
+  - [ ] Crear modelo `CheckInProgramado` según el esquema acordado + migración.
+  - [ ] Scheduler (Celery beat / cron): crea los eventos del día con su
+    `orden`/`etiqueta`/`hora_programada` y cierra vencidos PENDIENTE→
+    NO_RESPONDIDO. Incluye el envío matutino 7–10 AM Bogotá ya diferido.
+  - [ ] Refactor de bot.py: la conversación se vincula al CheckInProgramado
+    PENDIENTE del día (la conversación deja de decidir el turno).
+  - [ ] Alerta de silencio (NO_RESPONDIDO) — resolver DECISIÓN ABIERTA:
+    severidad + ¿uno o dos silencios?
+  - [ ] Resolver los 2 gatings (DECISIONES ABIERTAS): deduplicación de
+    alertas y gating pre-operatorio (dia_postoperatorio=0).
 - [ ] Demo funcional con 1 paciente ficticio para el equipo médico
 
 **Decisiones de diseño pendientes (anotadas durante la implementación
