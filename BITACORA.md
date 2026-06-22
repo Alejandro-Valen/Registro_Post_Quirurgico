@@ -735,6 +735,134 @@ Cierre de CLAUDE.md.
 
 ---
 
+## Decisión de arquitectura: bot 2×/día como evento (CheckInProgramado)
+**Fecha:** 22/06/2026
+**Responsable:** Alejo y León (Arquitectos), con Claude (chat) y Claude Code
+**Estado:** ARQUITECTURA CERRADA ✅ — implementación trasladada a Sprint 4
+**Commit (especificación):** `d5e90bd` (ROADMAP, FASE 3.6 y handoff en FASE 4)
+
+### Contexto
+El Paso 1 del cierre de Sprint 3 era "implementar el bot 2×/día", y la idea
+de partida era barata: un campo nuevo en `ConversacionWhatsApp` que marcara
+si el check-in en curso era de mañana o de tarde. Al sentarnos a diseñarlo,
+la decisión escaló: lo que parecía un campo terminó siendo un rediseño
+arquitectónico. La narrativa de por qué está aquí; la especificación cerrada
+(decisiones D1–D5 + esquema del modelo) ya quedó en el ROADMAP — esta entrada
+no la repite, la explica.
+
+### Por qué se descartó el campo único
+El problema de fondo es que la respuesta del paciente es **estocástica**: no
+controlamos cuándo contesta, ni si contesta. Un campo de turno en la
+conversación deduce la etiqueta de la hora en que llega el mensaje, y eso
+abre tres fallos que no son casos de borde, son el comportamiento normal:
+
+1. **Etiqueta semánticamente falsa.** Si el turno se infiere de la hora de
+   respuesta, un paciente que contesta el check-in de la mañana a las 4 PM
+   queda registrado como "tarde". La etiqueta describiría cuándo respondió,
+   no qué se le preguntó — justo al revés de lo que el médico necesita leer.
+2. **Mezcla AM/PM.** Dos respuestas que caen en la misma franja (p. ej. las
+   dos en la tarde, porque el paciente ignoró el prompt matutino) colisionan:
+   el sistema no sabe cuál es "la de la mañana".
+3. **Cruce de medianoche.** Si el día del check-in se recalcula en `save()`
+   con la fecha del momento, una respuesta que llega pasada la medianoche se
+   contabiliza en el día equivocado — el mismo tipo de bug de fecha que ya
+   nos mordió con la zona horaria (ver entrada anterior).
+
+### La decisión
+El check-in deja de ser un atributo de la conversación y pasa a ser un
+**evento de primera clase**: un modelo nuevo, `CheckInProgramado`, que el
+sistema **agenda** (no el paciente). El evento **nace etiquetado** —
+chequeo 1 = mañana, chequeo 2 = tarde — porque la etiqueta la fija el prompt
+que el sistema envía, no la hora en que el paciente reacciona. El paciente
+responde cuando pueda; la etiqueta del evento no se mueve. Las 5 decisiones
+cerradas (evento vs. campo, etiqueta por evento, persistir solo dato crudo,
+`estado` como hecho cualitativo, escalabilidad a N vía `orden`) están como
+D1–D5 en el ROADMAP — no se re-discuten en Sprint 4, se implementan.
+
+### Por qué el diseño resuelve los cuatro casos sin ambigüedad
+La clave es que un evento agendado tiene una identidad propia (paciente +
+día + orden) **antes** de que el paciente haga nada. Entonces los cuatro
+cruces de responde/no-responde × mañana/tarde dejan de ser ambiguos:
+
+- **Mañana, responde / Tarde, responde:** el `RegistroDiario` se cuelga del
+  evento correcto vía su `orden`/`etiqueta` — no importa a qué hora llegó.
+- **Mañana, no responde / Tarde, no responde:** el evento queda en
+  `NO_RESPONDIDO`. El silencio no es un dato faltante ni un hueco: es el
+  **resultado** de un evento que existió, se etiquetó y venció.
+
+Dicho de otro modo: el dato y el silencio son los dos desenlaces válidos de
+un evento que ya nació con nombre. Antes, sin evento, el silencio era
+invisible (no hay fila que falte si nunca se esperó una).
+
+### Decisión clínica nueva: alerta de silencio del paciente
+De hacer el silencio un hecho de primera clase sale una alerta que antes no
+existía: si un `CheckInProgramado` pasa a `NO_RESPONDIDO`, el equipo médico
+debe **contactar al paciente**. Un paciente que deja de responder es señal
+clínica por sí misma (deterioro, hospitalización, abandono del seguimiento).
+Esta alerta **depende del scheduler** — solo una tarea programada puede
+detectar la *ausencia* de respuesta; el bot, que únicamente reacciona a
+mensajes entrantes, nunca "ve" un silencio. Por eso va a Sprint 4. Queda
+como **decisión abierta**: su severidad, y si dispara con un silencio o con
+dos consecutivos.
+
+### Frontera de alcance (Sprint 3 vs. Sprint 4)
+Sprint 3 cierra la **decisión** documentada y congelada; no toca código de
+dominio todavía. Sprint 4 **ejecuta** la unidad completa —modelo
+`CheckInProgramado` + scheduler (Celery beat/cron) + refactor de `bot.py` +
+alerta de silencio + los 2 gatings del alert_engine— porque todo eso cuelga
+de la dependencia con Celery y no tiene sentido partirlo. El único trabajo de
+implementación que permanece en Sprint 3 es el Paso 1b (seguridad del
+webhook), que no depende del scheduler.
+
+### Riesgos anotados para Sprint 4 (del cruce contra el código real)
+Al contrastar el diseño con los modelos actuales, tres puntos que conviene
+tener presentes antes de implementar:
+
+1. **Tres "fechas de hoy" que pueden divergir.** `CheckInProgramado.fecha_dia`
+   (congelado al agendar), `RegistroDiario.fecha_registro` (`auto_now_add` al
+   completar el flujo) y `dia_postoperatorio` (calculado con `localdate()` en
+   `save()`) son tres relojes distintos. Si el paciente responde el check-in
+   de la mañana pasada la medianoche, `fecha_registro` cae en el día
+   siguiente al `fecha_dia` del evento. Como el alert_engine agrupa las reglas
+   de días calendario por `fecha_registro__date`, hay que **decidir cuál
+   fecha es la autoritativa** para esas reglas: la del evento (`fecha_dia`) o
+   la del registro. D3 ya manda congelar `fecha_dia`; falta extender ese
+   criterio al alert_engine.
+2. **"Un registro por día" debe volverse "un registro por check-in".** El
+   guard actual (`ConversacionWhatsApp.fecha_ultimo_registro` → "ya
+   registramos tus datos de hoy") bloquearía el segundo check-in del día. El
+   refactor del bot tiene que reescribir esa guarda en términos del evento
+   `PENDIENTE`, no de la fecha.
+3. **El `OneToOne` exige vincular al crear.** Hoy `RegistroDiario` nace suelto
+   en el bot; con el nuevo modelo, al completar el flujo hay que asociarlo al
+   `CheckInProgramado` PENDIENTE del día. Conviene que ese vínculo sea
+   transaccional con la creación del registro para no dejar eventos
+   COMPLETADO sin `registro`, ni registros huérfanos.
+
+### Lección para el equipo
+Cuando el dato de entrada es estocástico (el paciente responde cuando quiere,
+o no responde), la etiqueta y la fecha deben fijarse en el momento en que el
+**sistema** crea el evento, no en el momento en que el **usuario** reacciona.
+Modelar el check-in como evento agendado —no como atributo de la
+conversación— es lo que hace que el silencio sea representable. Es la misma
+disciplina de la norma de zona horaria: la verdad de "qué día/turno es esto"
+la pone el sistema, no el reloj de la respuesta.
+
+### Pendientes que siguen en Sprint 3
+- **Paso 1b:** mini-revisión de seguridad del webhook/secretos Twilio
+  (validación de firma en `views.py`, manejo de secretos en `settings`) — no
+  depende del scheduler, por eso queda en este sprint.
+- **Paso 2:** variables nuevas de la literatura (FC/FR, RH/antecedentes) —
+  analizar los artículos en `/docs` y decidir si entran antes o después del
+  merge.
+- **Paso 3:** auditoría de cierre en dos frentes (Claude Code: coherencia y
+  deuda técnica; Codex: seguridad adversarial + escalabilidad; síntesis
+  priorizada en chat).
+- **Paso 4:** resolver lo bloqueante de la síntesis y merge
+  `sprint-3-whatsapp` → `Desarrollo` con aprobación del Arquitecto.
+
+---
+
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** pendiente
 **Estado:** EN COLA ⏳
