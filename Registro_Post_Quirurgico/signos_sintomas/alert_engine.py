@@ -29,6 +29,10 @@ DIAS_SIN_GASES_ALTA  = 3
 DIAS_SIN_TOLERAR_LIQUIDOS_MEDIA = 1
 DIAS_SIN_TOLERAR_LIQUIDOS_ALTA  = 2
 
+HINCHAZON_NIVELES = {'nada': 0, 'algo': 1, 'mucho': 2}
+DIAS_HINCHAZON_MUCHO_ALTA = 4
+DIAS_HINCHAZON_MEDIA = 2  # el empeoramiento debe mantenerse > 2 días
+
 # Escalera de dolor (EVA) por ventana de dia_postoperatorio.
 # Decisión Arquitecto, jun 2026. Base: Delaney 2008, Lee 2022,
 # Outersterp 2025, Coeckelberghs 2025.
@@ -56,6 +60,22 @@ def _severidad_dolor_por_ventana(dia_postoperatorio, dolor_eva):
             else:
                 return None
     return None
+
+
+def _nivel_hinchazon_dia(paciente, dia):
+    """Nivel numérico máximo de hinchazón reportado por el paciente en
+    un día calendario. None si no hay dato ese día."""
+    registros = RegistroDiario.objects.filter(
+        paciente=paciente,
+        fecha_registro__date=dia,
+        hinchazon_abdominal__isnull=False,
+    )
+    niveles = [
+        HINCHAZON_NIVELES[r.hinchazon_abdominal]
+        for r in registros
+        if r.hinchazon_abdominal in HINCHAZON_NIVELES
+    ]
+    return max(niveles) if niveles else None
 
 
 def evaluar_registro(registro):
@@ -403,6 +423,72 @@ def evaluar_registro(registro):
                     "Paciente no toleró líquidos hoy. Vigilar hidratación "
                     "— llamar al médico."
                 )
+            )
+            alertas_creadas.append(alerta)
+
+    # Regla 7: Hinchazón abdominal — empeoramiento entre días.
+    # Decisión Arquitecto, jun 2026. Distensión = signo cardinal de íleo.
+    # Prioriza especificidad: casi todos tienen algo de hinchazón post-op,
+    # así que solo el empeoramiento sostenido o "mucho" prolongado alertan.
+    # Severidad final = la más alta entre las condiciones que apliquen.
+    if registro.hinchazon_abdominal in HINCHAZON_NIVELES:
+        hoy_h = timezone.localdate(registro.fecha_registro)
+        nivel_hoy = _nivel_hinchazon_dia(registro.paciente, hoy_h)
+        nivel_ayer = _nivel_hinchazon_dia(
+            registro.paciente, hoy_h - timedelta(days=1)
+        )
+        nivel_antier = _nivel_hinchazon_dia(
+            registro.paciente, hoy_h - timedelta(days=2)
+        )
+
+        severidad_hinchazon = None
+
+        # --- Condición BAJA: empeoramiento puntual (hoy > ayer) ---
+        if nivel_ayer is not None and nivel_hoy is not None:
+            if nivel_hoy > nivel_ayer:
+                severidad_hinchazon = 'BAJA'
+
+        # --- Condición MEDIA: empeoramiento verificado (hoy > antier) que
+        #     se mantuvo sin bajar en la ventana de los últimos > 2 días ---
+        if nivel_antier is not None and nivel_hoy is not None:
+            if nivel_hoy > nivel_antier and (
+                nivel_ayer is None or nivel_ayer >= nivel_antier
+            ) and nivel_hoy >= (nivel_ayer if nivel_ayer is not None else nivel_hoy):
+                # empeoró respecto al punto de partida y no bajó en el medio
+                severidad_hinchazon = 'MEDIA'
+
+        # --- Condición ALTA: "mucho" (2) sostenido 4 días consecutivos ---
+        dias_mucho = 0
+        dia_rev = hoy_h
+        while True:
+            nivel_dia = _nivel_hinchazon_dia(registro.paciente, dia_rev)
+            if nivel_dia is None:
+                break
+            if nivel_dia < HINCHAZON_NIVELES['mucho']:
+                break
+            dias_mucho += 1
+            if dias_mucho >= DIAS_HINCHAZON_MUCHO_ALTA:
+                break
+            dia_rev = dia_rev - timedelta(days=1)
+        if dias_mucho >= DIAS_HINCHAZON_MUCHO_ALTA:
+            severidad_hinchazon = 'ALTA'
+
+        if severidad_hinchazon is not None:
+            mensajes_h = {
+                'BAJA': "Aumento leve de la hinchazón abdominal respecto a "
+                        "ayer. Monitorear.",
+                'MEDIA': "Hinchazón abdominal en aumento sostenido sin "
+                         "mejorar. Posible íleo — llamar al médico.",
+                'ALTA': "Hinchazón abdominal severa (nivel máximo) sostenida "
+                        "varios días. Posible íleo paralítico — ir a "
+                        "urgencias.",
+            }
+            alerta = Alerta.objects.create(
+                paciente=registro.paciente,
+                registro_origen=registro,
+                tipo='ILEO_PARALITICO',
+                severidad=severidad_hinchazon,
+                mensaje=mensajes_h[severidad_hinchazon],
             )
             alertas_creadas.append(alerta)
 
