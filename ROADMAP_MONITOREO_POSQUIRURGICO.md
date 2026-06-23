@@ -49,6 +49,7 @@ bot sigue capturando 1 vez/día):
 | 6 | Volumen del drenaje | Entero opcional | ml — solo si el paciente lo mide |
 | 7 | Presencia de gases | Booleano | sí/no |
 | 8 | Episodios de náuseas/vómito | Entero | cantidad por check-in |
+| 9 | ¿Toleró líquidos sin vomitar? | Booleano nullable | sí/no/no capturado |
 
 ---
 
@@ -78,6 +79,8 @@ modelo — fase de decisiones de arquitectura clínica completa.**
 | 4e | náuseas (≥1 episodio/día) en 4 días calendario consecutivos | ILEO_PARALITICO | ALTA | Delaney 2008 — íleo en 27.8% con estancia 4+ días vs 11% general |
 | 5a | dolor_eva >= umbral según ventana de dia_postoperatorio (ver nota) | DOLOR_AGUDO | BAJA/MEDIA/ALTA según ventana | Delaney 2008, Lee 2022, Outersterp 2025, Coeckelberghs 2025 |
 | 5b | promedio dolor_eva últimos 2 días - promedio 2 días anteriores >= 3 | DOLOR_AGUDO | sube un nivel sobre 5a (techo ALTA) | Tendencia alcista — construcción propia |
+| 6a | tolero_liquidos=False en 1 día calendario | INTOLERANCIA_ORAL | MEDIA | Deshidratación = causa #1 de readmisión (Lawrence 2013); tolerancia oral es criterio de alta ERAS |
+| 6b | tolero_liquidos=False en 2 días calendario consecutivos | INTOLERANCIA_ORAL | ALTA | Riesgo de deshidratación establecida |
 
 **Nota sobre lógica de días calendario (Reglas 1, 3, 4):** agrupan
 registros por `fecha_registro__date`, no por número de registro — el
@@ -157,6 +160,7 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 | aspecto_drenaje | CharField choices | seroso/hemático/turbio/purulento/fecaloide/sin_drenaje |
 | presencia_gases | BooleanField | Tránsito intestinal |
 | episodios_nauseas | PositiveSmallIntegerField | Episodios en 24h |
+| tolero_liquidos | BooleanField nullable | null=no capturado, False=no toleró, True=toleró |
 | fecha_registro | DateTimeField auto | Timestamp automático |
 | dia_postoperatorio | PositiveSmallIntegerField | Calculado automáticamente al guardar |
 
@@ -381,9 +385,17 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
   Body truncado a 500 chars (defensa en profundidad). Auditoría confirmó:
   validación de firma Twilio ya existente y correcta, secretos vía .env
   fuera de git, 49/49 tests en verde. Sin deuda.
-- [ ] **Paso 2 — Variables nuevas (FC/FR, RH/antecedentes).** Analizar
-  artículos en /docs, decidir cuáles entran y si van antes o después del
-  merge; si después, mover a sprint posterior sin bloquear el merge.
+- [ ] **Paso 2 — Variables nuevas de la literatura** (una por una,
+  ciclo decidir→implementar→verificar→documentar):
+  - [x] Tolerancia a líquidos — booleano, escalera MEDIA/ALTA,
+    tipo INTOLERANCIA_ORAL (Regla 6)
+  - [ ] Hinchazón abdominal — pendiente
+  - [ ] Frecuencia cardíaca (FC) — pendiente (dispositivo provisto por
+    el médico, pregunta directa)
+  - [ ] Frecuencia respiratoria (FR) — pendiente (solo-dashboard, sin
+    alerta — Outersterp 2025: 77% de falsas alertas)
+  - Nota: estado de herida (fotos) y antecedentes quedan FUERA de
+    Sprint 3 (mejora futura / Sprint 4 respectivamente).
 - [ ] **Paso 3 — Revisión de cierre en dos frentes.** Claude Code audita
   coherencia interna y deuda técnica (alert_engine/modelos); Codex hace
   pasada adversarial de seguridad + escalabilidad; Claude (chat)
@@ -553,12 +565,14 @@ DB_PORT=5432
 ---
 
 *Última actualización: Fase 3.6 — las 5 reglas del alert_engine
-completas (drenaje, temperatura, gases, náuseas, dolor — 49 tests
-OK). Corregido un bug de zona horaria (UTC vs America/Bogota) que
-afectaba las reglas de días calendario en horario nocturno, más un
-clamp para dia_postoperatorio negativo (commit ff8bdc4). Pendiente:
-implementar 2×/día en bot.py (con los 2 gatings pendientes) y repaso
-final de alert_engine.py antes del merge.*
+completas (drenaje, temperatura, gases, náuseas, dolor) y entró la
+primera variable nueva del Paso 2: tolerancia a líquidos (Regla 6,
+INTOLERANCIA_ORAL) — 53 tests OK. Antes se corrigió un bug de zona
+horaria (UTC vs America/Bogota) que afectaba las reglas de días
+calendario en horario nocturno, más un clamp para dia_postoperatorio
+negativo (commit ff8bdc4). Pendiente: variables nuevas restantes
+(hinchazón, FC, FR), implementar 2×/día en bot.py (con los 2 gatings
+pendientes) y repaso final de alert_engine.py antes del merge.*
 *Siguiente paso: implementar frecuencia de check-ins (2×/día) en
 bot.py resolviendo los 2 pendientes de gating, luego repaso final de
 alert_engine.py completo, luego merge `sprint-3-whatsapp` →
