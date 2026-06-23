@@ -863,6 +863,62 @@ la pone el sistema, no el reloj de la respuesta.
 
 ---
 
+## Sesión: Variable nueva — Tolerancia a líquidos (Regla 6)
+**Fecha:** 20/06/2026
+**Responsable:** León (Arquitecto IA) con Claude (chat) y Claude Code
+**Estado:** COMPLETADO ✅ (commits 96f81c4, b13aacb, 0ad58d1)
+
+### Qué se hizo
+Primera de las 4 variables nuevas del Paso 2 (Sprint 3). Se agregó
+`tolero_liquidos` (booleano nullable) a RegistroDiario, un tipo de
+alerta nuevo INTOLERANCIA_ORAL, una pregunta al final del flujo del bot
+("¿Ha podido tomar líquidos sin vomitar?"), y la Regla 6 en el
+alert_engine.
+
+### Decisiones tomadas y su justificación
+1. **Booleano (sí/no), no escala.** La tolerancia a líquidos es
+   binaria en lo que importa clínicamente (¿retiene líquidos o no?); el
+   matiz de "cuánto" ya lo aproxima episodios_nauseas.
+2. **Tipo de alerta nuevo INTOLERANCIA_ORAL, no reutilizar
+   ILEO_PARALITICO.** Para granularidad en el dashboard futuro e
+   investigación — permite filtrar/contar por causa específica en vez
+   de colapsar tres síntomas (gases, náuseas, líquidos) en un solo
+   tipo genérico.
+3. **Escalera MEDIA(1 día)/ALTA(2 días), arranca en MEDIA no BAJA.**
+   La deshidratación es la causa #1 de readmisión (Lawrence 2013, 25%);
+   no retener líquidos ni un día ya es señal directa hacia
+   deshidratación, por eso no hay escalón BAJA y el techo ALTA llega a
+   los 2 días (no 3 como gases) — comprimido a propósito porque la
+   deshidratación se instala rápido.
+4. **Lógica de días calendario** (igual que gases): un día cuenta como
+   "toleró" si hubo al menos un registro positivo. Queda lista para el
+   2×/día del Sprint 4 sin retrabajo.
+
+### Base clínica
+Tolerancia oral = criterio de alta en todos los ERAS revisados; Lawrence
+2013 (deshidratación = causa #1 de readmisión); Delaney 2008 (tolera sin
+vómito como criterio de alta). Sin umbral numérico heredado para
+telemetría post-alta — la escalera de días es construcción propia con
+respaldo conceptual.
+
+### Verificación
+53/53 tests OK (49 previos + 4 nuevos). manage.py check limpio.
+Auditado contra el repo: la creación del RegistroDiario se MOVIÓ al
+nuevo paso (ESTADO_TOLERANCIA_LIQUIDOS) sin duplicarse — sigue
+centralizada en el helper `_crear_registro`, que ahora también persiste
+`tolero_liquidos`; gases/náuseas dejó de ser el paso final y solo avanza
+el estado. El flujo del bot pasó de 6 a 7 preguntas; los comentarios de
+referencia dentro del código (docstring de bot.py y "N preguntas" en
+models.py) se actualizaron en el mismo cambio.
+
+### Pendiente para la próxima sesión
+Siguiente variable del Paso 2: **hinchazón abdominal**. Luego FC
+(dispositivo del médico, pregunta directa) y FR (solo-dashboard, sin
+alerta — Outersterp 2025 reporta 77% de falsas alertas). Estado de
+herida (fotos) y antecedentes quedan fuera de Sprint 3.
+
+---
+
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** pendiente
 **Estado:** EN COLA ⏳
