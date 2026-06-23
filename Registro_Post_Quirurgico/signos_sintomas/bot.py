@@ -10,7 +10,7 @@ Diseño:
 - El bot NO diagnostica ni muestra alertas al paciente. Solo captura telemetría,
   delega en alert_engine.evaluar_registro() y responde una confirmación neutra.
 
-Máquina de estados (7 preguntas):
+Máquina de estados (8 preguntas):
     INICIO
       -> ESPERANDO_TEMPERATURA
       -> ESPERANDO_DOLOR
@@ -18,6 +18,7 @@ Máquina de estados (7 preguntas):
       -> ESPERANDO_ASPECTO_DRENAJE    (se omite si tiene_drenaje=False)
       -> ESPERANDO_CANTIDAD_DRENAJE   (se omite si tiene_drenaje=False)
       -> ESPERANDO_GASES_NAUSEAS
+      -> ESPERANDO_HINCHAZON
       -> ESPERANDO_TOLERANCIA_LIQUIDOS
       -> COMPLETADO
 """
@@ -107,8 +108,17 @@ MSG_REINTENTO_GASES_NAUSEAS = (
     "Ejemplo: 'sí, 0' o 'no, 2'."
 )
 
+MSG_PREGUNTA_HINCHAZON = (
+    "7️⃣ ¿Cómo siente la hinchazón o distensión de su abdomen hoy? 🌿\n"
+    "Responda: *nada*, *algo* o *mucho*."
+)
+MSG_REINTENTO_HINCHAZON = (
+    "No entendí. ¿Cómo siente la hinchazón de su abdomen? "
+    "Responda *nada*, *algo* o *mucho*."
+)
+
 MSG_PREGUNTA_TOLERANCIA_LIQUIDOS = (
-    "7️⃣ Última pregunta 🌿\n"
+    "8️⃣ Última pregunta 🌿\n"
     "¿Ha podido tomar líquidos (agua, caldo, jugo) sin vomitar? "
     "Responda *sí* o *no*."
 )
@@ -254,6 +264,15 @@ def _procesar_respuesta_flujo(conv, paciente, texto, hoy):
             return MSG_REINTENTO_GASES_NAUSEAS
         conv.temp_presencia_gases = gases
         conv.temp_episodios_nauseas = nauseas
+        conv.estado = ConversacionWhatsApp.ESTADO_HINCHAZON
+        conv.save()
+        return MSG_PREGUNTA_HINCHAZON
+
+    if estado == ConversacionWhatsApp.ESTADO_HINCHAZON:
+        nivel = _parse_hinchazon(texto)
+        if nivel is None:
+            return MSG_REINTENTO_HINCHAZON
+        conv.temp_hinchazon_abdominal = nivel
         conv.estado = ConversacionWhatsApp.ESTADO_TOLERANCIA_LIQUIDOS
         conv.save()
         return MSG_PREGUNTA_TOLERANCIA_LIQUIDOS
@@ -290,6 +309,7 @@ def _crear_registro(conv, paciente):
         volumen_drenaje_ml=conv.temp_volumen_drenaje_ml,
         presencia_gases=conv.temp_presencia_gases,
         episodios_nauseas=conv.temp_episodios_nauseas,
+        hinchazon_abdominal=conv.temp_hinchazon_abdominal,
         tolero_liquidos=conv.temp_tolero_liquidos,
     )
     evaluar_registro(registro)
@@ -382,6 +402,22 @@ def _parse_cantidad(texto):
     return cantidad, ml
 
 
+def _parse_hinchazon(texto):
+    """Mapea la respuesta del paciente a nivel de hinchazón: nada/algo/mucho.
+
+    Vocabulario tolerante. Devuelve None si no se entiende. Se evalúa de
+    mayor a menor especificidad; 'no' se detecta con límite de palabra para
+    no confundirlo con 'menos' (en 'más o menos')."""
+    t = _sin_acentos(texto.lower())
+    if 'mucho' in t or 'bastante' in t or 'demasiado' in t:
+        return 'mucho'
+    if 'algo' in t or 'poco' in t or 'mas o menos' in t or 'masomenos' in t:
+        return 'algo'
+    if 'nada' in t or re.search(r'\bno\b', t):
+        return 'nada'
+    return None
+
+
 def _parse_gases_nauseas(texto):
     """Devuelve (presencia_gases_bool_o_None, episodios_nauseas_int_o_None).
 
@@ -435,6 +471,7 @@ def _limpiar_temporales(conv):
     conv.temp_volumen_drenaje_ml = None
     conv.temp_presencia_gases = None
     conv.temp_episodios_nauseas = None
+    conv.temp_hinchazon_abdominal = None
     conv.temp_tolero_liquidos = None
 
 

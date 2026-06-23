@@ -118,6 +118,21 @@ class RegistroDiario(models.Model):
             "False = no toleró. True = toleró."
         )
     )
+    HINCHAZON_CHOICES = [
+        ('nada', 'Nada'),
+        ('algo', 'Algo'),
+        ('mucho', 'Mucho'),
+    ]
+    hinchazon_abdominal = models.CharField(
+        max_length=5,
+        choices=HINCHAZON_CHOICES,
+        null=True,
+        blank=True,
+        help_text=(
+            "Nivel de hinchazón/distensión abdominal auto-reportado. "
+            "null = no capturado. Se evalúa por empeoramiento entre días."
+        )
+    )
     fecha_registro = models.DateTimeField(auto_now_add=True)
     dia_postoperatorio = models.PositiveSmallIntegerField(
         editable=False,
@@ -207,7 +222,7 @@ class ConversacionWhatsApp(models.Model):
     momento en que bot.py crea el RegistroDiario y dispara el alert_engine.
     """
 
-    # --- Estados de la máquina (7 preguntas) ---
+    # --- Estados de la máquina (8 preguntas) ---
     ESTADO_INICIO            = 'INICIO'
     ESTADO_TEMPERATURA       = 'ESPERANDO_TEMPERATURA'
     ESTADO_DOLOR             = 'ESPERANDO_DOLOR'
@@ -215,6 +230,7 @@ class ConversacionWhatsApp(models.Model):
     ESTADO_ASPECTO_DRENAJE   = 'ESPERANDO_ASPECTO_DRENAJE'
     ESTADO_CANTIDAD_DRENAJE  = 'ESPERANDO_CANTIDAD_DRENAJE'
     ESTADO_GASES_NAUSEAS     = 'ESPERANDO_GASES_NAUSEAS'
+    ESTADO_HINCHAZON         = 'ESPERANDO_HINCHAZON'
     ESTADO_TOLERANCIA_LIQUIDOS = 'ESPERANDO_TOLERANCIA_LIQUIDOS'
     ESTADO_COMPLETADO        = 'COMPLETADO'
 
@@ -226,6 +242,7 @@ class ConversacionWhatsApp(models.Model):
         (ESTADO_ASPECTO_DRENAJE,  'Esperando aspecto del drenaje'),
         (ESTADO_CANTIDAD_DRENAJE, 'Esperando cantidad del drenaje'),
         (ESTADO_GASES_NAUSEAS,    'Esperando gases y náuseas'),
+        (ESTADO_HINCHAZON,        'Esperando hinchazón abdominal'),
         (ESTADO_TOLERANCIA_LIQUIDOS, 'Esperando tolerancia a líquidos'),
         (ESTADO_COMPLETADO,       'Completado'),
     ]
@@ -262,6 +279,9 @@ class ConversacionWhatsApp(models.Model):
     )
     temp_presencia_gases = models.BooleanField(null=True, blank=True)
     temp_episodios_nauseas = models.PositiveSmallIntegerField(null=True, blank=True)
+    temp_hinchazon_abdominal = models.CharField(
+        max_length=5, null=True, blank=True
+    )
     temp_tolero_liquidos = models.BooleanField(null=True, blank=True)
 
     # --- Control "un registro por día" ---
