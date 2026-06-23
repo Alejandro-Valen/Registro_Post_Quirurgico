@@ -18,7 +18,7 @@ def webhook_whatsapp(request):
         return HttpResponseForbidden("Firma de Twilio inválida")
 
     telefono = request.POST.get('From', '')
-    texto = request.POST.get('Body', '')
+    texto = request.POST.get('Body', '')[:500]
 
     respuesta = procesar_mensaje(telefono, texto)
 

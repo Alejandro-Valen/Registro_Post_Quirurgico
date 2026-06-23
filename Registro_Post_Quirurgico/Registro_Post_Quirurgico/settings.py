@@ -4,7 +4,7 @@ from decouple import config, Csv
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = config('SECRET_KEY')
-DEBUG = config('DEBUG', default=True, cast=bool)
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 # Hosts permitidos: se definen por .env (separados por coma), NUNCA con wildcard
 # '*' en el código. Dev: agrega tu dominio de ngrok. Prod: el dominio real.
