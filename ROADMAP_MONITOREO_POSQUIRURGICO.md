@@ -407,6 +407,25 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
     severidad + ¿uno o dos silencios?
   - [ ] Resolver los 2 gatings (DECISIONES ABIERTAS): deduplicación de
     alertas y gating pre-operatorio (dia_postoperatorio=0).
+  - [ ] **Deuda de diseño detectada en el cruce contra el código
+    (detalle y razonamiento en BITACORA.md, entrada del 22/06/2026):**
+    - [ ] **Fecha autoritativa para reglas de días calendario.** El
+      alert_engine agrupa por `fecha_registro__date` (verificado: ~8 usos
+      en alert_engine.py). Si `CheckInProgramado.fecha_dia` (congelado) y
+      `RegistroDiario.fecha_registro` (auto_now_add) divergen en un cruce
+      de medianoche, las reglas cuentan el registro en el día equivocado.
+      DECISIÓN CLÍNICA pendiente: ¿cuál fecha manda para las reglas — la
+      del evento o la del registro? (Riesgo más serio: toca el engine, no
+      solo el bot.)
+    - [ ] **Reescribir el guard "un registro por día" → "por check-in".**
+      bot.py hoy bloquea con `fecha_ultimo_registro` (líneas ~145-146 y
+      161-162 → MSG_YA_REGISTRADO); con 2 check-ins/día eso bloquearía el
+      segundo. El refactor debe expresar la guarda en términos del evento
+      PENDIENTE, no de la fecha.
+    - [ ] **Vínculo OneToOne transaccional.** Al completar el flujo,
+      asociar el RegistroDiario al CheckInProgramado PENDIENTE dentro de
+      una transacción, para no dejar eventos COMPLETADO sin `registro` ni
+      registros huérfanos.
 - [ ] Demo funcional con 1 paciente ficticio para el equipo médico
 
 **Decisiones de diseño pendientes (anotadas durante la implementación
