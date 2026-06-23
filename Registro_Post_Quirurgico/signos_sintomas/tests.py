@@ -885,6 +885,126 @@ class AlertEngineTests(TestCase):
         alertas_oral = [a for a in alertas if a.tipo == "INTOLERANCIA_ORAL"]
         self.assertEqual(len(alertas_oral), 0)
 
+    # --- Regla 7: hinchazón abdominal ---
+    # Valores neutros en gases (True) y náuseas (0) para que la única
+    # alerta ILEO_PARALITICO posible sea la de hinchazón.
+
+    def _crear_hinchazon(self, paciente, nivel, dias_atras=0):
+        reg = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+            hinchazon_abdominal=nivel,
+        )
+        if dias_atras:
+            fecha = timezone.now() - timedelta(days=dias_atras)
+            RegistroDiario.objects.filter(pk=reg.pk).update(fecha_registro=fecha)
+        return reg
+
+    def test_hinchazon_empeoramiento_puntual_crea_baja(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Hinchazon Puntual",
+            telefono_whatsapp="+573008880060",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        self._crear_hinchazon(paciente, "nada", dias_atras=1)
+        reg_hoy = self._crear_hinchazon(paciente, "algo")
+        alertas = evaluar_registro(reg_hoy)
+        ileo = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(ileo), 1)
+        self.assertEqual(ileo[0].severidad, "BAJA")
+
+    def test_hinchazon_empeoramiento_sostenido_crea_media(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Hinchazon Sostenido",
+            telefono_whatsapp="+573008880061",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        self._crear_hinchazon(paciente, "algo", dias_atras=2)
+        self._crear_hinchazon(paciente, "algo", dias_atras=1)
+        reg_hoy = self._crear_hinchazon(paciente, "mucho")
+        alertas = evaluar_registro(reg_hoy)
+        ileo = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(ileo), 1)
+        self.assertEqual(ileo[0].severidad, "MEDIA")
+
+    def test_hinchazon_subida_progresiva_crea_media(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Hinchazon Progresiva",
+            telefono_whatsapp="+573008880062",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        self._crear_hinchazon(paciente, "nada", dias_atras=2)
+        self._crear_hinchazon(paciente, "algo", dias_atras=1)
+        reg_hoy = self._crear_hinchazon(paciente, "mucho")
+        alertas = evaluar_registro(reg_hoy)
+        ileo = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(ileo), 1)
+        self.assertEqual(ileo[0].severidad, "MEDIA")
+
+    def test_hinchazon_fluctuacion_que_mejora_no_crea_media(self):
+        # antier algo, ayer mucho, hoy algo → hoy bajó, no escala.
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Hinchazon Fluctua",
+            telefono_whatsapp="+573008880063",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        self._crear_hinchazon(paciente, "algo", dias_atras=2)
+        self._crear_hinchazon(paciente, "mucho", dias_atras=1)
+        reg_hoy = self._crear_hinchazon(paciente, "algo")
+        alertas = evaluar_registro(reg_hoy)
+        ileo = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(ileo), 0)
+
+    def test_hinchazon_estable_no_crea_alerta(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Hinchazon Estable",
+            telefono_whatsapp="+573008880064",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        self._crear_hinchazon(paciente, "algo", dias_atras=2)
+        self._crear_hinchazon(paciente, "algo", dias_atras=1)
+        reg_hoy = self._crear_hinchazon(paciente, "algo")
+        alertas = evaluar_registro(reg_hoy)
+        ileo = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(ileo), 0)
+
+    def test_hinchazon_mucho_4_dias_crea_alta(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Hinchazon Mucho 4d",
+            telefono_whatsapp="+573008880065",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        self._crear_hinchazon(paciente, "mucho", dias_atras=3)
+        self._crear_hinchazon(paciente, "mucho", dias_atras=2)
+        self._crear_hinchazon(paciente, "mucho", dias_atras=1)
+        reg_hoy = self._crear_hinchazon(paciente, "mucho")
+        alertas = evaluar_registro(reg_hoy)
+        ileo = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(ileo), 1)
+        self.assertEqual(ileo[0].severidad, "ALTA")
+
+    def test_hinchazon_null_no_crea_alerta(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Hinchazon Null",
+            telefono_whatsapp="+573008880066",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        reg_hoy = self._crear_hinchazon(paciente, None)
+        alertas = evaluar_registro(reg_hoy)
+        ileo = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(ileo), 0)
+
 
 class RegistroDiarioModelTests(TestCase):
     """Cálculo de dia_postoperatorio en RegistroDiario.save().
@@ -957,15 +1077,16 @@ class BotWhatsAppTests(TestCase):
 
     def _completar_flujo(self, gases_nauseas="sí, 0", temperatura="37.0",
                          tiene_drenaje="sí", aspecto="1", cantidad="normal",
-                         tolero_liquidos="sí"):
-        """Recorre las 7 preguntas y devuelve la respuesta final del bot."""
+                         hinchazon="nada", tolero_liquidos="sí"):
+        """Recorre las 8 preguntas y devuelve la respuesta final del bot."""
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")          # -> temperatura
         bot.procesar_mensaje(self.TELEFONO_TWILIO, temperatura)     # -> dolor
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")             # -> tiene_drenaje
         bot.procesar_mensaje(self.TELEFONO_TWILIO, tiene_drenaje)   # -> aspecto (si sí)
         bot.procesar_mensaje(self.TELEFONO_TWILIO, aspecto)         # -> cantidad
         bot.procesar_mensaje(self.TELEFONO_TWILIO, cantidad)        # -> gases/nauseas
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, gases_nauseas)   # -> tolerancia líquidos
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, gases_nauseas)   # -> hinchazón
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, hinchazon)       # -> tolerancia líquidos
         return bot.procesar_mensaje(self.TELEFONO_TWILIO, tolero_liquidos)
 
     def test_paciente_no_registrado(self):
@@ -995,6 +1116,7 @@ class BotWhatsAppTests(TestCase):
         self.assertEqual(registro.cantidad_drenaje, "normal")
         self.assertTrue(registro.presencia_gases)
         self.assertEqual(registro.episodios_nauseas, 0)
+        self.assertEqual(registro.hinchazon_abdominal, "nada")
         self.assertTrue(registro.tolero_liquidos)
         conv = ConversacionWhatsApp.objects.get()
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_COMPLETADO)
