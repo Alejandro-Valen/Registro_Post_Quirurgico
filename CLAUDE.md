@@ -82,6 +82,7 @@ bot sigue capturando 1 vez/día):
 | 6 | Volumen del drenaje | Entero opcional | ml — solo si el paciente lo mide |
 | 7 | Presencia de gases | Booleano | sí/no |
 | 8 | Episodios de náuseas/vómito | Entero | cantidad por check-in |
+| 9 | ¿Toleró líquidos sin vomitar? | Booleano nullable | sí/no/no capturado |
 
 ---
 
@@ -111,6 +112,8 @@ modelo — fase de decisiones de arquitectura clínica completa.**
 | 4e | náuseas (≥1 episodio/día) en 4 días calendario consecutivos | ILEO_PARALITICO | ALTA | Delaney 2008 — íleo en 27.8% con estancia 4+ días vs 11% general |
 | 5a | dolor_eva >= umbral según ventana de dia_postoperatorio (ver nota) | DOLOR_AGUDO | BAJA/MEDIA/ALTA según ventana | Delaney 2008, Lee 2022, Outersterp 2025, Coeckelberghs 2025 |
 | 5b | promedio dolor_eva últimos 2 días - promedio 2 días anteriores >= 3 | DOLOR_AGUDO | sube un nivel sobre 5a (techo ALTA) | Tendencia alcista — construcción propia |
+| 6a | tolero_liquidos=False en 1 día calendario | INTOLERANCIA_ORAL | MEDIA | Deshidratación = causa #1 de readmisión (Lawrence 2013); tolerancia oral es criterio de alta ERAS |
+| 6b | tolero_liquidos=False en 2 días calendario consecutivos | INTOLERANCIA_ORAL | ALTA | Riesgo de deshidratación establecida |
 
 **Nota sobre lógica de días calendario (Reglas 1, 3, 4):** agrupan
 registros por `fecha_registro__date`, no por número de registro — el
@@ -157,6 +160,7 @@ cantidad_drenaje      CharField choices=[poco,normal,mucho,sin_drenaje] null=Tru
 volumen_drenaje_ml    PositiveIntegerField nullable  # opcional, complemento de cantidad_drenaje
 presencia_gases       BooleanField
 episodios_nauseas     PositiveSmallIntegerField
+tolero_liquidos       BooleanField null=True  # null=no capturado, False=no toleró, True=toleró
 fecha_registro        DateTimeField auto_now_add=True
 dia_postoperatorio    PositiveSmallIntegerField  # calculado automáticamente en save()
 ```
@@ -171,7 +175,7 @@ el paciente lo menciona espontáneamente (ej. "poco, 30ml"). El alert_engine usa
 ```python
 paciente              ForeignKey(Paciente, PROTECT)
 registro_origen       ForeignKey(RegistroDiario, PROTECT)
-tipo                  CharField choices=[SEPSIS,FUGA_ANASTOMOTICA,ILEO_PARALITICO,DOLOR_AGUDO]
+tipo                  CharField choices=[SEPSIS,FUGA_ANASTOMOTICA,ILEO_PARALITICO,DOLOR_AGUDO,INTOLERANCIA_ORAL]
 severidad             CharField choices=[ALTA,MEDIA,BAJA]
 mensaje               TextField
 resuelta              BooleanField default=False
@@ -186,7 +190,7 @@ estado                     CharField choices=[INICIO, ESPERANDO_TEMPERATURA,
                            ESPERANDO_DOLOR, ESPERANDO_TIENE_DRENAJE,
                            ESPERANDO_ASPECTO_DRENAJE,
                            ESPERANDO_CANTIDAD_DRENAJE, ESPERANDO_GASES_NAUSEAS,
-                           COMPLETADO]
+                           ESPERANDO_TOLERANCIA_LIQUIDOS, COMPLETADO]
 temp_temperatura           DecimalField nullable  # respuesta parcial del día
 temp_dolor_eva              PositiveSmallIntegerField nullable
 temp_tiene_drenaje          BooleanField nullable
@@ -195,6 +199,7 @@ temp_cantidad_drenaje       CharField nullable
 temp_volumen_drenaje_ml     PositiveIntegerField nullable
 temp_presencia_gases        BooleanField nullable
 temp_episodios_nauseas      PositiveSmallIntegerField nullable
+temp_tolero_liquidos        BooleanField nullable
 fecha_ultimo_registro       DateField nullable  # controla "un registro por día"
 fecha_actualizacion         DateTimeField auto_now=True
 ```
@@ -212,9 +217,9 @@ la base de datos en lugar de en memoria.
 
 Diseño: lógica **pura**, sin conocimiento de HTTP ni Twilio. La vista
 (`views.py`, pendiente) traduce HTTP ↔ esta función. Esto permite testear el
-bot completo sin mockear peticiones web — actualmente **49 tests unitarios OK**.
+bot completo sin mockear peticiones web — actualmente **53 tests unitarios OK**.
 
-**Máquina de estados (6 preguntas):**
+**Máquina de estados (7 preguntas):**
 ```
 INICIO
   → ESPERANDO_TEMPERATURA       "¿Cuál es tu temperatura? ej: 37.5"
@@ -223,6 +228,7 @@ INICIO
   → ESPERANDO_ASPECTO_DRENAJE   menú 1-5 en lenguaje no médico — se OMITE si tiene_drenaje=False
   → ESPERANDO_CANTIDAD_DRENAJE  poco/normal/mucho (+ ml opcional) — se OMITE si tiene_drenaje=False
   → ESPERANDO_GASES_NAUSEAS     "¿pasaste gases? (sí/no), ¿náuseas? (número)" en un solo mensaje
+  → ESPERANDO_TOLERANCIA_LIQUIDOS "¿Ha podido tomar líquidos sin vomitar? sí/no"
   → COMPLETADO                  crea RegistroDiario, llama evaluar_registro(), confirmación neutra
 ```
 
@@ -303,13 +309,15 @@ evidencia disponible, no decisiones ya tomadas.
 **Punto actual:** Sprint 3 funcional end-to-end. **Fase de decisiones
 de arquitectura clínica del `alert_engine` COMPLETA — las 5 variables
 reescritas** bajo el modelo de alta sensibilidad: drenaje,
-temperatura, gases, náuseas y dolor (49 tests OK). Pendiente antes
-del merge: implementar en `bot.py` la frecuencia de check-ins ya
-decidida (2×/día fijo) y hacer un repaso final de `alert_engine.py`
-completo. Ver `docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md`
-para el detalle original de la auditoría. El merge
-`sprint-3-whatsapp` → `Desarrollo` sigue pospuesto hasta cerrar esos
-2 pendientes.
+temperatura, gases, náuseas y dolor (53 tests OK). **Paso 2 (variables
+nuevas) en curso:** la primera, tolerancia a líquidos (Regla 6,
+`INTOLERANCIA_ORAL`), ya está implementada; pendientes hinchazón
+abdominal, FC y FR. Pendiente también antes del merge: implementar en
+`bot.py` la frecuencia de check-ins ya decidida (2×/día fijo) y hacer un
+repaso final de `alert_engine.py` completo. Ver
+`docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md` para el detalle
+original de la auditoría. El merge `sprint-3-whatsapp` → `Desarrollo`
+sigue pospuesto hasta cerrar esos pendientes.
 
 - ✅ **Paso 1:** modelo `ConversacionWhatsApp` + campo `cantidad_drenaje` en
   `RegistroDiario` + migración `0002` aplicada.
