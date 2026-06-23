@@ -82,7 +82,7 @@ modelo — fase de decisiones de arquitectura clínica completa.**
 | 6a | tolero_liquidos=False en 1 día calendario | INTOLERANCIA_ORAL | MEDIA | Deshidratación = causa #1 de readmisión (Lawrence 2013); tolerancia oral es criterio de alta ERAS |
 | 6b | tolero_liquidos=False en 2 días calendario consecutivos | INTOLERANCIA_ORAL | ALTA | Riesgo de deshidratación establecida |
 
-**Nota sobre lógica de días calendario (Reglas 1, 3, 4):** agrupan
+**Nota sobre lógica de días calendario (Reglas 1, 3, 4, 6):** agrupan
 registros por `fecha_registro__date`, no por número de registro — el
 sistema captura 2 check-ins/día, así que 2 registros del mismo día
 cuentan como 1 día, no como 2.
