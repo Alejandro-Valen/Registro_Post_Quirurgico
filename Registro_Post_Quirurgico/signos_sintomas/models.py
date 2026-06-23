@@ -109,6 +109,15 @@ class RegistroDiario(models.Model):
         default=0,
         help_text="Número de episodios de náuseas o vómito en 24h"
     )
+    tolero_liquidos = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text=(
+            "¿El paciente toleró líquidos sin vomitar? "
+            "null = no capturado (registros anteriores a esta versión). "
+            "False = no toleró. True = toleró."
+        )
+    )
     fecha_registro = models.DateTimeField(auto_now_add=True)
     dia_postoperatorio = models.PositiveSmallIntegerField(
         editable=False,
@@ -144,6 +153,7 @@ class Alerta(models.Model):
         ('FUGA_ANASTOMOTICA', 'Drenaje Anormal — Posible Fuga Anastomótica'),
         ('ILEO_PARALITICO',   'Sin Tránsito Intestinal — Posible Íleo Paralítico'),
         ('DOLOR_AGUDO',       'Dolor Agudo Incontrolable'),
+        ('INTOLERANCIA_ORAL', 'Intolerancia a Líquidos — Riesgo de Deshidratación'),
     ]
     SEVERIDAD_CHOICES = [
         ('ALTA',  'Alta — Ir a urgencias'),
@@ -197,7 +207,7 @@ class ConversacionWhatsApp(models.Model):
     momento en que bot.py crea el RegistroDiario y dispara el alert_engine.
     """
 
-    # --- Estados de la máquina (6 preguntas) ---
+    # --- Estados de la máquina (7 preguntas) ---
     ESTADO_INICIO            = 'INICIO'
     ESTADO_TEMPERATURA       = 'ESPERANDO_TEMPERATURA'
     ESTADO_DOLOR             = 'ESPERANDO_DOLOR'
@@ -205,6 +215,7 @@ class ConversacionWhatsApp(models.Model):
     ESTADO_ASPECTO_DRENAJE   = 'ESPERANDO_ASPECTO_DRENAJE'
     ESTADO_CANTIDAD_DRENAJE  = 'ESPERANDO_CANTIDAD_DRENAJE'
     ESTADO_GASES_NAUSEAS     = 'ESPERANDO_GASES_NAUSEAS'
+    ESTADO_TOLERANCIA_LIQUIDOS = 'ESPERANDO_TOLERANCIA_LIQUIDOS'
     ESTADO_COMPLETADO        = 'COMPLETADO'
 
     ESTADO_CHOICES = [
@@ -215,6 +226,7 @@ class ConversacionWhatsApp(models.Model):
         (ESTADO_ASPECTO_DRENAJE,  'Esperando aspecto del drenaje'),
         (ESTADO_CANTIDAD_DRENAJE, 'Esperando cantidad del drenaje'),
         (ESTADO_GASES_NAUSEAS,    'Esperando gases y náuseas'),
+        (ESTADO_TOLERANCIA_LIQUIDOS, 'Esperando tolerancia a líquidos'),
         (ESTADO_COMPLETADO,       'Completado'),
     ]
 
@@ -250,6 +262,7 @@ class ConversacionWhatsApp(models.Model):
     )
     temp_presencia_gases = models.BooleanField(null=True, blank=True)
     temp_episodios_nauseas = models.PositiveSmallIntegerField(null=True, blank=True)
+    temp_tolero_liquidos = models.BooleanField(null=True, blank=True)
 
     # --- Control "un registro por día" ---
     fecha_ultimo_registro = models.DateField(

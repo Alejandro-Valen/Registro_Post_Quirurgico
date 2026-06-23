@@ -10,7 +10,7 @@ Diseño:
 - El bot NO diagnostica ni muestra alertas al paciente. Solo captura telemetría,
   delega en alert_engine.evaluar_registro() y responde una confirmación neutra.
 
-Máquina de estados (6 preguntas):
+Máquina de estados (7 preguntas):
     INICIO
       -> ESPERANDO_TEMPERATURA
       -> ESPERANDO_DOLOR
@@ -18,6 +18,7 @@ Máquina de estados (6 preguntas):
       -> ESPERANDO_ASPECTO_DRENAJE    (se omite si tiene_drenaje=False)
       -> ESPERANDO_CANTIDAD_DRENAJE   (se omite si tiene_drenaje=False)
       -> ESPERANDO_GASES_NAUSEAS
+      -> ESPERANDO_TOLERANCIA_LIQUIDOS
       -> COMPLETADO
 """
 
@@ -104,6 +105,15 @@ MSG_PREGUNTA_GASES_NAUSEAS = (
 MSG_REINTENTO_GASES_NAUSEAS = (
     "Por favor dime si pasaste gases (sí/no) y cuántas veces tuviste náuseas. "
     "Ejemplo: 'sí, 0' o 'no, 2'."
+)
+
+MSG_PREGUNTA_TOLERANCIA_LIQUIDOS = (
+    "¿Ha podido tomar líquidos (agua, caldo, jugo) sin vomitar? "
+    "Responda *sí* o *no*."
+)
+MSG_REINTENTO_TOLERANCIA_LIQUIDOS = (
+    "No entendí su respuesta. ¿Pudo tomar líquidos sin vomitar? "
+    "Responda *sí* o *no*."
 )
 
 # Respuestas predefinidas a dudas (espejo de knowledge_base.md mientras no haya RAG)
@@ -243,6 +253,18 @@ def _procesar_respuesta_flujo(conv, paciente, texto, hoy):
             return MSG_REINTENTO_GASES_NAUSEAS
         conv.temp_presencia_gases = gases
         conv.temp_episodios_nauseas = nauseas
+        conv.estado = ConversacionWhatsApp.ESTADO_TOLERANCIA_LIQUIDOS
+        conv.save()
+        return MSG_PREGUNTA_TOLERANCIA_LIQUIDOS
+
+    if estado == ConversacionWhatsApp.ESTADO_TOLERANCIA_LIQUIDOS:
+        respuesta_lower = _sin_acentos(texto.strip().lower())
+        if respuesta_lower in ('si', 's', 'yes', 'si.', 'claro', 'si pude'):
+            conv.temp_tolero_liquidos = True
+        elif respuesta_lower in ('no', 'no.', 'n', 'no pude'):
+            conv.temp_tolero_liquidos = False
+        else:
+            return MSG_REINTENTO_TOLERANCIA_LIQUIDOS
         _crear_registro(conv, paciente)
         _finalizar(conv, hoy)
         return MSG_CONFIRMACION
@@ -267,6 +289,7 @@ def _crear_registro(conv, paciente):
         volumen_drenaje_ml=conv.temp_volumen_drenaje_ml,
         presencia_gases=conv.temp_presencia_gases,
         episodios_nauseas=conv.temp_episodios_nauseas,
+        tolero_liquidos=conv.temp_tolero_liquidos,
     )
     evaluar_registro(registro)
     return registro
@@ -411,6 +434,7 @@ def _limpiar_temporales(conv):
     conv.temp_volumen_drenaje_ml = None
     conv.temp_presencia_gases = None
     conv.temp_episodios_nauseas = None
+    conv.temp_tolero_liquidos = None
 
 
 def _reiniciar(conv):
