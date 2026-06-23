@@ -97,7 +97,7 @@ MSG_REINTENTO_CANTIDAD = (
 )
 
 MSG_PREGUNTA_GASES_NAUSEAS = (
-    "6️⃣ Últimas preguntas 🌿\n"
+    "6️⃣ Ya casi terminamos 🌿\n"
     "¿Has podido pasar gases o ir al baño hoy? (sí/no)\n"
     "Y ¿cuántas veces has tenido náuseas o vómito hoy? (si ninguna, 0)\n"
     "Puedes responder así: 'sí, 0'"
@@ -108,6 +108,7 @@ MSG_REINTENTO_GASES_NAUSEAS = (
 )
 
 MSG_PREGUNTA_TOLERANCIA_LIQUIDOS = (
+    "7️⃣ Última pregunta 🌿\n"
     "¿Ha podido tomar líquidos (agua, caldo, jugo) sin vomitar? "
     "Responda *sí* o *no*."
 )
