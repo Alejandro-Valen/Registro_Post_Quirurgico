@@ -373,10 +373,14 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
   trasladados a FASE 4 como ítems ejecutables. Implementación (modelo +
   scheduler + alerta de silencio + 2 gatings) → Sprint 4 por dependencia
   con Celery.
-- [ ] **Paso 1b — Mini-revisión de seguridad webhook/secretos Twilio.**
+- [x] **Paso 1b — Mini-revisión de seguridad webhook/secretos Twilio.**
   SÍ va en Sprint 3: es el endpoint que ya existe, no depende del
   scheduler. Revisar validación de firma del webhook y manejo de
   secretos en views.py / settings.
+  Resuelto en commit 22fb629: DEBUG default→False (fail-safe en prod) y
+  Body truncado a 500 chars (defensa en profundidad). Auditoría confirmó:
+  validación de firma Twilio ya existente y correcta, secretos vía .env
+  fuera de git, 49/49 tests en verde. Sin deuda.
 - [ ] **Paso 2 — Variables nuevas (FC/FR, RH/antecedentes).** Analizar
   artículos en /docs, decidir cuáles entran y si van antes o después del
   merge; si después, mover a sprint posterior sin bloquear el merge.
