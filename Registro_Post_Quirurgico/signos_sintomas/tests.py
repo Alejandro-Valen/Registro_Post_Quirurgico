@@ -792,6 +792,99 @@ class AlertEngineTests(TestCase):
         self.assertEqual(len(alertas_dolor), 1)
         self.assertEqual(alertas_dolor[0].severidad, "MEDIA")
 
+    def test_no_tolero_liquidos_un_dia_crea_alerta_media(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente No Tolera Liquidos",
+            telefono_whatsapp="+573008880050",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+            tolero_liquidos=False,
+        )
+        alertas = evaluar_registro(registro)
+        alertas_oral = [a for a in alertas if a.tipo == "INTOLERANCIA_ORAL"]
+        self.assertEqual(len(alertas_oral), 1)
+        self.assertEqual(alertas_oral[0].severidad, "MEDIA")
+
+    def test_no_tolero_liquidos_dos_dias_crea_alerta_alta(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente No Tolera Dos Dias",
+            telefono_whatsapp="+573008880051",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        ayer = timezone.now() - timedelta(days=1)
+        reg_ayer = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+            tolero_liquidos=False,
+        )
+        RegistroDiario.objects.filter(pk=reg_ayer.pk).update(fecha_registro=ayer)
+        reg_hoy = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+            tolero_liquidos=False,
+        )
+        alertas = evaluar_registro(reg_hoy)
+        alertas_oral = [a for a in alertas if a.tipo == "INTOLERANCIA_ORAL"]
+        self.assertEqual(len(alertas_oral), 1)
+        self.assertEqual(alertas_oral[0].severidad, "ALTA")
+
+    def test_tolero_liquidos_no_crea_alerta(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Tolera Liquidos",
+            telefono_whatsapp="+573008880052",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+            tolero_liquidos=True,
+        )
+        alertas = evaluar_registro(registro)
+        alertas_oral = [a for a in alertas if a.tipo == "INTOLERANCIA_ORAL"]
+        self.assertEqual(len(alertas_oral), 0)
+
+    def test_tolero_liquidos_null_no_crea_alerta(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Liquidos Null",
+            telefono_whatsapp="+573008880053",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+            tolero_liquidos=None,
+        )
+        alertas = evaluar_registro(registro)
+        alertas_oral = [a for a in alertas if a.tipo == "INTOLERANCIA_ORAL"]
+        self.assertEqual(len(alertas_oral), 0)
+
 
 class RegistroDiarioModelTests(TestCase):
     """Cálculo de dia_postoperatorio en RegistroDiario.save().
@@ -863,15 +956,17 @@ class BotWhatsAppTests(TestCase):
         )
 
     def _completar_flujo(self, gases_nauseas="sí, 0", temperatura="37.0",
-                         tiene_drenaje="sí", aspecto="1", cantidad="normal"):
-        """Recorre las 6 preguntas y devuelve la respuesta final del bot."""
+                         tiene_drenaje="sí", aspecto="1", cantidad="normal",
+                         tolero_liquidos="sí"):
+        """Recorre las 7 preguntas y devuelve la respuesta final del bot."""
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")          # -> temperatura
         bot.procesar_mensaje(self.TELEFONO_TWILIO, temperatura)     # -> dolor
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")             # -> tiene_drenaje
         bot.procesar_mensaje(self.TELEFONO_TWILIO, tiene_drenaje)   # -> aspecto (si sí)
         bot.procesar_mensaje(self.TELEFONO_TWILIO, aspecto)         # -> cantidad
         bot.procesar_mensaje(self.TELEFONO_TWILIO, cantidad)        # -> gases/nauseas
-        return bot.procesar_mensaje(self.TELEFONO_TWILIO, gases_nauseas)
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, gases_nauseas)   # -> tolerancia líquidos
+        return bot.procesar_mensaje(self.TELEFONO_TWILIO, tolero_liquidos)
 
     def test_paciente_no_registrado(self):
         respuesta = bot.procesar_mensaje("whatsapp:+570000000000", "hola")
@@ -900,6 +995,7 @@ class BotWhatsAppTests(TestCase):
         self.assertEqual(registro.cantidad_drenaje, "normal")
         self.assertTrue(registro.presencia_gases)
         self.assertEqual(registro.episodios_nauseas, 0)
+        self.assertTrue(registro.tolero_liquidos)
         conv = ConversacionWhatsApp.objects.get()
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_COMPLETADO)
         self.assertIsNone(conv.temp_temperatura)  # parciales limpiados
