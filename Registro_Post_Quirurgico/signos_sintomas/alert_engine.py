@@ -26,6 +26,9 @@ DIAS_SIN_GASES_BAJA  = 1
 DIAS_SIN_GASES_MEDIA = 2
 DIAS_SIN_GASES_ALTA  = 3
 
+DIAS_SIN_TOLERAR_LIQUIDOS_MEDIA = 1
+DIAS_SIN_TOLERAR_LIQUIDOS_ALTA  = 2
+
 # Escalera de dolor (EVA) por ventana de dia_postoperatorio.
 # Decisión Arquitecto, jun 2026. Base: Delaney 2008, Lee 2022,
 # Outersterp 2025, Coeckelberghs 2025.
@@ -346,6 +349,62 @@ def evaluar_registro(registro):
             mensaje=mensaje
         )
         alertas_creadas.append(alerta)
+
+    # Regla 6: Intolerancia a líquidos — escalera por días calendario.
+    # Decisión Arquitecto, jun 2026. Base: tolerancia oral es criterio de
+    # alta en todos los ERAS revisados; deshidratación = causa #1 de
+    # readmisión (Lawrence 2013). Arranca en MEDIA (no BAJA) porque no
+    # retener líquidos ni un día ya es señal directa hacia deshidratación.
+    # Un día cuenta como "toleró" si hubo al menos un registro positivo.
+    # Solo evalúa si el registro actual tiene el dato capturado.
+    if registro.tolero_liquidos is False:
+        hoy_liquidos = timezone.localdate(registro.fecha_registro)
+        dias_sin_tolerar = 0
+        dia_revisado = hoy_liquidos
+        while True:
+            toleraba_ese_dia = RegistroDiario.objects.filter(
+                paciente=registro.paciente,
+                fecha_registro__date=dia_revisado,
+                tolero_liquidos=True,
+            ).exists()
+            existe_registro_ese_dia = RegistroDiario.objects.filter(
+                paciente=registro.paciente,
+                fecha_registro__date=dia_revisado,
+            ).exists()
+            if not existe_registro_ese_dia:
+                break
+            if toleraba_ese_dia:
+                break
+            dias_sin_tolerar += 1
+            if dias_sin_tolerar >= DIAS_SIN_TOLERAR_LIQUIDOS_ALTA:
+                break
+            dia_revisado = dia_revisado - timedelta(days=1)
+
+        if dias_sin_tolerar >= DIAS_SIN_TOLERAR_LIQUIDOS_ALTA:
+            alerta = Alerta.objects.create(
+                paciente=registro.paciente,
+                registro_origen=registro,
+                tipo='INTOLERANCIA_ORAL',
+                severidad='ALTA',
+                mensaje=(
+                    f"Paciente sin tolerar líquidos por {dias_sin_tolerar} "
+                    "días consecutivos. Riesgo de deshidratación — ir a "
+                    "urgencias."
+                )
+            )
+            alertas_creadas.append(alerta)
+        elif dias_sin_tolerar >= DIAS_SIN_TOLERAR_LIQUIDOS_MEDIA:
+            alerta = Alerta.objects.create(
+                paciente=registro.paciente,
+                registro_origen=registro,
+                tipo='INTOLERANCIA_ORAL',
+                severidad='MEDIA',
+                mensaje=(
+                    "Paciente no toleró líquidos hoy. Vigilar hidratación "
+                    "— llamar al médico."
+                )
+            )
+            alertas_creadas.append(alerta)
 
     return alertas_creadas
 
