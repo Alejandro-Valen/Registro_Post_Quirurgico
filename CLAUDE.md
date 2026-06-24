@@ -93,7 +93,8 @@ bot sigue capturando 1 vez/día):
 **Función principal:** `evaluar_registro(registro: RegistroDiario) -> list[Alerta]`
 **Principio de diseño (decisión jun 2026):** modelo de alta sensibilidad
 (Lee 2022, Outersterp 2025) — escalera BAJA/MEDIA/ALTA en vez de un solo
-nivel de alerta. **Las 5 variables están reescritas bajo este
+nivel de alerta. **Las 5 variables del núcleo clínico (drenaje,
+temperatura, gases, náuseas, dolor) están reescritas bajo este
 modelo — fase de decisiones de arquitectura clínica completa.**
 
 | Regla | Condición exacta | Tipo Alerta | Severidad | Base clínica |
@@ -310,14 +311,14 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 2 | Motor de alertas (alert_engine) | ✅ Completado (fix post-merge 01b8a47) |
 | Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Funcional end-to-end — merge a Desarrollo POSPUESTO a propósito (ver nota) |
 | Sprint 3.5 | Auditoría de literatura, generalización de alcance/marca y documentación | ✅ Completado |
-| Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables completadas |
+| Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + variables nuevas del Paso 2 en curso |
 | Sprint 4 | Dashboard médico y notificaciones | ⏳ Pendiente |
 | Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ Pendiente |
 
 **Punto actual:** Sprint 3 funcional end-to-end. **Fase de decisiones
 de arquitectura clínica del `alert_engine` COMPLETA — las 5 variables
-reescritas** bajo el modelo de alta sensibilidad: drenaje,
-temperatura, gases, náuseas y dolor (60 tests OK). **Paso 2 (variables
+del núcleo clínico reescritas** bajo el modelo de alta sensibilidad:
+drenaje, temperatura, gases, náuseas y dolor (60 tests OK). **Paso 2 (variables
 nuevas) en curso — 2 de 4:** tolerancia a líquidos (Regla 6,
 `INTOLERANCIA_ORAL`) y hinchazón abdominal (Regla 7, `ILEO_PARALITICO`)
 ya están implementadas; pendientes FC y FR. Pendiente también antes del merge: implementar en

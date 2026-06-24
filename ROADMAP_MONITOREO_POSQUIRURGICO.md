@@ -135,7 +135,7 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
         ├── urls.py                    ← ⏳ paso 3: rutas
         ├── alert_engine.py            ← ✅ creado y mergeado (Sprint 2)
         ├── knowledge_base.md          ← ✅ placeholder (RAG diferido a FASE 5)
-        └── bot.py                     ← ✅ máquina de estados, 18 tests OK (Sprint 3)
+        └── bot.py                     ← ✅ máquina de estados, flujo de 8 pasos
 ```
 
 ---
