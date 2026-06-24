@@ -1087,6 +1087,59 @@ completo (8 reglas juntas); (3) auditoría de cierre en dos frentes
 
 ---
 
+## Sesión: Cambio de medico_responsable a ForeignKey(User)
+**Fecha:** 24/06/2026
+**Responsable:** León (Arquitecto IA) con Claude Code
+**Estado:** COMPLETADO ✅ (commits eb4a41a, 164492f)
+
+### Qué se hizo
+Se cambió el campo `medico_responsable` del modelo `Paciente` de
+`CharField(max_length=200)` (un string libre con el nombre del médico) a
+`ForeignKey(settings.AUTH_USER_MODEL, on_delete=SET_NULL, null=True,
+blank=True, related_name='pacientes')`. Con esto el médico pasa a ser un
+usuario real de Django con acceso al admin, y la relación se puede usar en
+el dashboard de Sprint 4 para filtrar alertas por médico.
+
+Cambios concretos:
+- **models.py:** import `settings`, nueva definición del FK, `__str__`
+  actualizado para usar `get_full_name()/username` del User, o "Sin médico
+  asignado" si el FK es None.
+- **admin.py:** se reemplazó `medico_responsable` en `list_display` por un
+  método `medico_nombre()` decorado con `@admin.display` que muestra nombre
+  completo o username, y "— Sin asignar" si es None. `search_fields`
+  extendido para buscar por `first_name`, `last_name` y `username` del médico.
+- **Migración 0009:** editada manualmente para usar `RemoveField + AddField`
+  en vez del `AlterField` autogenerado. El motivo: la BD de desarrollo tenía
+  pacientes existentes con el string "Medico Prueba" en la columna varchar —
+  un `AlterField` intentaría castear ese string a integer (la nueva columna FK
+  es un entero), lo que falla en PostgreSQL. `RemoveField + AddField` descarta
+  la columna vieja y crea la nueva FK nullable, dejando a todos los pacientes
+  existentes con `medico_responsable=NULL`. Verificado en shell: el paciente
+  "Alejandro Valencia" quedó con `medico_responsable: None`.
+- **tests.py:** eliminadas las 55 ocurrencias de
+  `medico_responsable="Medico Prueba"` (era el valor de prueba del string
+  viejo — pasar un string a un FK lanza `ValueError`). Como ningún test
+  existente prueba el valor del médico, `None` es el valor correcto para todos.
+  Se agregaron 5 tests nuevos en la clase `PacienteMedicoFKTests`: FK y
+  `related_name` funcionan, `__str__` con nombre completo, `__str__` con
+  username (fallback), `__str__` sin médico, y `on_delete=SET_NULL` verificado
+  al borrar el User. Suite final: **74 tests OK**.
+
+### Origen del cambio
+La recomendación de pasar `medico_responsable` a FK provino de una revisión
+de Gemini al código del modelo. El Arquitecto la evaluó y la aprobó como
+mejora de diseño necesaria para Sprint 4 (dashboard por médico,
+autenticación real en admin).
+
+### Pendiente para la próxima sesión
+Sin cambios respecto al cierre anterior: (1) implementar 2×/día en `bot.py`
+con arquitectura CheckInProgramado; (2) repaso final de `alert_engine.py`
+completo (8 reglas juntas); (3) auditoría de cierre en dos frentes
+(Claude Code + Codex); (4) merge `sprint-3-whatsapp` → `Desarrollo`.
+Sincronización de docs de este cambio: commits `docs:` en esta misma sesión.
+
+---
+
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** pendiente
 **Estado:** EN COLA ⏳
