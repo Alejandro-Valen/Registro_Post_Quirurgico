@@ -919,6 +919,83 @@ herida (fotos) y antecedentes quedan fuera de Sprint 3.
 
 ---
 
+## Sesión: Variable nueva — Hinchazón abdominal (Regla 7)
+**Fecha:** 22/06/2026
+**Responsable:** León (Arquitecto IA) con Claude (chat) y Claude Code
+**Estado:** COMPLETADO ✅ (commits 556251d, 5129d80, bc723cc)
+
+### Qué se hizo
+Segunda de las 4 variables nuevas del Paso 2 (Sprint 3). Se agregó
+`hinchazon_abdominal` (CharField nada/algo/mucho, nullable) a
+RegistroDiario, una pregunta intermedia en el flujo del bot ("¿Cómo
+siente la hinchazón o distensión de su abdomen hoy?"), y la Regla 7 en el
+alert_engine. El flujo del bot pasó de 7 a 8 preguntas: hinchazón se
+intercaló entre gases/náuseas (6️⃣) y tolerancia a líquidos (que pasó de
+7️⃣ a 8️⃣, sigue siendo la última). A diferencia de tolerancia a líquidos
+(tipo nuevo INTOLERANCIA_ORAL), hinchazón **reusa ILEO_PARALITICO**: la
+distensión es convergente con gases y náuseas como signo del mismo
+cuadro.
+
+### Decisiones tomadas y su justificación
+1. **Escala ordinal nada/algo/mucho, no booleano.** A diferencia de
+   tolerancia a líquidos (binaria), la hinchazón importa por su
+   *trayectoria*: lo clínicamente relevante no es "hay o no hay" sino si
+   está empeorando. Se mapea internamente a niveles 0/1/2 para poder
+   comparar entre días.
+2. **La escalera prioriza ESPECIFICIDAD a propósito (baja sensibilidad).**
+   Casi todos los pacientes tienen algo de hinchazón post-operatoria
+   normal; alertar por el valor absoluto generaría una avalancha de
+   falsos positivos. Por eso la regla NO alerta por "tiene hinchazón"
+   sino por **empeoramiento** o por **"mucho" prolongado**. La hinchazón
+   estable —incluso en nivel alto— no alerta: es el estado esperado.
+3. **Tres condiciones, severidad = la más alta que aplique** (mismo
+   patrón de "no duplicar, tomar el máximo" ya usado en náuseas):
+   - **BAJA — empeoramiento puntual:** el nivel de hoy es mayor que el de
+     ayer. Señal temprana, solo monitorear.
+   - **MEDIA — empeoramiento verificado y sostenido:** hoy es
+     estrictamente mayor que antier (empeoró contra el punto de partida)
+     Y no hubo una bajada en el medio (ayer no bajó respecto a antier, y
+     hoy no bajó respecto a ayer). La doble condición evita que una
+     fluctuación que sube y baja (p. ej. algo→mucho→algo) se confunda con
+     un empeoramiento real: solo dispara si la tendencia se mantiene.
+   - **ALTA — "mucho" sostenido 4 días calendario consecutivos:**
+     distensión severa persistente, el umbral más fuerte de íleo.
+4. **Lógica de días calendario** (como gases/náuseas/líquidos): "el nivel
+   de un día" es el máximo reportado ese día. Con 1×/día es trivial, pero
+   queda listo para el 2×/día del Sprint 4 sin retrabajo.
+
+### Base clínica
+La distensión abdominal es un signo cardinal del íleo paralítico, por eso
+la alerta es de tipo ILEO_PARALITICO (convergente con gases y náuseas).
+El auto-reporte del paciente (PROM — patient-reported outcome measure) es
+el método viable por WhatsApp: no hay medición objetiva remota, así que
+se captura la percepción del paciente en lenguaje natural. No hay umbral
+numérico heredado de la literatura para distensión auto-reportada
+post-alta; la escalera por empeoramiento es construcción propia, diseñada
+para maximizar especificidad dado que la hinchazón basal post-op es casi
+universal.
+
+### Verificación
+60/60 tests OK (53 previos + 7 nuevos de hinchazón). manage.py check
+limpio. La condición MEDIA —la más delicada— se validó contra los 5 casos
+de borde antes de implementar: empeoramiento sostenido (algo/algo/mucho)
+y subida progresiva (nada/algo/mucho) → MEDIA; fluctuación que mejora
+(algo/mucho/algo), bajada en el medio (mucho/algo/mucho) y estable
+(algo/algo/algo) → no MEDIA. La lógica booleana `hoy>antier ∧ ayer≥antier
+∧ hoy≥ayer` refleja exactamente la definición. Cada test usa valores
+neutros en gases (True) y náuseas (0) para aislar la alerta de hinchazón,
+ya que las tres comparten el tipo ILEO_PARALITICO.
+
+### Pendiente para la próxima sesión
+Quedan 2 de las 4 variables nuevas del Paso 2: **frecuencia cardíaca (FC)**
+—dispositivo provisto por el médico, pregunta directa— y **frecuencia
+respiratoria (FR)** —solo-dashboard, sin alerta, porque Outersterp 2025
+reporta 77% de falsas alertas con FR. Después del Paso 2 siguen el repaso
+final de alert_engine.py, la implementación de 2×/día en bot.py (con los
+2 gatings) y el merge a Desarrollo.
+
+---
+
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** pendiente
 **Estado:** EN COLA ⏳
