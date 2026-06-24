@@ -1005,6 +1005,106 @@ class AlertEngineTests(TestCase):
         ileo = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
         self.assertEqual(len(ileo), 0)
 
+    # --- Regla 8: frecuencia cardíaca (taquicardia) ---
+
+    def _crear_fc(self, paciente, fc):
+        return RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+            frecuencia_cardiaca=fc,
+        )
+
+    def test_fc_100_no_crea_alerta(self):
+        # Borde inferior: 100 lpm está por debajo del umbral BAJA (101).
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente FC 100",
+            telefono_whatsapp="+573008880070",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        alertas = evaluar_registro(self._crear_fc(paciente, 100))
+        taqui = [a for a in alertas if a.tipo == "TAQUICARDIA"]
+        self.assertEqual(len(taqui), 0)
+
+    def test_fc_101_crea_baja(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente FC 101",
+            telefono_whatsapp="+573008880071",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        alertas = evaluar_registro(self._crear_fc(paciente, 101))
+        taqui = [a for a in alertas if a.tipo == "TAQUICARDIA"]
+        self.assertEqual(len(taqui), 1)
+        self.assertEqual(taqui[0].severidad, "BAJA")
+
+    def test_fc_109_crea_baja(self):
+        # Borde superior de BAJA (109).
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente FC 109",
+            telefono_whatsapp="+573008880072",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        alertas = evaluar_registro(self._crear_fc(paciente, 109))
+        taqui = [a for a in alertas if a.tipo == "TAQUICARDIA"]
+        self.assertEqual(len(taqui), 1)
+        self.assertEqual(taqui[0].severidad, "BAJA")
+
+    def test_fc_110_crea_media(self):
+        # Borde inferior de MEDIA (110) — umbral CREWS 2022.
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente FC 110",
+            telefono_whatsapp="+573008880073",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        alertas = evaluar_registro(self._crear_fc(paciente, 110))
+        taqui = [a for a in alertas if a.tipo == "TAQUICARDIA"]
+        self.assertEqual(len(taqui), 1)
+        self.assertEqual(taqui[0].severidad, "MEDIA")
+
+    def test_fc_149_crea_media(self):
+        # Borde superior de MEDIA (149).
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente FC 149",
+            telefono_whatsapp="+573008880074",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        alertas = evaluar_registro(self._crear_fc(paciente, 149))
+        taqui = [a for a in alertas if a.tipo == "TAQUICARDIA"]
+        self.assertEqual(len(taqui), 1)
+        self.assertEqual(taqui[0].severidad, "MEDIA")
+
+    def test_fc_150_crea_alta(self):
+        # Borde inferior de ALTA (150) — escalamiento inmediato.
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente FC 150",
+            telefono_whatsapp="+573008880075",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        alertas = evaluar_registro(self._crear_fc(paciente, 150))
+        taqui = [a for a in alertas if a.tipo == "TAQUICARDIA"]
+        self.assertEqual(len(taqui), 1)
+        self.assertEqual(taqui[0].severidad, "ALTA")
+
+    def test_fc_null_no_crea_alerta(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente FC Null",
+            telefono_whatsapp="+573008880076",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        alertas = evaluar_registro(self._crear_fc(paciente, None))
+        taqui = [a for a in alertas if a.tipo == "TAQUICARDIA"]
+        self.assertEqual(len(taqui), 0)
+
 
 class RegistroDiarioModelTests(TestCase):
     """Cálculo de dia_postoperatorio en RegistroDiario.save().
@@ -1077,8 +1177,9 @@ class BotWhatsAppTests(TestCase):
 
     def _completar_flujo(self, gases_nauseas="sí, 0", temperatura="37.0",
                          tiene_drenaje="sí", aspecto="1", cantidad="normal",
-                         hinchazon="nada", tolero_liquidos="sí"):
-        """Recorre las 8 preguntas y devuelve la respuesta final del bot."""
+                         hinchazon="nada", frecuencia_cardiaca="78",
+                         tolero_liquidos="sí"):
+        """Recorre las 9 preguntas y devuelve la respuesta final del bot."""
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")          # -> temperatura
         bot.procesar_mensaje(self.TELEFONO_TWILIO, temperatura)     # -> dolor
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")             # -> tiene_drenaje
@@ -1086,7 +1187,8 @@ class BotWhatsAppTests(TestCase):
         bot.procesar_mensaje(self.TELEFONO_TWILIO, aspecto)         # -> cantidad
         bot.procesar_mensaje(self.TELEFONO_TWILIO, cantidad)        # -> gases/nauseas
         bot.procesar_mensaje(self.TELEFONO_TWILIO, gases_nauseas)   # -> hinchazón
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, hinchazon)       # -> tolerancia líquidos
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, hinchazon)       # -> frecuencia cardíaca
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, frecuencia_cardiaca)  # -> tolerancia líquidos
         return bot.procesar_mensaje(self.TELEFONO_TWILIO, tolero_liquidos)
 
     def test_paciente_no_registrado(self):
@@ -1117,6 +1219,7 @@ class BotWhatsAppTests(TestCase):
         self.assertTrue(registro.presencia_gases)
         self.assertEqual(registro.episodios_nauseas, 0)
         self.assertEqual(registro.hinchazon_abdominal, "nada")
+        self.assertEqual(registro.frecuencia_cardiaca, 78)
         self.assertTrue(registro.tolero_liquidos)
         conv = ConversacionWhatsApp.objects.get()
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_COMPLETADO)
@@ -1191,6 +1294,26 @@ class BotWhatsAppTests(TestCase):
         self.assertEqual(respuesta, bot.MSG_REINTENTO_GASES_NAUSEAS)
         conv = ConversacionWhatsApp.objects.get()
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_GASES_NAUSEAS)
+        self.assertEqual(RegistroDiario.objects.count(), 0)
+
+    def test_fc_fuera_de_rango_reintenta(self):
+        # Un valor fuera del rango 30-250 lpm se rechaza y pide reintento,
+        # sin avanzar de estado ni crear registro.
+        self._crear_paciente()
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "37.0")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")        # dolor -> tiene_drenaje
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "sí")       # tiene_drenaje -> aspecto
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "1")        # aspecto -> cantidad
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "normal")   # cantidad -> gases/nauseas
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "sí, 0")    # gases -> hinchazón
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "nada")     # hinchazón -> frecuencia cardíaca
+        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "999")  # fuera de rango
+        self.assertEqual(respuesta, bot.MSG_REINTENTO_FRECUENCIA_CARDIACA)
+        conv = ConversacionWhatsApp.objects.get()
+        self.assertEqual(
+            conv.estado, ConversacionWhatsApp.ESTADO_FRECUENCIA_CARDIACA
+        )
         self.assertEqual(RegistroDiario.objects.count(), 0)
 
 
