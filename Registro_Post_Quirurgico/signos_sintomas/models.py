@@ -133,6 +133,14 @@ class RegistroDiario(models.Model):
             "null = no capturado. Se evalúa por empeoramiento entre días."
         )
     )
+    frecuencia_cardiaca = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Frecuencia cardíaca en lpm. null = no capturado. "
+            "Solo se vigila taquicardia (FC alta), no bradicardia."
+        )
+    )
     fecha_registro = models.DateTimeField(auto_now_add=True)
     dia_postoperatorio = models.PositiveSmallIntegerField(
         editable=False,
@@ -169,6 +177,7 @@ class Alerta(models.Model):
         ('ILEO_PARALITICO',   'Sin Tránsito Intestinal — Posible Íleo Paralítico'),
         ('DOLOR_AGUDO',       'Dolor Agudo Incontrolable'),
         ('INTOLERANCIA_ORAL', 'Intolerancia a Líquidos — Riesgo de Deshidratación'),
+        ('TAQUICARDIA',       'Frecuencia Cardíaca Elevada — Taquicardia'),
     ]
     SEVERIDAD_CHOICES = [
         ('ALTA',  'Alta — Ir a urgencias'),
@@ -222,7 +231,7 @@ class ConversacionWhatsApp(models.Model):
     momento en que bot.py crea el RegistroDiario y dispara el alert_engine.
     """
 
-    # --- Estados de la máquina (8 preguntas) ---
+    # --- Estados de la máquina (9 preguntas) ---
     ESTADO_INICIO            = 'INICIO'
     ESTADO_TEMPERATURA       = 'ESPERANDO_TEMPERATURA'
     ESTADO_DOLOR             = 'ESPERANDO_DOLOR'
@@ -231,6 +240,7 @@ class ConversacionWhatsApp(models.Model):
     ESTADO_CANTIDAD_DRENAJE  = 'ESPERANDO_CANTIDAD_DRENAJE'
     ESTADO_GASES_NAUSEAS     = 'ESPERANDO_GASES_NAUSEAS'
     ESTADO_HINCHAZON         = 'ESPERANDO_HINCHAZON'
+    ESTADO_FRECUENCIA_CARDIACA = 'ESPERANDO_FRECUENCIA_CARDIACA'
     ESTADO_TOLERANCIA_LIQUIDOS = 'ESPERANDO_TOLERANCIA_LIQUIDOS'
     ESTADO_COMPLETADO        = 'COMPLETADO'
 
@@ -243,6 +253,7 @@ class ConversacionWhatsApp(models.Model):
         (ESTADO_CANTIDAD_DRENAJE, 'Esperando cantidad del drenaje'),
         (ESTADO_GASES_NAUSEAS,    'Esperando gases y náuseas'),
         (ESTADO_HINCHAZON,        'Esperando hinchazón abdominal'),
+        (ESTADO_FRECUENCIA_CARDIACA, 'Esperando frecuencia cardíaca'),
         (ESTADO_TOLERANCIA_LIQUIDOS, 'Esperando tolerancia a líquidos'),
         (ESTADO_COMPLETADO,       'Completado'),
     ]
@@ -281,6 +292,9 @@ class ConversacionWhatsApp(models.Model):
     temp_episodios_nauseas = models.PositiveSmallIntegerField(null=True, blank=True)
     temp_hinchazon_abdominal = models.CharField(
         max_length=5, null=True, blank=True
+    )
+    temp_frecuencia_cardiaca = models.PositiveSmallIntegerField(
+        null=True, blank=True
     )
     temp_tolero_liquidos = models.BooleanField(null=True, blank=True)
 
