@@ -160,7 +160,9 @@ nombre_completo       CharField(200)
 telefono_whatsapp     CharField(20) unique  # identificador para el bot
 fecha_cirugia         DateField
 tipo_cirugia          CharField choices=[sugarbaker_hipec,colectomia_electiva,otra] null=True blank=True
-medico_responsable    CharField(200)
+medico_responsable    ForeignKey(User, SET_NULL, null=True)
+                      # related_name='pacientes' — médico accede a sus pacientes con
+                      # medico.pacientes.all()
 activo                BooleanField default=True
 fecha_registro        DateTimeField auto_now_add=True
 ```

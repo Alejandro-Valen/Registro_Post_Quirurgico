@@ -163,7 +163,7 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 | telefono_whatsapp | CharField(20) unique | Formato: +573001234567 |
 | fecha_cirugia | DateField | Fecha de la cirugía a la que se le da seguimiento postoperatorio |
 | tipo_cirugia | CharField choices null=True | Dato descriptivo (sugarbaker_hipec/colectomia_electiva/otra) — no afecta alert_engine ni bot |
-| medico_responsable | CharField(200) | Médico a cargo |
+| medico_responsable | ForeignKey(User, SET_NULL, null=True) | Médico a cargo — related_name='pacientes' |
 | activo | BooleanField | Desactivar al terminar seguimiento |
 | fecha_registro | DateTimeField auto | Timestamp automático |
 
