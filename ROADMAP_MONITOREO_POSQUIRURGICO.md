@@ -50,6 +50,7 @@ bot sigue capturando 1 vez/día):
 | 7 | Presencia de gases | Booleano | sí/no |
 | 8 | Episodios de náuseas/vómito | Entero | cantidad por check-in |
 | 9 | ¿Toleró líquidos sin vomitar? | Booleano nullable | sí/no/no capturado |
+| 10 | Hinchazón/distensión abdominal | Choices nullable | nada/algo/mucho |
 
 ---
 
@@ -81,8 +82,11 @@ modelo — fase de decisiones de arquitectura clínica completa.**
 | 5b | promedio dolor_eva últimos 2 días - promedio 2 días anteriores >= 3 | DOLOR_AGUDO | sube un nivel sobre 5a (techo ALTA) | Tendencia alcista — construcción propia |
 | 6a | tolero_liquidos=False en 1 día calendario | INTOLERANCIA_ORAL | MEDIA | Deshidratación = causa #1 de readmisión (Lawrence 2013); tolerancia oral es criterio de alta ERAS |
 | 6b | tolero_liquidos=False en 2 días calendario consecutivos | INTOLERANCIA_ORAL | ALTA | Riesgo de deshidratación establecida |
+| 7a | hinchazón: nivel de hoy > nivel de ayer (empeoramiento puntual) | ILEO_PARALITICO | BAJA | Distensión = signo de íleo; empeoramiento leve |
+| 7b | hinchazón: hoy > antier sostenido sin bajar >2 días | ILEO_PARALITICO | MEDIA | Empeoramiento sostenido — posible íleo en progreso |
+| 7c | hinchazón "mucho" sostenido 4 días calendario consecutivos | ILEO_PARALITICO | ALTA | Distensión severa persistente — posible íleo paralítico |
 
-**Nota sobre lógica de días calendario (Reglas 1, 3, 4, 6):** agrupan
+**Nota sobre lógica de días calendario (Reglas 1, 3, 4, 6, 7):** agrupan
 registros por `fecha_registro__date`, no por número de registro — el
 sistema captura 2 check-ins/día, así que 2 registros del mismo día
 cuentan como 1 día, no como 2.
@@ -161,6 +165,7 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 | presencia_gases | BooleanField | Tránsito intestinal |
 | episodios_nauseas | PositiveSmallIntegerField | Episodios en 24h |
 | tolero_liquidos | BooleanField nullable | null=no capturado, False=no toleró, True=toleró |
+| hinchazon_abdominal | CharField choices nullable | nada/algo/mucho — evaluado por empeoramiento entre días |
 | fecha_registro | DateTimeField auto | Timestamp automático |
 | dia_postoperatorio | PositiveSmallIntegerField | Calculado automáticamente al guardar |
 
@@ -389,7 +394,8 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
   ciclo decidir→implementar→verificar→documentar):
   - [x] Tolerancia a líquidos — booleano, escalera MEDIA/ALTA,
     tipo INTOLERANCIA_ORAL (Regla 6)
-  - [ ] Hinchazón abdominal — pendiente
+  - [x] Hinchazón abdominal — escala nada/algo/mucho, alerta por
+    empeoramiento entre días (Regla 7), tipo ILEO_PARALITICO
   - [ ] Frecuencia cardíaca (FC) — pendiente (dispositivo provisto por
     el médico, pregunta directa)
   - [ ] Frecuencia respiratoria (FR) — pendiente (solo-dashboard, sin
@@ -565,14 +571,15 @@ DB_PORT=5432
 ---
 
 *Última actualización: Fase 3.6 — las 5 reglas del alert_engine
-completas (drenaje, temperatura, gases, náuseas, dolor) y entró la
-primera variable nueva del Paso 2: tolerancia a líquidos (Regla 6,
-INTOLERANCIA_ORAL) — 53 tests OK. Antes se corrigió un bug de zona
-horaria (UTC vs America/Bogota) que afectaba las reglas de días
-calendario en horario nocturno, más un clamp para dia_postoperatorio
-negativo (commit ff8bdc4). Pendiente: variables nuevas restantes
-(hinchazón, FC, FR), implementar 2×/día en bot.py (con los 2 gatings
-pendientes) y repaso final de alert_engine.py antes del merge.*
+completas (drenaje, temperatura, gases, náuseas, dolor) y van 2 de 4
+variables nuevas del Paso 2: tolerancia a líquidos (Regla 6,
+INTOLERANCIA_ORAL) y hinchazón abdominal (Regla 7, ILEO_PARALITICO) —
+60 tests OK. Antes se corrigió un bug de zona horaria (UTC vs
+America/Bogota) que afectaba las reglas de días calendario en horario
+nocturno, más un clamp para dia_postoperatorio negativo (commit
+ff8bdc4). Pendiente: variables nuevas restantes (FC, FR), implementar
+2×/día en bot.py (con los 2 gatings pendientes) y repaso final de
+alert_engine.py antes del merge.*
 *Siguiente paso: implementar frecuencia de check-ins (2×/día) en
 bot.py resolviendo los 2 pendientes de gating, luego repaso final de
 alert_engine.py completo, luego merge `sprint-3-whatsapp` →
