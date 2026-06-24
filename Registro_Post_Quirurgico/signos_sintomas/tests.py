@@ -1105,6 +1105,29 @@ class AlertEngineTests(TestCase):
         taqui = [a for a in alertas if a.tipo == "TAQUICARDIA"]
         self.assertEqual(len(taqui), 0)
 
+    def test_frecuencia_respiratoria_no_genera_alerta(self):
+        # FR es solo-dashboard: aunque el valor sea alto (30 rpm) y el
+        # resto del registro sea neutro, el alert_engine NO debe generar
+        # ninguna alerta. (Outersterp 2025: 77% de falsas alertas venían
+        # del sensor de FR — decisión de no evaluarla.)
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente FR Alta",
+            telefono_whatsapp="+573008880080",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable="Medico Prueba",
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+            frecuencia_respiratoria=30,
+        )
+        alertas = evaluar_registro(registro)
+        self.assertEqual(alertas, [])
+
 
 class RegistroDiarioModelTests(TestCase):
     """Cálculo de dia_postoperatorio en RegistroDiario.save().
@@ -1178,8 +1201,8 @@ class BotWhatsAppTests(TestCase):
     def _completar_flujo(self, gases_nauseas="sí, 0", temperatura="37.0",
                          tiene_drenaje="sí", aspecto="1", cantidad="normal",
                          hinchazon="nada", frecuencia_cardiaca="78",
-                         tolero_liquidos="sí"):
-        """Recorre las 9 preguntas y devuelve la respuesta final del bot."""
+                         frecuencia_respiratoria="16", tolero_liquidos="sí"):
+        """Recorre las 10 preguntas y devuelve la respuesta final del bot."""
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")          # -> temperatura
         bot.procesar_mensaje(self.TELEFONO_TWILIO, temperatura)     # -> dolor
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")             # -> tiene_drenaje
@@ -1188,7 +1211,8 @@ class BotWhatsAppTests(TestCase):
         bot.procesar_mensaje(self.TELEFONO_TWILIO, cantidad)        # -> gases/nauseas
         bot.procesar_mensaje(self.TELEFONO_TWILIO, gases_nauseas)   # -> hinchazón
         bot.procesar_mensaje(self.TELEFONO_TWILIO, hinchazon)       # -> frecuencia cardíaca
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, frecuencia_cardiaca)  # -> tolerancia líquidos
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, frecuencia_cardiaca)      # -> frecuencia respiratoria
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, frecuencia_respiratoria)  # -> tolerancia líquidos
         return bot.procesar_mensaje(self.TELEFONO_TWILIO, tolero_liquidos)
 
     def test_paciente_no_registrado(self):
@@ -1220,6 +1244,7 @@ class BotWhatsAppTests(TestCase):
         self.assertEqual(registro.episodios_nauseas, 0)
         self.assertEqual(registro.hinchazon_abdominal, "nada")
         self.assertEqual(registro.frecuencia_cardiaca, 78)
+        self.assertEqual(registro.frecuencia_respiratoria, 16)
         self.assertTrue(registro.tolero_liquidos)
         conv = ConversacionWhatsApp.objects.get()
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_COMPLETADO)
