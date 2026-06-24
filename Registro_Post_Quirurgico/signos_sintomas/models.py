@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -27,7 +28,15 @@ class Paciente(models.Model):
         help_text="Tipo de cirugía realizada — dato descriptivo para estadística "
                   "e investigación futura. No afecta el alert_engine ni el flujo del bot."
     )
-    medico_responsable = models.CharField(max_length=200)
+    medico_responsable = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pacientes',
+        help_text="Usuario del sistema (médico) responsable del paciente. "
+                  "Debe existir como usuario en Django Admin."
+    )
     activo = models.BooleanField(
         default=True,
         help_text="Desactivar cuando el paciente termina el seguimiento"
@@ -40,7 +49,11 @@ class Paciente(models.Model):
         ordering = ["-fecha_registro"]
 
     def __str__(self):
-        return f"{self.nombre_completo} — Dr. {self.medico_responsable}"
+        if self.medico_responsable is None:
+            return f"{self.nombre_completo} — Sin médico asignado"
+        medico = (self.medico_responsable.get_full_name()
+                  or self.medico_responsable.username)
+        return f"{self.nombre_completo} — Dr. {medico}"
 
 
 class RegistroDiario(models.Model):
