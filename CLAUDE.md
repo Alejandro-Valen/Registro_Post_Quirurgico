@@ -84,6 +84,8 @@ bot sigue capturando 1 vez/día):
 | 8 | Episodios de náuseas/vómito | Entero | cantidad por check-in |
 | 9 | ¿Toleró líquidos sin vomitar? | Booleano nullable | sí/no/no capturado |
 | 10 | Hinchazón/distensión abdominal | Choices nullable | nada/algo/mucho |
+| 11 | Frecuencia cardíaca | Entero nullable | lpm — alerta TAQUICARDIA si >= 101 |
+| 12 | Frecuencia respiratoria | Entero nullable | rpm — SOLO dashboard, sin alerta |
 
 ---
 
@@ -119,6 +121,20 @@ modelo — fase de decisiones de arquitectura clínica completa.**
 | 7a | hinchazón: nivel de hoy > nivel de ayer (empeoramiento puntual) | ILEO_PARALITICO | BAJA | Distensión = signo de íleo; empeoramiento leve |
 | 7b | hinchazón: hoy > antier sostenido sin bajar >2 días | ILEO_PARALITICO | MEDIA | Empeoramiento sostenido — posible íleo en progreso |
 | 7c | hinchazón "mucho" sostenido 4 días calendario consecutivos | ILEO_PARALITICO | ALTA | Distensión severa persistente — posible íleo paralítico |
+| 8a | frecuencia_cardiaca 101-109 lpm | TAQUICARDIA | BAJA | Taquicardia leve, probablemente fisiológica |
+| 8b | frecuencia_cardiaca 110-149 lpm | TAQUICARDIA | MEDIA | CREWS 2022 (110 lpm, 75% sens. fuga/sangrado); Cleveland NCT04574908 (>110 intervención) |
+| 8c | frecuencia_cardiaca >= 150 lpm | TAQUICARDIA | ALTA | Escalamiento inmediato (protocolos hospitalarios) |
+
+**Nota Regla 8 (FC — valor absoluto):** la taquicardia se evalúa por el
+valor de cada registro, sin lógica de días calendario ni persistencia
+(el valor por sí solo ya es clínicamente significativo). Solo se vigila
+FC alta, no bradicardia.
+
+**Frecuencia respiratoria (FR): SOLO DASHBOARD, sin regla.** Se captura y
+almacena pero el `alert_engine` NO la evalúa — decisión del Arquitecto:
+Outersterp 2025 halló que el 77% de las falsas alertas venían del sensor
+de FR. Por eso FR no tiene fila de reglas; solo aparece como variable y
+campo del modelo.
 
 **Nota sobre lógica de días calendario (Reglas 1, 3, 4, 6, 7):** agrupan
 registros por `fecha_registro__date`, no por número de registro — el
@@ -167,6 +183,8 @@ presencia_gases       BooleanField
 episodios_nauseas     PositiveSmallIntegerField
 tolero_liquidos       BooleanField null=True  # null=no capturado, False=no toleró, True=toleró
 hinchazon_abdominal   CharField choices=[nada,algo,mucho] null=True  # se evalúa por empeoramiento entre días
+frecuencia_cardiaca   PositiveSmallIntegerField null=True  # lpm — alerta TAQUICARDIA por valor absoluto
+frecuencia_respiratoria PositiveSmallIntegerField null=True  # rpm — SOLO dashboard, sin alerta (Outersterp 2025)
 fecha_registro        DateTimeField auto_now_add=True
 dia_postoperatorio    PositiveSmallIntegerField  # calculado automáticamente en save()
 ```
@@ -181,7 +199,7 @@ el paciente lo menciona espontáneamente (ej. "poco, 30ml"). El alert_engine usa
 ```python
 paciente              ForeignKey(Paciente, PROTECT)
 registro_origen       ForeignKey(RegistroDiario, PROTECT)
-tipo                  CharField choices=[SEPSIS,FUGA_ANASTOMOTICA,ILEO_PARALITICO,DOLOR_AGUDO,INTOLERANCIA_ORAL]
+tipo                  CharField choices=[SEPSIS,FUGA_ANASTOMOTICA,ILEO_PARALITICO,DOLOR_AGUDO,INTOLERANCIA_ORAL,TAQUICARDIA]
 severidad             CharField choices=[ALTA,MEDIA,BAJA]
 mensaje               TextField
 resuelta              BooleanField default=False
@@ -196,8 +214,9 @@ estado                     CharField choices=[INICIO, ESPERANDO_TEMPERATURA,
                            ESPERANDO_DOLOR, ESPERANDO_TIENE_DRENAJE,
                            ESPERANDO_ASPECTO_DRENAJE,
                            ESPERANDO_CANTIDAD_DRENAJE, ESPERANDO_GASES_NAUSEAS,
-                           ESPERANDO_HINCHAZON, ESPERANDO_TOLERANCIA_LIQUIDOS,
-                           COMPLETADO]
+                           ESPERANDO_HINCHAZON, ESPERANDO_FRECUENCIA_CARDIACA,
+                           ESPERANDO_FRECUENCIA_RESPIRATORIA,
+                           ESPERANDO_TOLERANCIA_LIQUIDOS, COMPLETADO]
 temp_temperatura           DecimalField nullable  # respuesta parcial del día
 temp_dolor_eva              PositiveSmallIntegerField nullable
 temp_tiene_drenaje          BooleanField nullable
@@ -207,6 +226,8 @@ temp_volumen_drenaje_ml     PositiveIntegerField nullable
 temp_presencia_gases        BooleanField nullable
 temp_episodios_nauseas      PositiveSmallIntegerField nullable
 temp_hinchazon_abdominal    CharField nullable
+temp_frecuencia_cardiaca    PositiveSmallIntegerField nullable
+temp_frecuencia_respiratoria PositiveSmallIntegerField nullable
 temp_tolero_liquidos        BooleanField nullable
 fecha_ultimo_registro       DateField nullable  # controla "un registro por día"
 fecha_actualizacion         DateTimeField auto_now=True
@@ -225,9 +246,9 @@ la base de datos en lugar de en memoria.
 
 Diseño: lógica **pura**, sin conocimiento de HTTP ni Twilio. La vista
 (`views.py`, pendiente) traduce HTTP ↔ esta función. Esto permite testear el
-bot completo sin mockear peticiones web — actualmente **60 tests unitarios OK**.
+bot completo sin mockear peticiones web — actualmente **69 tests unitarios OK**.
 
-**Máquina de estados (8 preguntas):**
+**Máquina de estados (10 preguntas):**
 ```
 INICIO
   → ESPERANDO_TEMPERATURA       "¿Cuál es tu temperatura? ej: 37.5"
@@ -237,6 +258,8 @@ INICIO
   → ESPERANDO_CANTIDAD_DRENAJE  poco/normal/mucho (+ ml opcional) — se OMITE si tiene_drenaje=False
   → ESPERANDO_GASES_NAUSEAS     "¿pasaste gases? (sí/no), ¿náuseas? (número)" en un solo mensaje
   → ESPERANDO_HINCHAZON         "¿cómo siente la hinchazón del abdomen? nada/algo/mucho"
+  → ESPERANDO_FRECUENCIA_CARDIACA "¿cuál es tu frecuencia cardíaca? (lpm)"
+  → ESPERANDO_FRECUENCIA_RESPIRATORIA "¿cuál es tu frecuencia respiratoria? (rpm)"
   → ESPERANDO_TOLERANCIA_LIQUIDOS "¿Ha podido tomar líquidos sin vomitar? sí/no"
   → COMPLETADO                  crea RegistroDiario, llama evaluar_registro(), confirmación neutra
 ```
@@ -311,17 +334,18 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 2 | Motor de alertas (alert_engine) | ✅ Completado (fix post-merge 01b8a47) |
 | Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Funcional end-to-end — merge a Desarrollo POSPUESTO a propósito (ver nota) |
 | Sprint 3.5 | Auditoría de literatura, generalización de alcance/marca y documentación | ✅ Completado |
-| Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + variables nuevas del Paso 2 en curso |
+| Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 4 | Dashboard médico y notificaciones | ⏳ Pendiente |
 | Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ Pendiente |
 
 **Punto actual:** Sprint 3 funcional end-to-end. **Fase de decisiones
 de arquitectura clínica del `alert_engine` COMPLETA — las 5 variables
 del núcleo clínico reescritas** bajo el modelo de alta sensibilidad:
-drenaje, temperatura, gases, náuseas y dolor (60 tests OK). **Paso 2 (variables
-nuevas) en curso — 2 de 4:** tolerancia a líquidos (Regla 6,
-`INTOLERANCIA_ORAL`) y hinchazón abdominal (Regla 7, `ILEO_PARALITICO`)
-ya están implementadas; pendientes FC y FR. Pendiente también antes del merge: implementar en
+drenaje, temperatura, gases, náuseas y dolor (69 tests OK). **Paso 2
+(variables nuevas) COMPLETO — 4 de 4:** tolerancia a líquidos (Regla 6,
+`INTOLERANCIA_ORAL`), hinchazón abdominal (Regla 7, `ILEO_PARALITICO`),
+frecuencia cardíaca (Regla 8, `TAQUICARDIA`) y frecuencia respiratoria
+(solo-dashboard, sin alerta). Pendiente antes del merge: implementar en
 `bot.py` la frecuencia de check-ins ya decidida (2×/día fijo) y hacer un
 repaso final de `alert_engine.py` completo. Ver
 `docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md` para el detalle
