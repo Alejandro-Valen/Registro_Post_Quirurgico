@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -16,9 +17,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Prueba",
             telefono_whatsapp="+573001112233",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("38.0"),
@@ -39,9 +38,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Drenaje",
             telefono_whatsapp="+573004445566",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -62,9 +59,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Nauseas",
             telefono_whatsapp="+573007778899",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -84,9 +79,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Sin Gases",
             telefono_whatsapp="+573006661122",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         anteayer = timezone.now() - timedelta(days=2)
         ayer = timezone.now() - timedelta(days=1)
 
@@ -129,9 +122,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Estable",
             telefono_whatsapp="+573005551234",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -151,9 +142,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Multiple",
             telefono_whatsapp="+573005550000",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("38.5"),
@@ -178,9 +167,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Limite",
             telefono_whatsapp="+573005559999",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         # 37.4°C: justo por debajo del umbral de subfebrícula (37.5°C)
         # episodios_nauseas=0: con la regla nueva cualquier episodio >= 1
         # genera alerta, se usa 0 para mantener la intención original del test
@@ -203,9 +190,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Seroso",
             telefono_whatsapp="+573001110001",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -226,9 +211,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Hematico",
             telefono_whatsapp="+573001110002",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -249,9 +232,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Turbio",
             telefono_whatsapp="+573001110003",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -272,9 +253,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Sin Drenaje",
             telefono_whatsapp="+573001110004",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -293,9 +272,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Legacy",
             telefono_whatsapp="+573001110005",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         # tiene_drenaje=None simula un registro anterior a esta versión
         registro = RegistroDiario.objects.create(
             paciente=paciente,
@@ -314,9 +291,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Temp Alta",
             telefono_whatsapp="+573008880001",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.9"),
@@ -334,9 +309,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Subfebricula Un Dia",
             telefono_whatsapp="+573008880002",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.6"),
@@ -352,9 +325,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Subfebricula Persistente",
             telefono_whatsapp="+573008880003",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         ayer = timezone.now() - timedelta(days=1)
         registro_ayer = RegistroDiario.objects.create(
             paciente=paciente,
@@ -384,9 +355,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Temp Normal",
             telefono_whatsapp="+573008880004",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("36.8"),
@@ -402,9 +371,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Sin Gases Un Dia",
             telefono_whatsapp="+573008880010",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -422,9 +389,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Sin Gases Dos Dias",
             telefono_whatsapp="+573008880011",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         ayer = timezone.now() - timedelta(days=1)
         registro_ayer = RegistroDiario.objects.create(
             paciente=paciente,
@@ -456,9 +421,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Dos Checkins Mismo Dia",
             telefono_whatsapp="+573008880012",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -487,9 +450,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Gases Parcial",
             telefono_whatsapp="+573008880013",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -514,9 +475,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Nausea Baja",
             telefono_whatsapp="+573008880020",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -534,9 +493,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Nausea Alta",
             telefono_whatsapp="+573008880021",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -557,9 +514,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Nausea Suma Dia",
             telefono_whatsapp="+573008880022",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -587,9 +542,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Nausea Persistente",
             telefono_whatsapp="+573008880023",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         ayer = timezone.now() - timedelta(days=1)
         registro_ayer = RegistroDiario.objects.create(
             paciente=paciente,
@@ -619,9 +572,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Sin Nauseas",
             telefono_whatsapp="+573008880024",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -638,9 +589,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Nausea Persistente Larga",
             telefono_whatsapp="+573008880025",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         for dias_atras in [3, 2, 1]:
             fecha = timezone.now() - timedelta(days=dias_atras)
             reg = RegistroDiario.objects.create(
@@ -669,9 +618,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Dolor POD1",
             telefono_whatsapp="+573008880030",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -689,9 +636,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Dolor POD1 Alto",
             telefono_whatsapp="+573008880031",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -711,9 +656,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Dolor POD6",
             telefono_whatsapp="+573008880032",
-            fecha_cirugia=timezone.localdate() - timedelta(days=6),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate() - timedelta(days=6),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -732,9 +675,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Dolor POD6 Bajo",
             telefono_whatsapp="+573008880033",
-            fecha_cirugia=timezone.localdate() - timedelta(days=6),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate() - timedelta(days=6),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -755,9 +696,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Dolor Tendencia",
             telefono_whatsapp="+573008880034",
-            fecha_cirugia=timezone.localdate() - timedelta(days=5),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),        )
         for dias_atras, eva in [(3, 2), (2, 2)]:
             fecha = timezone.now() - timedelta(days=dias_atras)
             reg = RegistroDiario.objects.create(
@@ -796,9 +735,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente No Tolera Liquidos",
             telefono_whatsapp="+573008880050",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -817,9 +754,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente No Tolera Dos Dias",
             telefono_whatsapp="+573008880051",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         ayer = timezone.now() - timedelta(days=1)
         reg_ayer = RegistroDiario.objects.create(
             paciente=paciente,
@@ -849,9 +784,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Tolera Liquidos",
             telefono_whatsapp="+573008880052",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -869,9 +802,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Liquidos Null",
             telefono_whatsapp="+573008880053",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -908,9 +839,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Hinchazon Puntual",
             telefono_whatsapp="+573008880060",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         self._crear_hinchazon(paciente, "nada", dias_atras=1)
         reg_hoy = self._crear_hinchazon(paciente, "algo")
         alertas = evaluar_registro(reg_hoy)
@@ -922,9 +851,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Hinchazon Sostenido",
             telefono_whatsapp="+573008880061",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         self._crear_hinchazon(paciente, "algo", dias_atras=2)
         self._crear_hinchazon(paciente, "algo", dias_atras=1)
         reg_hoy = self._crear_hinchazon(paciente, "mucho")
@@ -937,9 +864,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Hinchazon Progresiva",
             telefono_whatsapp="+573008880062",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         self._crear_hinchazon(paciente, "nada", dias_atras=2)
         self._crear_hinchazon(paciente, "algo", dias_atras=1)
         reg_hoy = self._crear_hinchazon(paciente, "mucho")
@@ -953,9 +878,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Hinchazon Fluctua",
             telefono_whatsapp="+573008880063",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         self._crear_hinchazon(paciente, "algo", dias_atras=2)
         self._crear_hinchazon(paciente, "mucho", dias_atras=1)
         reg_hoy = self._crear_hinchazon(paciente, "algo")
@@ -967,9 +890,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Hinchazon Estable",
             telefono_whatsapp="+573008880064",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         self._crear_hinchazon(paciente, "algo", dias_atras=2)
         self._crear_hinchazon(paciente, "algo", dias_atras=1)
         reg_hoy = self._crear_hinchazon(paciente, "algo")
@@ -981,9 +902,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Hinchazon Mucho 4d",
             telefono_whatsapp="+573008880065",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         self._crear_hinchazon(paciente, "mucho", dias_atras=3)
         self._crear_hinchazon(paciente, "mucho", dias_atras=2)
         self._crear_hinchazon(paciente, "mucho", dias_atras=1)
@@ -997,9 +916,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Hinchazon Null",
             telefono_whatsapp="+573008880066",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         reg_hoy = self._crear_hinchazon(paciente, None)
         alertas = evaluar_registro(reg_hoy)
         ileo = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
@@ -1023,9 +940,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente FC 100",
             telefono_whatsapp="+573008880070",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         alertas = evaluar_registro(self._crear_fc(paciente, 100))
         taqui = [a for a in alertas if a.tipo == "TAQUICARDIA"]
         self.assertEqual(len(taqui), 0)
@@ -1034,9 +949,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente FC 101",
             telefono_whatsapp="+573008880071",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         alertas = evaluar_registro(self._crear_fc(paciente, 101))
         taqui = [a for a in alertas if a.tipo == "TAQUICARDIA"]
         self.assertEqual(len(taqui), 1)
@@ -1047,9 +960,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente FC 109",
             telefono_whatsapp="+573008880072",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         alertas = evaluar_registro(self._crear_fc(paciente, 109))
         taqui = [a for a in alertas if a.tipo == "TAQUICARDIA"]
         self.assertEqual(len(taqui), 1)
@@ -1060,9 +971,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente FC 110",
             telefono_whatsapp="+573008880073",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         alertas = evaluar_registro(self._crear_fc(paciente, 110))
         taqui = [a for a in alertas if a.tipo == "TAQUICARDIA"]
         self.assertEqual(len(taqui), 1)
@@ -1073,9 +982,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente FC 149",
             telefono_whatsapp="+573008880074",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         alertas = evaluar_registro(self._crear_fc(paciente, 149))
         taqui = [a for a in alertas if a.tipo == "TAQUICARDIA"]
         self.assertEqual(len(taqui), 1)
@@ -1086,9 +993,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente FC 150",
             telefono_whatsapp="+573008880075",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         alertas = evaluar_registro(self._crear_fc(paciente, 150))
         taqui = [a for a in alertas if a.tipo == "TAQUICARDIA"]
         self.assertEqual(len(taqui), 1)
@@ -1098,9 +1003,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente FC Null",
             telefono_whatsapp="+573008880076",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         alertas = evaluar_registro(self._crear_fc(paciente, None))
         taqui = [a for a in alertas if a.tipo == "TAQUICARDIA"]
         self.assertEqual(len(taqui), 0)
@@ -1113,9 +1016,7 @@ class AlertEngineTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente FR Alta",
             telefono_whatsapp="+573008880080",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = RegistroDiario.objects.create(
             paciente=paciente,
             temperatura=Decimal("37.0"),
@@ -1154,9 +1055,7 @@ class RegistroDiarioModelTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Cirugia Futura",
             telefono_whatsapp="+573009990001",
-            fecha_cirugia=timezone.localdate() + timedelta(days=1),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate() + timedelta(days=1),        )
         registro = self._crear_registro(paciente)
         self.assertEqual(registro.dia_postoperatorio, 0)
 
@@ -1166,9 +1065,7 @@ class RegistroDiarioModelTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente Cirugia Hoy",
             telefono_whatsapp="+573009990002",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate(),        )
         registro = self._crear_registro(paciente)
         self.assertEqual(registro.dia_postoperatorio, 0)
 
@@ -1179,9 +1076,7 @@ class RegistroDiarioModelTests(TestCase):
         paciente = Paciente.objects.create(
             nombre_completo="Paciente POD5",
             telefono_whatsapp="+573009990003",
-            fecha_cirugia=timezone.localdate() - timedelta(days=5),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),        )
         registro = self._crear_registro(paciente)
         self.assertEqual(registro.dia_postoperatorio, 5)
 
@@ -1194,9 +1089,7 @@ class BotWhatsAppTests(TestCase):
         return Paciente.objects.create(
             nombre_completo="Paciente Bot",
             telefono_whatsapp=self.TELEFONO,
-            fecha_cirugia=timezone.localdate() - timedelta(days=5),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),        )
 
     def _completar_flujo(self, gases_nauseas="sí, 0", temperatura="37.0",
                          tiene_drenaje="sí", aspecto="1", cantidad="normal",
@@ -1351,9 +1244,7 @@ class WebhookWhatsAppTests(TestCase):
         Paciente.objects.create(
             nombre_completo="Paciente Webhook",
             telefono_whatsapp="+573001112233",
-            fecha_cirugia=timezone.localdate() - timedelta(days=3),
-            medico_responsable="Medico Prueba",
-        )
+            fecha_cirugia=timezone.localdate() - timedelta(days=3),        )
         respuesta = self.client.post(
             self.url, {'From': 'whatsapp:+573001112233', 'Body': 'hola'}
         )
@@ -1382,3 +1273,51 @@ class WebhookWhatsAppTests(TestCase):
             self.client.post(
                 self.url, {'From': 'whatsapp:+573001112233', 'Body': 'hola'}
             )
+
+
+class PacienteMedicoFKTests(TestCase):
+    """Tests de la relación ForeignKey Paciente → auth.User (medico_responsable)."""
+
+    def _crear_paciente(self, **kwargs):
+        return Paciente.objects.create(
+            nombre_completo="Paciente FK Test",
+            telefono_whatsapp="+573000000001",
+            fecha_cirugia=timezone.localdate(),
+            **kwargs,
+        )
+
+    def test_paciente_con_medico_fk(self):
+        User = get_user_model()
+        medico = User.objects.create_user(
+            username='dr_test', password='x', first_name='Carlos', last_name='López'
+        )
+        paciente = self._crear_paciente(medico_responsable=medico)
+        paciente.refresh_from_db()
+        self.assertEqual(paciente.medico_responsable, medico)
+        self.assertIn(paciente, medico.pacientes.all())
+
+    def test_str_con_medico_nombre_completo(self):
+        User = get_user_model()
+        medico = User.objects.create_user(
+            username='dr_str', password='x', first_name='Ana', last_name='Ruiz'
+        )
+        paciente = self._crear_paciente(medico_responsable=medico)
+        self.assertEqual(str(paciente), "Paciente FK Test — Dr. Ana Ruiz")
+
+    def test_str_con_medico_sin_nombre_usa_username(self):
+        User = get_user_model()
+        medico = User.objects.create_user(username='dr_noname', password='x')
+        paciente = self._crear_paciente(medico_responsable=medico)
+        self.assertEqual(str(paciente), "Paciente FK Test — Dr. dr_noname")
+
+    def test_str_sin_medico(self):
+        paciente = self._crear_paciente()
+        self.assertEqual(str(paciente), "Paciente FK Test — Sin médico asignado")
+
+    def test_set_null_al_borrar_usuario(self):
+        User = get_user_model()
+        medico = User.objects.create_user(username='dr_delete', password='x')
+        paciente = self._crear_paciente(medico_responsable=medico)
+        medico.delete()
+        paciente.refresh_from_db()
+        self.assertIsNone(paciente.medico_responsable)
