@@ -996,6 +996,97 @@ final de alert_engine.py, la implementación de 2×/día en bot.py (con los
 
 ---
 
+## Sesión: Variables nuevas FC y FR — cierre del Paso 2 (4/4)
+**Fecha:** 24/06/2026
+**Responsable:** León (Arquitecto IA) con Claude (chat) y Claude Code
+**Estado:** COMPLETADO ✅ (FC: commits 03ed352, 2c3de80, 7088ade · FR:
+commits 1189e47, e97c765)
+
+### Qué se hizo
+Se implementaron las dos últimas variables nuevas del Paso 2:
+**frecuencia cardíaca (FC)** y **frecuencia respiratoria (FR)**, ambas
+constantes vitales que el paciente mide con un dispositivo provisto por
+el médico (pregunta directa, sin condicional). Con esto cierra el Paso 2
+(4/4: tolerancia a líquidos, hinchazón, FC, FR) y el flujo del bot pasó
+de 8 a 10 preguntas. Se agruparon FC (8️⃣) y FR (9️⃣) juntas, antes de
+tolerancia a líquidos (🔟, última), por ser ambas mediciones con
+dispositivo.
+
+La diferencia de fondo entre las dos: **FC genera alerta (Regla 8,
+tipo nuevo TAQUICARDIA); FR NO genera ninguna alerta** — se captura solo
+para el dashboard del médico.
+
+### Decisiones de diseño y su justificación
+
+**FC — tipo de alerta nuevo TAQUICARDIA (no reusar SEPSIS):**
+La taquicardia es etiológicamente inespecífica — signo temprano de
+sepsis, pero también de sangrado/fuga, hipovolemia, dolor, arritmia.
+Etiquetarla SEPSIS afirmaría una causa que el dato por sí solo no
+establece (de hecho CREWS 2022 la asocia a fuga/sangrado, no a sepsis).
+Coherente con el principio ya fijado en INTOLERANCIA_ORAL (granularidad
+para dashboard e investigación) y con "la IA NO diagnostica": un tipo
+propio presenta la señal cruda y deja que el médico la correlacione.
+
+**FC — escalera por valor absoluto, sin días calendario:**
+A diferencia de temperatura/gases/náuseas/hinchazón, el valor de FC por
+sí solo ya es clínicamente significativo, así que no se evalúa
+persistencia ni ventana de días. Umbrales: 101-109 BAJA (taquicardia
+leve, probablemente fisiológica), 110-149 MEDIA (umbral de intervención),
+>=150 ALTA (escalamiento inmediato). Solo se vigila FC alta, no
+bradicardia (decisión del Arquitecto). Parser del bot: rango 30-250 lpm
+para descartar errores de tipeo.
+
+**FR — solo dashboard, sin regla en el alert_engine:**
+Decisión explícita del Arquitecto de NO generar alerta con FR.
+Outersterp 2025 halló que el **77% de las falsas alertas** provenían del
+sensor de frecuencia respiratoria. Generar alertas con FR introduciría
+más ruido que señal y erosionaría la confianza del médico en el sistema.
+Se captura y almacena para que el médico la lea en contexto, pero el
+`alert_engine` no la toca (cero reglas nuevas para FR). Parser del bot:
+rango 5-60 rpm.
+
+### Base clínica y referencias
+- **FC > 100 lpm** como umbral de monitoreo domiciliario: Outersterp 2025
+  (en `docs/auditoria_literatura/`).
+- **FC 110 lpm, 75% de sensibilidad para fuga/sangrado:** Estudio CREWS,
+  Hospital Catharina 2022 — https://pubmed.ncbi.nlm.nih.gov/35850957/
+- **FC > 110 lpm como umbral de intervención:** Cleveland Clinic
+  NCT04574908 —
+  https://cdn.clinicaltrials.gov/large-docs/08/NCT04574908/Prot_SAP_002.pdf
+- **FC > 150 lpm escalamiento inmediato:** protocolos hospitalarios —
+  https://med-linket-corp.com/blogs/news/hospital-monitor-alarms
+- **FR como fuente de falsas alertas (77%):** Outersterp 2025 (en
+  `docs/auditoria_literatura/`) — fundamento de la decisión de no alertar
+  con FR.
+
+### Verificación
+69/69 tests OK (60 previos + 8 de FC + 1 de FR). `manage.py check` limpio.
+- FC: 8 tests — escalera en los bordes exactos (100 sin alerta, 101 y 109
+  BAJA, 110 y 149 MEDIA, 150 ALTA, null sin alerta) + 1 de reintento por
+  valor fuera de rango en el bot.
+- FR: 1 test que confirma que un valor alto (FR=30) con el resto del
+  registro neutro NO genera ninguna alerta (prueba de que es solo-dashboard).
+- Tests previos del alert_engine intactos: FC y FR son nullable y FR no
+  tiene regla; la de FC solo dispara con `is not None`.
+
+### Nota técnica resuelta durante la implementación
+Al agregar el estado `ESPERANDO_FRECUENCIA_RESPIRATORIA` (33 caracteres),
+el campo `estado` de `ConversacionWhatsApp` (max_length=30) quedó corto y
+`manage.py check` lo detectó (fields.E009). Se amplió `max_length` a 40
+(incluido en la migración 0008). Lección: al nombrar estados largos,
+vigilar el `max_length` del CharField que los almacena.
+
+### Pendiente para la próxima sesión
+**El Paso 2 (variables nuevas) está completo — las 4 entraron.** Quedan,
+antes del merge a Desarrollo: (1) implementar la frecuencia de check-ins
+2×/día en bot.py (arquitectura CheckInProgramado ya cerrada, ver entrada
+del 22/06), resolviendo los 2 gatings pendientes (deduplicación de
+alertas y gating pre-operatorio); (2) repaso final de `alert_engine.py`
+completo (8 reglas juntas); (3) auditoría de cierre en dos frentes
+(Claude Code + Codex); (4) merge `sprint-3-whatsapp` → `Desarrollo`.
+
+---
+
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** pendiente
 **Estado:** EN COLA ⏳
