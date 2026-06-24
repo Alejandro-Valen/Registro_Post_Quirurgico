@@ -141,6 +141,15 @@ class RegistroDiario(models.Model):
             "Solo se vigila taquicardia (FC alta), no bradicardia."
         )
     )
+    frecuencia_respiratoria = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Frecuencia respiratoria en rpm. null = no capturado. "
+            "SOLO DASHBOARD — no genera alerta (Outersterp 2025: 77% de "
+            "falsas alertas provenían del sensor de FR)."
+        )
+    )
     fecha_registro = models.DateTimeField(auto_now_add=True)
     dia_postoperatorio = models.PositiveSmallIntegerField(
         editable=False,
@@ -231,7 +240,7 @@ class ConversacionWhatsApp(models.Model):
     momento en que bot.py crea el RegistroDiario y dispara el alert_engine.
     """
 
-    # --- Estados de la máquina (9 preguntas) ---
+    # --- Estados de la máquina (10 preguntas) ---
     ESTADO_INICIO            = 'INICIO'
     ESTADO_TEMPERATURA       = 'ESPERANDO_TEMPERATURA'
     ESTADO_DOLOR             = 'ESPERANDO_DOLOR'
@@ -241,6 +250,7 @@ class ConversacionWhatsApp(models.Model):
     ESTADO_GASES_NAUSEAS     = 'ESPERANDO_GASES_NAUSEAS'
     ESTADO_HINCHAZON         = 'ESPERANDO_HINCHAZON'
     ESTADO_FRECUENCIA_CARDIACA = 'ESPERANDO_FRECUENCIA_CARDIACA'
+    ESTADO_FRECUENCIA_RESPIRATORIA = 'ESPERANDO_FRECUENCIA_RESPIRATORIA'
     ESTADO_TOLERANCIA_LIQUIDOS = 'ESPERANDO_TOLERANCIA_LIQUIDOS'
     ESTADO_COMPLETADO        = 'COMPLETADO'
 
@@ -254,6 +264,7 @@ class ConversacionWhatsApp(models.Model):
         (ESTADO_GASES_NAUSEAS,    'Esperando gases y náuseas'),
         (ESTADO_HINCHAZON,        'Esperando hinchazón abdominal'),
         (ESTADO_FRECUENCIA_CARDIACA, 'Esperando frecuencia cardíaca'),
+        (ESTADO_FRECUENCIA_RESPIRATORIA, 'Esperando frecuencia respiratoria'),
         (ESTADO_TOLERANCIA_LIQUIDOS, 'Esperando tolerancia a líquidos'),
         (ESTADO_COMPLETADO,       'Completado'),
     ]
@@ -265,7 +276,7 @@ class ConversacionWhatsApp(models.Model):
         help_text="Cada paciente tiene una sola conversación activa con el bot"
     )
     estado = models.CharField(
-        max_length=30,
+        max_length=40,
         choices=ESTADO_CHOICES,
         default=ESTADO_INICIO,
     )
@@ -294,6 +305,9 @@ class ConversacionWhatsApp(models.Model):
         max_length=5, null=True, blank=True
     )
     temp_frecuencia_cardiaca = models.PositiveSmallIntegerField(
+        null=True, blank=True
+    )
+    temp_frecuencia_respiratoria = models.PositiveSmallIntegerField(
         null=True, blank=True
     )
     temp_tolero_liquidos = models.BooleanField(null=True, blank=True)

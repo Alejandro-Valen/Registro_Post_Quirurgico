@@ -10,7 +10,7 @@ Diseño:
 - El bot NO diagnostica ni muestra alertas al paciente. Solo captura telemetría,
   delega en alert_engine.evaluar_registro() y responde una confirmación neutra.
 
-Máquina de estados (9 preguntas):
+Máquina de estados (10 preguntas):
     INICIO
       -> ESPERANDO_TEMPERATURA
       -> ESPERANDO_DOLOR
@@ -20,6 +20,7 @@ Máquina de estados (9 preguntas):
       -> ESPERANDO_GASES_NAUSEAS
       -> ESPERANDO_HINCHAZON
       -> ESPERANDO_FRECUENCIA_CARDIACA
+      -> ESPERANDO_FRECUENCIA_RESPIRATORIA
       -> ESPERANDO_TOLERANCIA_LIQUIDOS
       -> COMPLETADO
 """
@@ -127,8 +128,17 @@ MSG_REINTENTO_FRECUENCIA_CARDIACA = (
     "latidos por minuto (ej: 78)."
 )
 
+MSG_PREGUNTA_FRECUENCIA_RESPIRATORIA = (
+    "9️⃣ ¿Cuál es su frecuencia respiratoria? 🌿\n"
+    "Escriba el número de respiraciones por minuto, por ejemplo: 16"
+)
+MSG_REINTENTO_FRECUENCIA_RESPIRATORIA = (
+    "No entendí. Escriba su frecuencia respiratoria como un número de "
+    "respiraciones por minuto (ej: 16)."
+)
+
 MSG_PREGUNTA_TOLERANCIA_LIQUIDOS = (
-    "9️⃣ Última pregunta 🌿\n"
+    "🔟 Última pregunta 🌿\n"
     "¿Ha podido tomar líquidos (agua, caldo, jugo) sin vomitar? "
     "Responda *sí* o *no*."
 )
@@ -292,6 +302,15 @@ def _procesar_respuesta_flujo(conv, paciente, texto, hoy):
         if valor is None:
             return MSG_REINTENTO_FRECUENCIA_CARDIACA
         conv.temp_frecuencia_cardiaca = valor
+        conv.estado = ConversacionWhatsApp.ESTADO_FRECUENCIA_RESPIRATORIA
+        conv.save()
+        return MSG_PREGUNTA_FRECUENCIA_RESPIRATORIA
+
+    if estado == ConversacionWhatsApp.ESTADO_FRECUENCIA_RESPIRATORIA:
+        valor = _parse_entero_rango(texto, 5, 60)
+        if valor is None:
+            return MSG_REINTENTO_FRECUENCIA_RESPIRATORIA
+        conv.temp_frecuencia_respiratoria = valor
         conv.estado = ConversacionWhatsApp.ESTADO_TOLERANCIA_LIQUIDOS
         conv.save()
         return MSG_PREGUNTA_TOLERANCIA_LIQUIDOS
@@ -330,6 +349,7 @@ def _crear_registro(conv, paciente):
         episodios_nauseas=conv.temp_episodios_nauseas,
         hinchazon_abdominal=conv.temp_hinchazon_abdominal,
         frecuencia_cardiaca=conv.temp_frecuencia_cardiaca,
+        frecuencia_respiratoria=conv.temp_frecuencia_respiratoria,
         tolero_liquidos=conv.temp_tolero_liquidos,
     )
     evaluar_registro(registro)
@@ -493,6 +513,7 @@ def _limpiar_temporales(conv):
     conv.temp_episodios_nauseas = None
     conv.temp_hinchazon_abdominal = None
     conv.temp_frecuencia_cardiaca = None
+    conv.temp_frecuencia_respiratoria = None
     conv.temp_tolero_liquidos = None
 
 
