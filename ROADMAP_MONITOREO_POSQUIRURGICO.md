@@ -51,6 +51,8 @@ bot sigue capturando 1 vez/día):
 | 8 | Episodios de náuseas/vómito | Entero | cantidad por check-in |
 | 9 | ¿Toleró líquidos sin vomitar? | Booleano nullable | sí/no/no capturado |
 | 10 | Hinchazón/distensión abdominal | Choices nullable | nada/algo/mucho |
+| 11 | Frecuencia cardíaca | Entero nullable | lpm — alerta TAQUICARDIA si >= 101 |
+| 12 | Frecuencia respiratoria | Entero nullable | rpm — SOLO dashboard, sin alerta |
 
 ---
 
@@ -85,6 +87,18 @@ modelo — fase de decisiones de arquitectura clínica completa.**
 | 7a | hinchazón: nivel de hoy > nivel de ayer (empeoramiento puntual) | ILEO_PARALITICO | BAJA | Distensión = signo de íleo; empeoramiento leve |
 | 7b | hinchazón: hoy > antier sostenido sin bajar >2 días | ILEO_PARALITICO | MEDIA | Empeoramiento sostenido — posible íleo en progreso |
 | 7c | hinchazón "mucho" sostenido 4 días calendario consecutivos | ILEO_PARALITICO | ALTA | Distensión severa persistente — posible íleo paralítico |
+| 8a | frecuencia_cardiaca 101-109 lpm | TAQUICARDIA | BAJA | Taquicardia leve, probablemente fisiológica |
+| 8b | frecuencia_cardiaca 110-149 lpm | TAQUICARDIA | MEDIA | CREWS 2022 (110 lpm, 75% sens. fuga/sangrado); Cleveland NCT04574908 (>110 intervención) |
+| 8c | frecuencia_cardiaca >= 150 lpm | TAQUICARDIA | ALTA | Escalamiento inmediato (protocolos hospitalarios) |
+
+**Nota Regla 8 (FC — valor absoluto):** la taquicardia se evalúa por el
+valor de cada registro, sin lógica de días calendario ni persistencia.
+Solo se vigila FC alta, no bradicardia.
+
+**Frecuencia respiratoria (FR): SOLO DASHBOARD, sin regla.** Se captura y
+almacena pero el `alert_engine` NO la evalúa — Outersterp 2025 halló que
+el 77% de las falsas alertas venían del sensor de FR. Por eso FR no tiene
+fila de reglas; solo aparece como variable y campo del modelo.
 
 **Nota sobre lógica de días calendario (Reglas 1, 3, 4, 6, 7):** agrupan
 registros por `fecha_registro__date`, no por número de registro — el
@@ -135,7 +149,7 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
         ├── urls.py                    ← ⏳ paso 3: rutas
         ├── alert_engine.py            ← ✅ creado y mergeado (Sprint 2)
         ├── knowledge_base.md          ← ✅ placeholder (RAG diferido a FASE 5)
-        └── bot.py                     ← ✅ máquina de estados, flujo de 8 pasos
+        └── bot.py                     ← ✅ máquina de estados, flujo de 10 pasos
 ```
 
 ---
@@ -166,6 +180,8 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 | episodios_nauseas | PositiveSmallIntegerField | Episodios en 24h |
 | tolero_liquidos | BooleanField nullable | null=no capturado, False=no toleró, True=toleró |
 | hinchazon_abdominal | CharField choices nullable | nada/algo/mucho — evaluado por empeoramiento entre días |
+| frecuencia_cardiaca | PositiveSmallIntegerField nullable | lpm — alerta TAQUICARDIA por valor absoluto |
+| frecuencia_respiratoria | PositiveSmallIntegerField nullable | rpm — SOLO dashboard, sin alerta (Outersterp 2025) |
 | fecha_registro | DateTimeField auto | Timestamp automático |
 | dia_postoperatorio | PositiveSmallIntegerField | Calculado automáticamente al guardar |
 
@@ -390,16 +406,16 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
   Body truncado a 500 chars (defensa en profundidad). Auditoría confirmó:
   validación de firma Twilio ya existente y correcta, secretos vía .env
   fuera de git, 49/49 tests en verde. Sin deuda.
-- [ ] **Paso 2 — Variables nuevas de la literatura** (una por una,
+- [x] **Paso 2 — Variables nuevas de la literatura** (4/4, una por una,
   ciclo decidir→implementar→verificar→documentar):
   - [x] Tolerancia a líquidos — booleano, escalera MEDIA/ALTA,
     tipo INTOLERANCIA_ORAL (Regla 6)
   - [x] Hinchazón abdominal — escala nada/algo/mucho, alerta por
     empeoramiento entre días (Regla 7), tipo ILEO_PARALITICO
-  - [ ] Frecuencia cardíaca (FC) — pendiente (dispositivo provisto por
-    el médico, pregunta directa)
-  - [ ] Frecuencia respiratoria (FR) — pendiente (solo-dashboard, sin
-    alerta — Outersterp 2025: 77% de falsas alertas)
+  - [x] Frecuencia cardíaca (FC) — entero, escalera por valor absoluto
+    (101/110/150), tipo TAQUICARDIA (Regla 8)
+  - [x] Frecuencia respiratoria (FR) — entero, SOLO dashboard, sin
+    alerta (Outersterp 2025: 77% de falsas alertas venían del sensor de FR)
   - Nota: estado de herida (fotos) y antecedentes quedan FUERA de
     Sprint 3 (mejora futura / Sprint 4 respectivamente).
 - [ ] **Paso 3 — Revisión de cierre en dos frentes.** Claude Code audita
@@ -570,16 +586,15 @@ DB_PORT=5432
 
 ---
 
-*Última actualización: Fase 3.6 — las 5 reglas del alert_engine
-completas (drenaje, temperatura, gases, náuseas, dolor) y van 2 de 4
-variables nuevas del Paso 2: tolerancia a líquidos (Regla 6,
-INTOLERANCIA_ORAL) y hinchazón abdominal (Regla 7, ILEO_PARALITICO) —
-60 tests OK. Antes se corrigió un bug de zona horaria (UTC vs
-America/Bogota) que afectaba las reglas de días calendario en horario
-nocturno, más un clamp para dia_postoperatorio negativo (commit
-ff8bdc4). Pendiente: variables nuevas restantes (FC, FR), implementar
-2×/día en bot.py (con los 2 gatings pendientes) y repaso final de
-alert_engine.py antes del merge.*
+*Última actualización: Fase 3.6 — las 5 reglas del núcleo del
+alert_engine completas (drenaje, temperatura, gases, náuseas, dolor) y
+el Paso 2 de variables nuevas COMPLETO (4/4): tolerancia a líquidos
+(Regla 6, INTOLERANCIA_ORAL), hinchazón abdominal (Regla 7,
+ILEO_PARALITICO), frecuencia cardíaca (Regla 8, TAQUICARDIA) y
+frecuencia respiratoria (solo-dashboard, sin alerta) — 69 tests OK. El
+flujo del bot pasó a 10 preguntas. Pendiente: implementar 2×/día en
+bot.py (con los 2 gatings pendientes) y repaso final de alert_engine.py
+antes del merge.*
 *Siguiente paso: implementar frecuencia de check-ins (2×/día) en
 bot.py resolviendo los 2 pendientes de gating, luego repaso final de
 alert_engine.py completo, luego merge `sprint-3-whatsapp` →
