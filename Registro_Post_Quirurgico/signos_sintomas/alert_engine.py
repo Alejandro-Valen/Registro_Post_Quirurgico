@@ -33,6 +33,10 @@ HINCHAZON_NIVELES = {'nada': 0, 'algo': 1, 'mucho': 2}
 DIAS_HINCHAZON_MUCHO_ALTA = 4
 DIAS_HINCHAZON_MEDIA = 2  # el empeoramiento debe mantenerse > 2 días
 
+FC_BAJA_MIN  = 101  # 101-109: taquicardia leve
+FC_MEDIA_MIN = 110  # 110-149: intervención (CREWS 2022, Cleveland NCT04574908)
+FC_ALTA_MIN  = 150  # >=150: escalamiento inmediato (protocolos hospitalarios)
+
 # Escalera de dolor (EVA) por ventana de dia_postoperatorio.
 # Decisión Arquitecto, jun 2026. Base: Delaney 2008, Lee 2022,
 # Outersterp 2025, Coeckelberghs 2025.
@@ -489,6 +493,40 @@ def evaluar_registro(registro):
                 tipo='ILEO_PARALITICO',
                 severidad=severidad_hinchazon,
                 mensaje=mensajes_h[severidad_hinchazon],
+            )
+            alertas_creadas.append(alerta)
+
+    # Regla 8: Frecuencia cardíaca elevada (taquicardia) — valor absoluto.
+    # Decisión Arquitecto, jun 2026. Solo se vigila FC alta, no bradicardia.
+    # Sin lógica de días calendario: el valor por sí solo ya es significativo.
+    # Base: Outersterp 2025 (>100 lpm monitoreo domiciliario), CREWS 2022
+    # (110 lpm, 75% sensibilidad para fuga/sangrado), Cleveland NCT04574908
+    # (>110 umbral de intervención), protocolos hospitalarios (>150 escalamiento).
+    if registro.frecuencia_cardiaca is not None:
+        fc = registro.frecuencia_cardiaca
+        severidad_fc = None
+        if fc >= FC_ALTA_MIN:
+            severidad_fc = 'ALTA'
+        elif fc >= FC_MEDIA_MIN:
+            severidad_fc = 'MEDIA'
+        elif fc >= FC_BAJA_MIN:
+            severidad_fc = 'BAJA'
+
+        if severidad_fc is not None:
+            mensajes_fc = {
+                'BAJA': f"Frecuencia cardíaca de {fc} lpm (taquicardia leve). "
+                        "Monitorear.",
+                'MEDIA': f"Frecuencia cardíaca de {fc} lpm. Requiere "
+                         "evaluación — llamar al médico.",
+                'ALTA': f"Frecuencia cardíaca de {fc} lpm (taquicardia severa). "
+                        "Escalar — ir a urgencias.",
+            }
+            alerta = Alerta.objects.create(
+                paciente=registro.paciente,
+                registro_origen=registro,
+                tipo='TAQUICARDIA',
+                severidad=severidad_fc,
+                mensaje=mensajes_fc[severidad_fc],
             )
             alertas_creadas.append(alerta)
 
