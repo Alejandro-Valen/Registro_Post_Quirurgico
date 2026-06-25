@@ -436,9 +436,9 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 **Grupo A — Obligatorio antes de pacientes reales:**
 - [x] A1 — Conversación abandonada no reinicia al día siguiente
 - [x] A2 — FC/FR obligatorias bloquean paciente sin dispositivo
-- [ ] A3 — Webhook sin idempotencia (MessageSid)
-- [ ] A4 — Sin `select_for_update()` en estado conversacional
-- [ ] A5 — Sin rate limiting en el webhook
+- [x] A3 — Webhook sin idempotencia (MessageSid)
+- [x] A4 — Sin `select_for_update()` en estado conversacional
+- [x] A5 — Sin rate limiting en el webhook
 - [ ] A6 — `DEBUG=True` con Twilio/ngrok real activo
 
 **Grupo B — Hardening de producción:**
