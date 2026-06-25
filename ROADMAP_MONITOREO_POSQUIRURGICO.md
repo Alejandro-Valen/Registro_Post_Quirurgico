@@ -463,6 +463,10 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 - [x] D1 — Cache local-memory no comparte estado entre workers (A3/A5/C7 rompen en multi-worker)
 - [x] D2 — Admin scoping sin `formfield_for_foreignkey` ni `has_*_permission` por objeto
 - [x] D3 — `X-Forwarded-For` spoofeable en rate limit del formulario de contacto
+  > ⚠️ **Pendiente de producción (FASE 5):** Nginx debe configurar
+  > `proxy_set_header REMOTE_ADDR $remote_addr;` para que el rate limit funcione
+  > correctamente con la IP real del cliente. El código Django usa `REMOTE_ADDR`
+  > de forma segura — el ajuste requerido es exclusivamente de infraestructura.
 - [x] D4 — `requirements.txt` interno con Django 6.0.5 / duplicado con el de raíz
 - [x] D5 — Sin tests de acceso admin para médico no-superuser (changelist + URL directa)
 

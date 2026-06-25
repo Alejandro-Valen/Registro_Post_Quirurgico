@@ -337,14 +337,13 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Funcional end-to-end — merge a Desarrollo POSPUESTO a propósito (ver nota) |
 | Sprint 3.5 | Auditoría de literatura, generalización de alcance/marca y documentación | ✅ Completado |
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
-| Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 20 hallazgos (A1–A6, B1–B7, C1–C7), 88 tests OK, rama sprint-3-hardening |
-| Sprint 4 | Dashboard médico y notificaciones | ⏳ Pendiente |
+| Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
+| Sprint 4 | Dashboard médico y notificaciones | ⏳ Pendiente — rama sprint-4-dashboard |
 | Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ Pendiente |
 
-**Punto actual:** Sprint 3-Hardening completo en rama `sprint-3-hardening`
-(20 hallazgos resueltos: A1–A6, B1–B7, C1–C7; 88 tests OK). **Próximo
-paso inmediato: merge `sprint-3-hardening` → `Desarrollo`, luego Sprint 4
-(dashboard médico).**
+**Punto actual:** Sprint 3-Hardening mergeado a `Desarrollo` (25/06/2026).
+24 hallazgos resueltos: A1–A6, B1–B7, C1–C7, D1–D5. 103 tests OK.
+**Próximo paso: Sprint 4 — Dashboard médico. Rama: `sprint-4-dashboard`.**
 
 Resumen de lo resuelto en `sprint-3-hardening`:
 - A: conversación abandonada, FC/FR saltables, idempotencia, lock transaccional,
@@ -355,12 +354,21 @@ Resumen de lo resuelto en `sprint-3-hardening`:
 - C: refactor alert_engine en funciones _evaluar_X, CheckConstraint en BD,
   Django 6.0.6, rechazo de decimales en FC/FR, mensaje en list_display admin,
   403 genérico webhook, rate limit formulario de contacto.
+- D (auditoría post-hardening): RedisCache + paquete redis, AlertaAdmin solo
+  superuser puede borrar, REMOTE_ADDR en lugar de X-Forwarded-For,
+  requirements reorganizados, tests de scoping completos.
 
 **Lección clave de la conexión Twilio:** el Sandbox de WhatsApp firma sus webhooks
 con el **Auth Token PRIMARIO** (Twilio Console → Account Dashboard), NO con el de
 Test Credentials; usar el de Test causa `403`. Para ngrok free, `ALLOWED_HOSTS`
 usa el comodín `.ngrok-free.dev` (el subdominio cambia en cada reinicio). Detalle
 completo en BITACORA.md.
+
+**Pendiente de producción (no bloquea Sprint 4):** el proxy/balanceador Nginx
+debe configurarse con `proxy_set_header REMOTE_ADDR $remote_addr;` (o equivalente)
+para que `REMOTE_ADDR` refleje la IP real del cliente. El rate limit del formulario
+de contacto (`home/views.py`) y del webhook (`views.py`) dependen de que esto esté
+correcto en producción. Se resuelve en FASE 5 (despliegue), no en el código Django.
 
 **Diferido explícitamente (no es parte del Sprint 3):**
 - FASE 4 — envío automático matutino 7:00-10:00 AM Bogotá vía Celery/cron, y

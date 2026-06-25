@@ -1342,6 +1342,52 @@ Cada hallazgo tiene su commit individual en la rama.
   (nombre 100, teléfono 30, mensaje 2000). Template muestra aviso
   si se supera el límite.
 
+**Grupo D — Auditoría post-hardening (segunda pasada Codex):**
+
+Después del Grupo C se corrió una auditoría Codex adicional que encontró
+4 hallazgos bloqueantes. Se resolvieron en la misma sesión antes del merge.
+
+- **D1 — RedisCache sin paquete redis:** `settings_production.py` usaba
+  `RedisCache` pero `redis` no estaba en `requirements-runtime.txt` ni en
+  `requirements.txt`. Agregado `redis>=5` en ambos archivos. Test nuevo:
+  `CacheProductionConfigTests.test_redis_importable_para_settings_produccion`
+  verifica que `import redis` no falla.
+
+- **D2 — AlertaAdmin sin protección de borrado por objeto:** `has_delete_permission`
+  en `AlertaAdmin` retornaba True para el médico propietario. Cambiado a
+  `return request.user.is_superuser` incondicionalmente — las alertas son
+  registros clínicos con trazabilidad obligatoria; el médico solo puede marcar
+  `resuelta=True`, nunca borrar.
+
+- **D3 — `X-Forwarded-For` spoofeable:** `_get_client_ip()` en `home/views.py`
+  usaba `HTTP_X_FORWARDED_FOR` como fuente primaria. Reemplazado por `REMOTE_ADDR`
+  únicamente. **Pendiente de producción (no bloquea el merge):** el proxy/balanceador
+  Nginx debe configurarse con `proxy_set_header REMOTE_ADDR $remote_addr;` para
+  que `REMOTE_ADDR` refleje la IP real del cliente, no la del proxy. Esto se
+  resuelve en el Sprint de despliegue (FASE 5), no en el código de Django.
+
+- **D4 — `requirements.txt` duplicado y desactualizado:** reorganizados en dos
+  archivos con responsabilidades claras: `requirements-runtime.txt` (6 deps
+  directas, lo que va a producción) y `requirements.txt` (pip freeze completo,
+  para reproducir el entorno exacto de desarrollo).
+
+- **D5 — Tests de scoping admin incompletos:** expandida la clase
+  `AdminScopingTests` con cobertura completa de `RegistroDiarioAdmin` y
+  `AlertaAdmin` (changelist y URL directa) además de `PacienteAdmin`.
+
+**Fix adicional — Aserciones de redirect en Django 6:**
+
+Los tests de acceso ajeno (`test_medico_no_puede_editar_*`) asercionaban que
+el redirect iba al changelist del modelo (`/admin/signos_sintomas/<model>/`).
+En Django 6.0.6, `_get_obj_does_not_exist_redirect` redirige al índice del
+admin (`/admin/`) cuando el objeto no está en el queryset del usuario.
+Corregido: se usa `assertRegex(resp.url, r'^/admin/')` en lugar del path
+específico del changelist. La propiedad de seguridad verificada es la misma:
+el formulario (status 200) nunca se renderiza para objetos ajenos.
+
+**Resultado final:** 103 tests OK, `manage.py check --deploy` con
+`settings_production`: 0 issues. Auditoría Codex: ✅ APROBADO.
+
 ### Decisiones clínicas tomadas
 Ninguna. El hardening es de infraestructura, seguridad y calidad de
 código, no clínico.
@@ -1357,14 +1403,24 @@ código, no clínico.
 
 3. **B2 — Traceback en tests por LOGGING:** `test_token_faltante_falla_seguro`
    imprime un ERROR al stdout porque `ImproperlyConfigured` se levanta
-   intencionalmente. Comportamiento esperado; 88 tests pasan.
+   intencionalmente. Comportamiento esperado; 103 tests pasan.
+
+4. **Edit tool — "2 matches":** Al intentar parchear `has_delete_permission` en
+   `AlertaAdmin` (D2), el mismo bloque de código existía en `RegistroDiarioAdmin`.
+   Edit no puede distinguirlos con `replace_all=false`. Solución: reescritura
+   completa de `admin.py` con la herramienta Write.
+
+5. **AdminScopingTests — Staff sin permisos → 403:** Un usuario con
+   `is_staff=True` pero sin permisos de modelo asignados recibe 403 al intentar
+   acceder al admin. Solución: asignar permisos explícitos via `Permission +
+   ContentType` en el `setUp` de los tests.
 
 ### Próximo paso
 
-1. **Merge `sprint-3-hardening` → `Desarrollo`** con aprobación del Arquitecto.
+1. ~~Merge `sprint-3-hardening` → `Desarrollo`~~ ✅ Completado.
 2. **Sprint 4** — Dashboard médico (panel de alertas, notificación por
    email ante alerta ALTA, CheckInProgramado). Arranca sobre la base
-   ya endurecida.
+   ya endurecida. Rama: `sprint-4-dashboard`.
 
 ---
 
