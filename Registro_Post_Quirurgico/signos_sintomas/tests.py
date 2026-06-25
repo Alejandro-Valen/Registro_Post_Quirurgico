@@ -1235,6 +1235,70 @@ class BotWhatsAppTests(TestCase):
         self.assertEqual(RegistroDiario.objects.count(), 0)
 
 
+class BotAbandonoConversacionTests(TestCase):
+    """A1 — Conversación abandonada a mitad de flujo en un día anterior."""
+
+    TELEFONO = "+573001119999"
+    TELEFONO_TWILIO = "whatsapp:+573001119999"
+
+    def _crear_paciente(self):
+        return Paciente.objects.create(
+            nombre_completo="Paciente Abandono",
+            telefono_whatsapp=self.TELEFONO,
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),
+        )
+
+    def test_conversacion_en_flujo_ayer_reinicia_con_aviso(self):
+        paciente = self._crear_paciente()
+        conv = ConversacionWhatsApp.objects.create(paciente=paciente)
+        conv.estado = ConversacionWhatsApp.ESTADO_DOLOR
+        conv.temp_temperatura = Decimal("37.0")
+        conv.save()
+        # Simular que la última actualización fue ayer
+        ayer = timezone.now() - timedelta(days=1)
+        ConversacionWhatsApp.objects.filter(pk=conv.pk).update(fecha_actualizacion=ayer)
+
+        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
+
+        self.assertIn("ayer no pudimos terminar", respuesta)
+        self.assertEqual(RegistroDiario.objects.count(), 0)
+        conv.refresh_from_db()
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_TEMPERATURA)
+        self.assertIsNone(conv.temp_temperatura)
+
+    def test_inicio_incompleto_ayer_no_es_abandono(self):
+        # Estado INICIO desde días anteriores: no es "flujo" → no envía aviso.
+        paciente = self._crear_paciente()
+        conv = ConversacionWhatsApp.objects.create(paciente=paciente)
+        ConversacionWhatsApp.objects.filter(pk=conv.pk).update(
+            fecha_actualizacion=timezone.now() - timedelta(days=1)
+        )
+
+        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
+
+        self.assertEqual(respuesta, bot.MSG_PREGUNTA_TEMPERATURA)
+        self.assertNotIn("ayer no pudimos terminar", respuesta)
+
+    def test_despues_de_aviso_flujo_normal_continua(self):
+        # Después del reinicio con aviso, el bot espera temperatura.
+        paciente = self._crear_paciente()
+        conv = ConversacionWhatsApp.objects.create(paciente=paciente)
+        conv.estado = ConversacionWhatsApp.ESTADO_DOLOR
+        conv.temp_temperatura = Decimal("37.0")
+        conv.save()
+        ConversacionWhatsApp.objects.filter(pk=conv.pk).update(
+            fecha_actualizacion=timezone.now() - timedelta(days=1)
+        )
+
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")  # recibe aviso
+        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "37.2")  # temperatura
+
+        self.assertEqual(respuesta, bot.MSG_PREGUNTA_DOLOR)
+        conv.refresh_from_db()
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_DOLOR)
+        self.assertEqual(conv.temp_temperatura, Decimal("37.2"))
+
+
 class WebhookWhatsAppTests(TestCase):
     def setUp(self):
         self.url = reverse('signos_sintomas:webhook_whatsapp')

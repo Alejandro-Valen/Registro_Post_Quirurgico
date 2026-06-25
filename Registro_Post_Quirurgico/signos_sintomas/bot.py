@@ -51,6 +51,12 @@ MSG_CONFIRMACION = (
     "¡Listo! ✅ Hemos registrado tu reporte de hoy. Gracias por cuidarte 🌿 "
     "Tu equipo médico está pendiente de tu seguimiento. ¡Que tengas un buen día!"
 )
+MSG_ABANDONO_REINICIO = (
+    "Hola 👋 Parece que ayer no pudimos terminar tu reporte. "
+    "Esos datos quedaron sin registrar.\n\n"
+    "¡Empecemos el reporte de hoy!\n\n"
+    "1️⃣ ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5"
+)
 
 MSG_PREGUNTA_TEMPERATURA = (
     "¡Hola! 🌿 Vamos con tu reporte de hoy.\n\n"
@@ -186,6 +192,17 @@ def procesar_mensaje(telefono, texto):
     if (conv.estado == ConversacionWhatsApp.ESTADO_COMPLETADO
             and conv.fecha_ultimo_registro != hoy):
         _reiniciar(conv)
+    elif conv.estado not in (
+        ConversacionWhatsApp.ESTADO_INICIO,
+        ConversacionWhatsApp.ESTADO_COMPLETADO,
+    ):
+        # A1: conversación abandonada a mitad de flujo en un día anterior.
+        # Los datos parciales se descartan; el día anterior queda sin registro.
+        if timezone.localdate(conv.fecha_actualizacion) < hoy:
+            _limpiar_temporales(conv)
+            conv.estado = ConversacionWhatsApp.ESTADO_TEMPERATURA
+            conv.save()
+            return MSG_ABANDONO_REINICIO
 
     en_flujo = conv.estado not in (
         ConversacionWhatsApp.ESTADO_INICIO,
