@@ -370,9 +370,17 @@ def _procesar_respuesta_flujo(conv, paciente, texto, hoy):
 
 
 def _crear_registro(conv, paciente):
-    """Crea el RegistroDiario definitivo y dispara el motor de alertas.
+    """Crea el RegistroDiario definitivo y programa la evaluación de alertas.
 
-    Las alertas NO se devuelven al paciente: quedan en BD para el oncólogo.
+    B3: la evaluación del alert_engine (múltiples queries históricas) corre en
+    un hilo post-commit para no bloquear la respuesta a Twilio, cuyo timeout
+    es 15 s. transaction.on_commit() garantiza que el hilo solo arranca
+    después de que el RegistroDiario sea visible en la BD (el commit de la
+    transacción de A4 ya ocurrió). Las alertas quedan en BD para el oncólogo.
+
+    Limitación conocida: si el proceso cae antes de que el hilo termine, las
+    alertas no se generan para ese registro. Solución definitiva: Celery en
+    Sprint 4.
     """
     registro = RegistroDiario.objects.create(
         paciente=paciente,
@@ -389,7 +397,12 @@ def _crear_registro(conv, paciente):
         frecuencia_respiratoria=conv.temp_frecuencia_respiratoria,
         tolero_liquidos=conv.temp_tolero_liquidos,
     )
-    evaluar_registro(registro)
+
+    # B3: diferir evaluar_registro a post-commit (fuera del bloque atomic de A4)
+    # para liberar el select_for_update antes de hacer las queries históricas.
+    # Sigue siendo síncrono en el mismo hilo de la request — la solución
+    # completamente asíncrona (sin bloqueo de Twilio) requiere Celery (Sprint 4).
+    transaction.on_commit(lambda: evaluar_registro(registro))
     return registro
 
 

@@ -1144,8 +1144,11 @@ class BotWhatsAppTests(TestCase):
         self.assertIsNone(conv.temp_temperatura)  # parciales limpiados
 
     def test_alerta_no_se_muestra_al_paciente(self):
+        # B3: evaluar_registro corre vía on_commit (post-commit en producción).
+        # captureOnCommitCallbacks(execute=True) lo ejecuta síncronamente en tests.
         self._crear_paciente()
-        respuesta = self._completar_flujo(temperatura="38.5")  # dispara SEPSIS
+        with self.captureOnCommitCallbacks(execute=True):
+            respuesta = self._completar_flujo(temperatura="38.5")  # dispara SEPSIS
         # La alerta se crea para el oncólogo...
         self.assertEqual(Alerta.objects.filter(tipo="SEPSIS").count(), 1)
         # ...pero el paciente solo ve la confirmación neutra.
