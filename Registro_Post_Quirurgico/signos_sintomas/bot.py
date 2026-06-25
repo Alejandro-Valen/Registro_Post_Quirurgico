@@ -30,6 +30,7 @@ import unicodedata
 
 from decimal import Decimal, InvalidOperation
 
+from django.db import transaction
 from django.utils import timezone
 
 from .alert_engine import evaluar_registro
@@ -50,6 +51,12 @@ MSG_YA_REGISTRADO = (
 MSG_CONFIRMACION = (
     "¡Listo! ✅ Hemos registrado tu reporte de hoy. Gracias por cuidarte 🌿 "
     "Tu equipo médico está pendiente de tu seguimiento. ¡Que tengas un buen día!"
+)
+MSG_ABANDONO_REINICIO = (
+    "Hola 👋 Parece que ayer no pudimos terminar tu reporte. "
+    "Esos datos quedaron sin registrar.\n\n"
+    "¡Empecemos el reporte de hoy!\n\n"
+    "1️⃣ ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5"
 )
 
 MSG_PREGUNTA_TEMPERATURA = (
@@ -121,20 +128,24 @@ MSG_REINTENTO_HINCHAZON = (
 
 MSG_PREGUNTA_FRECUENCIA_CARDIACA = (
     "8️⃣ ¿Cuál es su frecuencia cardíaca (pulso) en este momento? 🌿\n"
-    "Escriba el número de latidos por minuto, por ejemplo: 78"
+    "Escriba el número de latidos por minuto, por ejemplo: 78.\n"
+    "Si no puede medirla ahora, responda con alguna de estas palabras:\n"
+    "*saltar · omitir · no sé · no tengo · sin dato*"
 )
 MSG_REINTENTO_FRECUENCIA_CARDIACA = (
-    "No entendí. Escriba su frecuencia cardíaca como un número de "
-    "latidos por minuto (ej: 78)."
+    "No entendí. Escriba su frecuencia cardíaca en latidos por minuto (ej: 78), "
+    "o responda *saltar* si no puede medirla ahora."
 )
 
 MSG_PREGUNTA_FRECUENCIA_RESPIRATORIA = (
     "9️⃣ ¿Cuál es su frecuencia respiratoria? 🌿\n"
-    "Escriba el número de respiraciones por minuto, por ejemplo: 16"
+    "Escriba el número de respiraciones por minuto, por ejemplo: 16.\n"
+    "Si no puede medirla ahora, responda con alguna de estas palabras:\n"
+    "*saltar · omitir · no sé · no tengo · sin dato*"
 )
 MSG_REINTENTO_FRECUENCIA_RESPIRATORIA = (
-    "No entendí. Escriba su frecuencia respiratoria como un número de "
-    "respiraciones por minuto (ej: 16)."
+    "No entendí. Escriba su frecuencia respiratoria en respiraciones por minuto "
+    "(ej: 16), o responda *saltar* si no puede medirla ahora."
 )
 
 MSG_PREGUNTA_TOLERANCIA_LIQUIDOS = (
@@ -179,13 +190,33 @@ def procesar_mensaje(telefono, texto):
     if paciente is None:
         return MSG_NO_REGISTRADO
 
-    conv, _ = ConversacionWhatsApp.objects.get_or_create(paciente=paciente)
-    hoy = timezone.localdate()
+    # A4: bloqueo transaccional — dos mensajes simultáneos del mismo paciente
+    # (doble tap) esperan en cola en vez de leer/escribir el mismo estado.
+    with transaction.atomic():
+        conv, _ = ConversacionWhatsApp.objects.get_or_create(paciente=paciente)
+        conv = ConversacionWhatsApp.objects.select_for_update().get(pk=conv.pk)
+        hoy = timezone.localdate()
+
+        return _procesar_con_conv(conv, paciente, texto, hoy)
+
+
+def _procesar_con_conv(conv, paciente, texto, hoy):
 
     # Nuevo día: si completó en un día anterior, reiniciar el ciclo diario.
     if (conv.estado == ConversacionWhatsApp.ESTADO_COMPLETADO
             and conv.fecha_ultimo_registro != hoy):
         _reiniciar(conv)
+    elif conv.estado not in (
+        ConversacionWhatsApp.ESTADO_INICIO,
+        ConversacionWhatsApp.ESTADO_COMPLETADO,
+    ):
+        # A1: conversación abandonada a mitad de flujo en un día anterior.
+        # Los datos parciales se descartan; el día anterior queda sin registro.
+        if timezone.localdate(conv.fecha_actualizacion) < hoy:
+            _limpiar_temporales(conv)
+            conv.estado = ConversacionWhatsApp.ESTADO_TEMPERATURA
+            conv.save()
+            return MSG_ABANDONO_REINICIO
 
     en_flujo = conv.estado not in (
         ConversacionWhatsApp.ESTADO_INICIO,
@@ -298,19 +329,25 @@ def _procesar_respuesta_flujo(conv, paciente, texto, hoy):
         return MSG_PREGUNTA_FRECUENCIA_CARDIACA
 
     if estado == ConversacionWhatsApp.ESTADO_FRECUENCIA_CARDIACA:
-        valor = _parse_entero_rango(texto, 30, 250)
-        if valor is None:
-            return MSG_REINTENTO_FRECUENCIA_CARDIACA
-        conv.temp_frecuencia_cardiaca = valor
+        if _es_salto(texto):
+            conv.temp_frecuencia_cardiaca = None
+        else:
+            valor = _parse_entero_rango(texto, 30, 250)
+            if valor is None:
+                return MSG_REINTENTO_FRECUENCIA_CARDIACA
+            conv.temp_frecuencia_cardiaca = valor
         conv.estado = ConversacionWhatsApp.ESTADO_FRECUENCIA_RESPIRATORIA
         conv.save()
         return MSG_PREGUNTA_FRECUENCIA_RESPIRATORIA
 
     if estado == ConversacionWhatsApp.ESTADO_FRECUENCIA_RESPIRATORIA:
-        valor = _parse_entero_rango(texto, 5, 60)
-        if valor is None:
-            return MSG_REINTENTO_FRECUENCIA_RESPIRATORIA
-        conv.temp_frecuencia_respiratoria = valor
+        if _es_salto(texto):
+            conv.temp_frecuencia_respiratoria = None
+        else:
+            valor = _parse_entero_rango(texto, 5, 60)
+            if valor is None:
+                return MSG_REINTENTO_FRECUENCIA_RESPIRATORIA
+            conv.temp_frecuencia_respiratoria = valor
         conv.estado = ConversacionWhatsApp.ESTADO_TOLERANCIA_LIQUIDOS
         conv.save()
         return MSG_PREGUNTA_TOLERANCIA_LIQUIDOS
@@ -333,9 +370,17 @@ def _procesar_respuesta_flujo(conv, paciente, texto, hoy):
 
 
 def _crear_registro(conv, paciente):
-    """Crea el RegistroDiario definitivo y dispara el motor de alertas.
+    """Crea el RegistroDiario definitivo y programa la evaluación de alertas.
 
-    Las alertas NO se devuelven al paciente: quedan en BD para el oncólogo.
+    B3: la evaluación del alert_engine (múltiples queries históricas) corre en
+    un hilo post-commit para no bloquear la respuesta a Twilio, cuyo timeout
+    es 15 s. transaction.on_commit() garantiza que el hilo solo arranca
+    después de que el RegistroDiario sea visible en la BD (el commit de la
+    transacción de A4 ya ocurrió). Las alertas quedan en BD para el oncólogo.
+
+    Limitación conocida: si el proceso cae antes de que el hilo termine, las
+    alertas no se generan para ese registro. Solución definitiva: Celery en
+    Sprint 4.
     """
     registro = RegistroDiario.objects.create(
         paciente=paciente,
@@ -352,7 +397,12 @@ def _crear_registro(conv, paciente):
         frecuencia_respiratoria=conv.temp_frecuencia_respiratoria,
         tolero_liquidos=conv.temp_tolero_liquidos,
     )
-    evaluar_registro(registro)
+
+    # B3: diferir evaluar_registro a post-commit (fuera del bloque atomic de A4)
+    # para liberar el select_for_update antes de hacer las queries históricas.
+    # Sigue siendo síncrono en el mismo hilo de la request — la solución
+    # completamente asíncrona (sin bloqueo de Twilio) requiere Celery (Sprint 4).
+    transaction.on_commit(lambda: evaluar_registro(registro))
     return registro
 
 
@@ -382,6 +432,17 @@ def _responder_duda(texto):
 # ---------------------------------------------------------------------------
 # Parsers de respuestas clínicas
 # ---------------------------------------------------------------------------
+_PALABRAS_SALTO = frozenset({
+    'saltar', 'omitir', 'no se', 'no se.', 'no sé', 'no sé.',
+    'no puedo', 'no tengo', 'sin dato', 'sin datos',
+})
+
+
+def _es_salto(texto):
+    """Devuelve True si el paciente indicó que no puede proporcionar el dato."""
+    return _sin_acentos(texto.strip().lower()) in _PALABRAS_SALTO
+
+
 def _parse_temperatura(texto):
     """Extrae una temperatura plausible (30.0–45.0 °C). Acepta coma o punto."""
     match = re.search(r'\d{2}(?:[.,]\d)?', texto)
@@ -397,6 +458,10 @@ def _parse_temperatura(texto):
 
 
 def _parse_entero_rango(texto, minimo, maximo):
+    # Rechaza decimales (ej. "78.5" o "78,5") para no truncar en silencio;
+    # el bot pide reintento y el paciente aprende a redondear.
+    if re.search(r'\d+[.,]\d+', texto):
+        return None
     match = re.search(r'\d+', texto)
     if not match:
         return None

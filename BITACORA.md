@@ -1256,6 +1256,174 @@ de producción real), luego Sprint 4 (dashboard del médico).
 
 ---
 
+## Sprint 3-Hardening — Seguridad y Robustez Pre-Producción
+**Fecha:** 25/06/2026
+**Responsable:** León (Arquitecto IA) con Claude Code
+**Rama:** `sprint-3-hardening`
+**Estado:** COMPLETADO ✅ — 88/88 tests OK
+
+### Qué se hizo
+
+Se resolvieron los 20 hallazgos del Grupo A, B y C de
+`AUDITORIA_SPRINT3_CIERRE.md`, en orden A1→A6, B1→B7, C1→C7.
+Cada hallazgo tiene su commit individual en la rama.
+
+**Grupo A — Lógica y seguridad del bot:**
+
+- **A1 — Conversación abandonada:** Si el paciente dejó un registro
+  incompleto el día anterior, el bot detecta el desfase
+  (`timezone.localdate(conv.fecha_actualizacion) < hoy`), limpia los
+  temporales y reinicia con un mensaje de aviso. Decisión: Option B
+  (warn + reset).
+
+- **A2 — FC y FR no saltables:** El paciente puede escribir "saltar",
+  "omitir", "no sé", "no puedo", "no tengo" o "sin dato". El bot
+  guarda `None` y avanza. Las palabras de salto se muestran en la
+  pregunta del chat. Decisión del Arquitecto: mostrar las opciones
+  predefinidas en el mismo mensaje.
+
+- **A3 — Idempotencia:** `views.py` cachea el `MessageSid` por 5 min
+  y devuelve TwiML vacío si el SID ya fue procesado.
+
+- **A4 — Race condition:** `procesar_mensaje()` ejecuta dentro de
+  `transaction.atomic()` con `select_for_update()` sobre
+  `ConversacionWhatsApp`.
+
+- **A5 — Rate limiting:** 20 mensajes/hora por número de teléfono
+  (cache.incr + fallback a set para primer mensaje).
+
+- **A6 — Settings de entorno:** Separados `settings_local.py` y
+  `settings_production.py` con todos los headers de seguridad HTTPS.
+
+**Grupo B — Infraestructura y datos:**
+
+- **B1:** Headers HTTPS en `settings_production.py` (HSTS 31536000 s,
+  SESSION_COOKIE_SECURE, CSRF_COOKIE_SECURE, SSL_REDIRECT, NOSNIFF,
+  X_FRAME_OPTIONS=DENY).
+- **B2:** LOGGING configurado (WARNING para django, ERROR para
+  django.request). `@sensitive_post_parameters` en el webhook.
+- **B3:** `evaluar_registro()` invocado con `transaction.on_commit()`.
+  Test actualizado con `captureOnCommitCallbacks(execute=True)`.
+- **B4:** `db_index=True` en `fecha_registro` + índice funcional
+  `CAST(... AT TIME ZONE 'America/Bogota' AS date)` via RunSQL.
+- **B5:** URL del admin configurable por `ADMIN_URL`. `django-axes 7.0.1`:
+  5 fallos → bloqueo 1 hora.
+- **B6:** `get_queryset()` en los 3 admins filtra por médico responsable;
+  superuser ve todo.
+- **B7:** 4 tests nuevos del webhook (header ausente, body vacío,
+  idempotencia, rate limit).
+
+**Grupo C — Backlog:**
+
+- **C1 — Refactor alert_engine:** `evaluar_registro()` queda como
+  orquestador de 8 llamadas `_evaluar_X(registro)`. Reglas 3 y 4
+  estaban invertidas en el archivo — corregido. `ORDEN_SEVERIDAD`
+  promovido a constante de módulo.
+
+- **C2 — CheckConstraint:** 6 constraints PostgreSQL en `Paciente`,
+  `RegistroDiario` y `Alerta` para campos categóricos clínicos.
+  Nullable: `Q(campo__isnull=True) | Q(campo__in=[...])`.
+
+- **C3 — Django 6.0.6:** Actualización desde 6.0.5. `requirements.txt`
+  regenerado.
+
+- **C4 — Decimales truncados en FC/FR:** `_parse_entero_rango()` ahora
+  detecta `\d+[.,]\d+` y devuelve `None` → bot pide reintento en lugar
+  de truncar silenciosamente. 4 tests nuevos.
+
+- **C5 — Mensaje en list_display:** `AlertaAdmin` muestra `mensaje_corto`
+  (primeros 80 chars) sin abrir el detalle.
+
+- **C6 — 403 genérico:** `HttpResponseForbidden()` sin body para no
+  revelar que el endpoint valida firma de Twilio.
+
+- **C7 — Rate limit en contacto:** 5 envíos/hora por IP en
+  `home/views.py`. Campos truncados a max_length del modelo
+  (nombre 100, teléfono 30, mensaje 2000). Template muestra aviso
+  si se supera el límite.
+
+**Grupo D — Auditoría post-hardening (segunda pasada Codex):**
+
+Después del Grupo C se corrió una auditoría Codex adicional que encontró
+4 hallazgos bloqueantes. Se resolvieron en la misma sesión antes del merge.
+
+- **D1 — RedisCache sin paquete redis:** `settings_production.py` usaba
+  `RedisCache` pero `redis` no estaba en `requirements-runtime.txt` ni en
+  `requirements.txt`. Agregado `redis>=5` en ambos archivos. Test nuevo:
+  `CacheProductionConfigTests.test_redis_importable_para_settings_produccion`
+  verifica que `import redis` no falla.
+
+- **D2 — AlertaAdmin sin protección de borrado por objeto:** `has_delete_permission`
+  en `AlertaAdmin` retornaba True para el médico propietario. Cambiado a
+  `return request.user.is_superuser` incondicionalmente — las alertas son
+  registros clínicos con trazabilidad obligatoria; el médico solo puede marcar
+  `resuelta=True`, nunca borrar.
+
+- **D3 — `X-Forwarded-For` spoofeable:** `_get_client_ip()` en `home/views.py`
+  usaba `HTTP_X_FORWARDED_FOR` como fuente primaria. Reemplazado por `REMOTE_ADDR`
+  únicamente. **Pendiente de producción (no bloquea el merge):** el proxy/balanceador
+  Nginx debe configurarse con `proxy_set_header REMOTE_ADDR $remote_addr;` para
+  que `REMOTE_ADDR` refleje la IP real del cliente, no la del proxy. Esto se
+  resuelve en el Sprint de despliegue (FASE 5), no en el código de Django.
+
+- **D4 — `requirements.txt` duplicado y desactualizado:** reorganizados en dos
+  archivos con responsabilidades claras: `requirements-runtime.txt` (6 deps
+  directas, lo que va a producción) y `requirements.txt` (pip freeze completo,
+  para reproducir el entorno exacto de desarrollo).
+
+- **D5 — Tests de scoping admin incompletos:** expandida la clase
+  `AdminScopingTests` con cobertura completa de `RegistroDiarioAdmin` y
+  `AlertaAdmin` (changelist y URL directa) además de `PacienteAdmin`.
+
+**Fix adicional — Aserciones de redirect en Django 6:**
+
+Los tests de acceso ajeno (`test_medico_no_puede_editar_*`) asercionaban que
+el redirect iba al changelist del modelo (`/admin/signos_sintomas/<model>/`).
+En Django 6.0.6, `_get_obj_does_not_exist_redirect` redirige al índice del
+admin (`/admin/`) cuando el objeto no está en el queryset del usuario.
+Corregido: se usa `assertRegex(resp.url, r'^/admin/')` en lugar del path
+específico del changelist. La propiedad de seguridad verificada es la misma:
+el formulario (status 200) nunca se renderiza para objetos ajenos.
+
+**Resultado final:** 103 tests OK, `manage.py check --deploy` con
+`settings_production`: 0 issues. Auditoría Codex: ✅ APROBADO.
+
+### Decisiones clínicas tomadas
+Ninguna. El hardening es de infraestructura, seguridad y calidad de
+código, no clínico.
+
+### Problemas encontrados y resueltos
+
+1. **B3 — `on_commit` no dispara en TestCase:** `TestCase` envuelve
+   cada test en una transacción que nunca hace commit. Solución:
+   `captureOnCommitCallbacks(execute=True)`.
+
+2. **B4 — `::date` falla en RunSQL:** psycopg2 interpreta `::` como
+   operador de Python. Solución: `CAST(... AS date)`.
+
+3. **B2 — Traceback en tests por LOGGING:** `test_token_faltante_falla_seguro`
+   imprime un ERROR al stdout porque `ImproperlyConfigured` se levanta
+   intencionalmente. Comportamiento esperado; 103 tests pasan.
+
+4. **Edit tool — "2 matches":** Al intentar parchear `has_delete_permission` en
+   `AlertaAdmin` (D2), el mismo bloque de código existía en `RegistroDiarioAdmin`.
+   Edit no puede distinguirlos con `replace_all=false`. Solución: reescritura
+   completa de `admin.py` con la herramienta Write.
+
+5. **AdminScopingTests — Staff sin permisos → 403:** Un usuario con
+   `is_staff=True` pero sin permisos de modelo asignados recibe 403 al intentar
+   acceder al admin. Solución: asignar permisos explícitos via `Permission +
+   ContentType` en el `setUp` de los tests.
+
+### Próximo paso
+
+1. ~~Merge `sprint-3-hardening` → `Desarrollo`~~ ✅ Completado.
+2. **Sprint 4** — Dashboard médico (panel de alertas, notificación por
+   email ante alerta ALTA, CheckInProgramado). Arranca sobre la base
+   ya endurecida. Rama: `sprint-4-dashboard`.
+
+---
+
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** pendiente
 **Estado:** EN COLA ⏳

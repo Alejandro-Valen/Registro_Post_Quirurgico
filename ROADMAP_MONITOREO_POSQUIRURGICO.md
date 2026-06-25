@@ -434,30 +434,41 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 > Detalle completo de cada hallazgo en `AUDITORIA_SPRINT3_CIERRE.md`.
 
 **Grupo A — Obligatorio antes de pacientes reales:**
-- [ ] A1 — Conversación abandonada no reinicia al día siguiente
-- [ ] A2 — FC/FR obligatorias bloquean paciente sin dispositivo
-- [ ] A3 — Webhook sin idempotencia (MessageSid)
-- [ ] A4 — Sin `select_for_update()` en estado conversacional
-- [ ] A5 — Sin rate limiting en el webhook
-- [ ] A6 — `DEBUG=True` con Twilio/ngrok real activo
+- [x] A1 — Conversación abandonada no reinicia al día siguiente
+- [x] A2 — FC/FR obligatorias bloquean paciente sin dispositivo
+- [x] A3 — Webhook sin idempotencia (MessageSid)
+- [x] A4 — Sin `select_for_update()` en estado conversacional
+- [x] A5 — Sin rate limiting en el webhook
+- [x] A6 — `DEBUG=True` con Twilio/ngrok real activo
 
 **Grupo B — Hardening de producción:**
-- [ ] B1 — settings.py sin configuración de producción
-- [ ] B2 — Sin LOGGING configurado (datos médicos en logs)
-- [ ] B3 — Path síncrono del webhook (timeout de Twilio)
-- [ ] B4 — `fecha_registro` sin índice eficiente para filtros
-- [ ] B5 — Admin en `/admin/` sin controles adicionales
-- [ ] B6 — Admin sin scoping por médico (Sprint 4)
-- [ ] B7 — Tests del webhook incompletos
+- [x] B1 — settings.py sin configuración de producción
+- [x] B2 — Sin LOGGING configurado (datos médicos en logs)
+- [x] B3 — Path síncrono del webhook (timeout de Twilio)
+- [x] B4 — `fecha_registro` sin índice eficiente para filtros
+- [x] B5 — Admin en `/admin/` sin controles adicionales
+- [x] B6 — Admin sin scoping por médico (Sprint 4)
+- [x] B7 — Tests del webhook incompletos
 
 **Grupo C — Backlog:**
-- [ ] C1 — Refactor `evaluar_registro()` monolítica
-- [ ] C2 — Choices sin `CheckConstraint` en BD
-- [ ] C3 — Django 6.0.5 → 6.0.6
-- [ ] C4 — Decimales truncados en parsers FC/FR
-- [ ] C5 — Mensaje de alerta no visible en list_display
-- [ ] C6 — 403 del webhook revela detalles internos
-- [ ] C7 — Endpoint de contacto sin rate limit
+- [x] C1 — Refactor `evaluar_registro()` monolítica
+- [x] C2 — Choices sin `CheckConstraint` en BD
+- [x] C3 — Django 6.0.5 → 6.0.6
+- [x] C4 — Decimales truncados en parsers FC/FR
+- [x] C5 — Mensaje de alerta no visible en list_display
+- [x] C6 — 403 del webhook revela detalles internos
+- [x] C7 — Endpoint de contacto sin rate limit
+
+**Grupo D — Hallazgos auditoría post-hardening (Codex):**
+- [x] D1 — Cache local-memory no comparte estado entre workers (A3/A5/C7 rompen en multi-worker)
+- [x] D2 — Admin scoping sin `formfield_for_foreignkey` ni `has_*_permission` por objeto
+- [x] D3 — `X-Forwarded-For` spoofeable en rate limit del formulario de contacto
+  > ⚠️ **Pendiente de producción (FASE 5):** Nginx debe configurar
+  > `proxy_set_header REMOTE_ADDR $remote_addr;` para que el rate limit funcione
+  > correctamente con la IP real del cliente. El código Django usa `REMOTE_ADDR`
+  > de forma segura — el ajuste requerido es exclusivamente de infraestructura.
+- [x] D4 — `requirements.txt` interno con Django 6.0.5 / duplicado con el de raíz
+- [x] D5 — Sin tests de acceso admin para médico no-superuser (changelist + URL directa)
 
 ---
 

@@ -2,6 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -1144,8 +1145,11 @@ class BotWhatsAppTests(TestCase):
         self.assertIsNone(conv.temp_temperatura)  # parciales limpiados
 
     def test_alerta_no_se_muestra_al_paciente(self):
+        # B3: evaluar_registro corre vía on_commit (post-commit en producción).
+        # captureOnCommitCallbacks(execute=True) lo ejecuta síncronamente en tests.
         self._crear_paciente()
-        respuesta = self._completar_flujo(temperatura="38.5")  # dispara SEPSIS
+        with self.captureOnCommitCallbacks(execute=True):
+            respuesta = self._completar_flujo(temperatura="38.5")  # dispara SEPSIS
         # La alerta se crea para el oncólogo...
         self.assertEqual(Alerta.objects.filter(tipo="SEPSIS").count(), 1)
         # ...pero el paciente solo ve la confirmación neutra.
@@ -1214,6 +1218,45 @@ class BotWhatsAppTests(TestCase):
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_GASES_NAUSEAS)
         self.assertEqual(RegistroDiario.objects.count(), 0)
 
+    def test_fc_saltar_guarda_none_y_avanza(self):
+        # A2: paciente sin oxímetro usa palabra de salto en FC → None, avanza a FR.
+        self._crear_paciente()
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "37.0")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "sí")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "1")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "normal")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "sí, 0")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "nada")
+        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "saltar")
+        self.assertEqual(respuesta, bot.MSG_PREGUNTA_FRECUENCIA_RESPIRATORIA)
+        conv = ConversacionWhatsApp.objects.get()
+        self.assertIsNone(conv.temp_frecuencia_cardiaca)
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_FRECUENCIA_RESPIRATORIA)
+
+    def test_fr_omitir_guarda_none_y_flujo_completa(self):
+        # A2: paciente usa "omitir" en FR → None guardado en RegistroDiario.
+        self._crear_paciente()
+        respuesta = self._completar_flujo(
+            frecuencia_cardiaca="78", frecuencia_respiratoria="omitir"
+        )
+        self.assertEqual(respuesta, bot.MSG_CONFIRMACION)
+        registro = RegistroDiario.objects.get()
+        self.assertEqual(registro.frecuencia_cardiaca, 78)
+        self.assertIsNone(registro.frecuencia_respiratoria)
+
+    def test_flujo_completo_sin_fc_ni_fr_crea_registro_con_nulls(self):
+        # A2: ambas variables saltadas → RegistroDiario creado con FC=None, FR=None.
+        self._crear_paciente()
+        respuesta = self._completar_flujo(
+            frecuencia_cardiaca="no sé", frecuencia_respiratoria="sin dato"
+        )
+        self.assertEqual(respuesta, bot.MSG_CONFIRMACION)
+        registro = RegistroDiario.objects.get()
+        self.assertIsNone(registro.frecuencia_cardiaca)
+        self.assertIsNone(registro.frecuencia_respiratoria)
+
     def test_fc_fuera_de_rango_reintenta(self):
         # Un valor fuera del rango 30-250 lpm se rechaza y pide reintento,
         # sin avanzar de estado ni crear registro.
@@ -1233,6 +1276,100 @@ class BotWhatsAppTests(TestCase):
             conv.estado, ConversacionWhatsApp.ESTADO_FRECUENCIA_CARDIACA
         )
         self.assertEqual(RegistroDiario.objects.count(), 0)
+
+
+class ParseEnteroRangoDecimalTests(TestCase):
+    """C4 — _parse_entero_rango rechaza decimales con punto y coma."""
+
+    def test_punto_decimal_devuelve_none(self):
+        self.assertIsNone(bot._parse_entero_rango("78.5", 30, 250))
+
+    def test_coma_decimal_devuelve_none(self):
+        self.assertIsNone(bot._parse_entero_rango("78,5", 30, 250))
+
+    def test_entero_valido_pasa(self):
+        self.assertEqual(bot._parse_entero_rango("78", 30, 250), 78)
+
+    def test_fc_decimal_pide_reintento(self):
+        """Flujo real: paciente escribe "78.5" en la pregunta de FC → reintento."""
+        Paciente.objects.create(
+            nombre_completo="Paciente Decimal FC",
+            telefono_whatsapp="+573007778881",
+            fecha_cirugia=timezone.localdate() - timedelta(days=3),
+        )
+        from signos_sintomas import bot as b
+        conv = ConversacionWhatsApp.objects.create(
+            paciente=Paciente.objects.get(telefono_whatsapp="+573007778881"),
+            estado=ConversacionWhatsApp.ESTADO_FRECUENCIA_CARDIACA,
+        )
+        respuesta = b.procesar_mensaje("+573007778881", "78.5")
+        self.assertIn("latidos", respuesta.lower())
+        conv.refresh_from_db()
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_FRECUENCIA_CARDIACA)
+
+
+class BotAbandonoConversacionTests(TestCase):
+    """A1 — Conversación abandonada a mitad de flujo en un día anterior."""
+
+    TELEFONO = "+573001119999"
+    TELEFONO_TWILIO = "whatsapp:+573001119999"
+
+    def _crear_paciente(self):
+        return Paciente.objects.create(
+            nombre_completo="Paciente Abandono",
+            telefono_whatsapp=self.TELEFONO,
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),
+        )
+
+    def test_conversacion_en_flujo_ayer_reinicia_con_aviso(self):
+        paciente = self._crear_paciente()
+        conv = ConversacionWhatsApp.objects.create(paciente=paciente)
+        conv.estado = ConversacionWhatsApp.ESTADO_DOLOR
+        conv.temp_temperatura = Decimal("37.0")
+        conv.save()
+        # Simular que la última actualización fue ayer
+        ayer = timezone.now() - timedelta(days=1)
+        ConversacionWhatsApp.objects.filter(pk=conv.pk).update(fecha_actualizacion=ayer)
+
+        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
+
+        self.assertIn("ayer no pudimos terminar", respuesta)
+        self.assertEqual(RegistroDiario.objects.count(), 0)
+        conv.refresh_from_db()
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_TEMPERATURA)
+        self.assertIsNone(conv.temp_temperatura)
+
+    def test_inicio_incompleto_ayer_no_es_abandono(self):
+        # Estado INICIO desde días anteriores: no es "flujo" → no envía aviso.
+        paciente = self._crear_paciente()
+        conv = ConversacionWhatsApp.objects.create(paciente=paciente)
+        ConversacionWhatsApp.objects.filter(pk=conv.pk).update(
+            fecha_actualizacion=timezone.now() - timedelta(days=1)
+        )
+
+        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
+
+        self.assertEqual(respuesta, bot.MSG_PREGUNTA_TEMPERATURA)
+        self.assertNotIn("ayer no pudimos terminar", respuesta)
+
+    def test_despues_de_aviso_flujo_normal_continua(self):
+        # Después del reinicio con aviso, el bot espera temperatura.
+        paciente = self._crear_paciente()
+        conv = ConversacionWhatsApp.objects.create(paciente=paciente)
+        conv.estado = ConversacionWhatsApp.ESTADO_DOLOR
+        conv.temp_temperatura = Decimal("37.0")
+        conv.save()
+        ConversacionWhatsApp.objects.filter(pk=conv.pk).update(
+            fecha_actualizacion=timezone.now() - timedelta(days=1)
+        )
+
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")  # recibe aviso
+        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "37.2")  # temperatura
+
+        self.assertEqual(respuesta, bot.MSG_PREGUNTA_DOLOR)
+        conv.refresh_from_db()
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_DOLOR)
+        self.assertEqual(conv.temp_temperatura, Decimal("37.2"))
 
 
 class WebhookWhatsAppTests(TestCase):
@@ -1273,6 +1410,69 @@ class WebhookWhatsAppTests(TestCase):
             self.client.post(
                 self.url, {'From': 'whatsapp:+573001112233', 'Body': 'hola'}
             )
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=True, TWILIO_AUTH_TOKEN='token_falso')
+    def test_header_ausente_devuelve_403(self):
+        # Sin X-Twilio-Signature en el request → la firma vacía no valida → 403.
+        respuesta = self.client.post(
+            self.url,
+            {'From': 'whatsapp:+573001112233', 'Body': 'hola'},
+            # No se incluye HTTP_X_TWILIO_SIGNATURE
+        )
+        self.assertEqual(respuesta.status_code, 403)
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_body_vacio_devuelve_twiml(self):
+        # Body ausente / vacío no debe romper el webhook; paciente desconocido
+        # recibe respuesta amable.
+        respuesta = self.client.post(
+            self.url,
+            {'From': 'whatsapp:+573009999999', 'Body': ''},
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta['Content-Type'], 'application/xml')
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_idempotencia_mismo_sid_ignora_segundo_mensaje(self):
+        # Twilio puede reintentar un webhook con el mismo MessageSid.
+        # El segundo mensaje con el mismo SID debe devolver TwiML vacío sin
+        # ejecutar la lógica del bot de nuevo.
+        Paciente.objects.create(
+            nombre_completo="Paciente Idempotencia",
+            telefono_whatsapp="+573002223344",
+            fecha_cirugia=timezone.localdate() - timedelta(days=2),
+        )
+        payload = {
+            'From': 'whatsapp:+573002223344',
+            'Body': 'hola',
+            'MessageSid': 'SMidempotencia0001',
+        }
+        primera = self.client.post(self.url, payload)
+        segunda = self.client.post(self.url, payload)
+
+        self.assertEqual(primera.status_code, 200)
+        self.assertEqual(segunda.status_code, 200)
+        # Segunda respuesta es TwiML vacío (sin <Message>)
+        self.assertNotIn(b'<Message>', segunda.content)
+        # Primera sí tiene contenido
+        self.assertIn(b'<Message>', primera.content)
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_rate_limit_excedido_devuelve_twiml_vacio(self):
+        # Más de _LIMITE_MENSAJES_HORA (20) mensajes del mismo número en una
+        # hora → los mensajes excedentes reciben TwiML vacío sin procesar.
+        from signos_sintomas.views import _LIMITE_MENSAJES_HORA
+        telefono = 'whatsapp:+573005556677'
+        # Forzar el contador de cache directamente al límite
+        clave = 'rl_wh_{}'.format(telefono.replace('+', '').replace(':', ''))
+        cache.set(clave, _LIMITE_MENSAJES_HORA, 3600)
+
+        respuesta = self.client.post(
+            self.url,
+            {'From': telefono, 'Body': 'hola'},
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertNotIn(b'<Message>', respuesta.content)
 
 
 class PacienteMedicoFKTests(TestCase):
@@ -1321,3 +1521,196 @@ class PacienteMedicoFKTests(TestCase):
         medico.delete()
         paciente.refresh_from_db()
         self.assertIsNone(paciente.medico_responsable)
+
+
+class AdminScopingTests(TestCase):
+    """Tests de scoping del admin por médico responsable (B6 + D2 + D5)."""
+
+    def setUp(self):
+        from decimal import Decimal
+        from django.contrib.auth.models import Permission
+        from django.contrib.contenttypes.models import ContentType
+
+        User = get_user_model()
+        self.medico_a = User.objects.create_user(
+            username='dr_a', password='pass', is_staff=True
+        )
+        self.medico_b = User.objects.create_user(
+            username='dr_b', password='pass', is_staff=True
+        )
+        self.superuser = User.objects.create_superuser(
+            username='super', password='pass'
+        )
+        # Los usuarios staff necesitan permisos explícitos de modelo para
+        # acceder al admin — sin esto los 403 vendrían de falta de permiso
+        # general, no del scoping por médico (falso positivo en tests).
+        for model in (Paciente, RegistroDiario, Alerta):
+            ct = ContentType.objects.get_for_model(model)
+            perms = Permission.objects.filter(content_type=ct)
+            self.medico_a.user_permissions.add(*perms)
+            self.medico_b.user_permissions.add(*perms)
+
+        self.paciente_a = Paciente.objects.create(
+            nombre_completo="Paciente del Doctor A",
+            telefono_whatsapp="+573010000001",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable=self.medico_a,
+        )
+        self.paciente_b = Paciente.objects.create(
+            nombre_completo="Paciente del Doctor B",
+            telefono_whatsapp="+573010000002",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable=self.medico_b,
+        )
+        _campos_base = dict(
+            temperatura=Decimal('37.0'),
+            dolor_eva=3,
+            aspecto_drenaje='sin_drenaje',
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        self.registro_a = RegistroDiario.objects.create(
+            paciente=self.paciente_a, **_campos_base
+        )
+        self.registro_b = RegistroDiario.objects.create(
+            paciente=self.paciente_b, **_campos_base
+        )
+        self.alerta_a = Alerta.objects.create(
+            paciente=self.paciente_a,
+            registro_origen=self.registro_a,
+            tipo='SEPSIS', severidad='BAJA', mensaje='Alerta A',
+        )
+        self.alerta_b = Alerta.objects.create(
+            paciente=self.paciente_b,
+            registro_origen=self.registro_b,
+            tipo='SEPSIS', severidad='BAJA', mensaje='Alerta B',
+        )
+
+    def _login(self, user):
+        self.client.force_login(user)
+
+    # ------------------------------------------------------------------ #
+    # PacienteAdmin                                                        #
+    # ------------------------------------------------------------------ #
+
+    def test_medico_ve_solo_sus_pacientes_en_changelist(self):
+        self._login(self.medico_a)
+        resp = self.client.get('/admin/signos_sintomas/paciente/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Paciente del Doctor A")
+        self.assertNotContains(resp, "Paciente del Doctor B")
+
+    def test_superuser_ve_todos_en_changelist_paciente(self):
+        self._login(self.superuser)
+        resp = self.client.get('/admin/signos_sintomas/paciente/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Paciente del Doctor A")
+        self.assertContains(resp, "Paciente del Doctor B")
+
+    def test_medico_no_puede_editar_paciente_ajeno(self):
+        self._login(self.medico_a)
+        url = f'/admin/signos_sintomas/paciente/{self.paciente_b.pk}/change/'
+        resp = self.client.get(url)
+        # El objeto no está en el queryset del médico → Django admin redirige
+        # (302). En Django 6 el destino es /admin/ (índice). Lo relevante para
+        # seguridad: el formulario de edición NUNCA se renderiza (no 200).
+        self.assertEqual(resp.status_code, 302)
+        self.assertRegex(resp.url, r'^/admin/')
+
+    def test_medico_puede_editar_su_propio_paciente(self):
+        self._login(self.medico_a)
+        url = f'/admin/signos_sintomas/paciente/{self.paciente_a.pk}/change/'
+        self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_superuser_puede_editar_cualquier_paciente(self):
+        self._login(self.superuser)
+        url = f'/admin/signos_sintomas/paciente/{self.paciente_b.pk}/change/'
+        self.assertEqual(self.client.get(url).status_code, 200)
+
+    # ------------------------------------------------------------------ #
+    # RegistroDiarioAdmin                                                  #
+    # ------------------------------------------------------------------ #
+
+    def test_medico_ve_solo_sus_registros_en_changelist(self):
+        self._login(self.medico_a)
+        resp = self.client.get('/admin/signos_sintomas/registrodiario/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Paciente del Doctor A")
+        self.assertNotContains(resp, "Paciente del Doctor B")
+
+    def test_superuser_ve_todos_en_changelist_registro(self):
+        self._login(self.superuser)
+        resp = self.client.get('/admin/signos_sintomas/registrodiario/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Paciente del Doctor A")
+        self.assertContains(resp, "Paciente del Doctor B")
+
+    def test_medico_no_puede_editar_registro_ajeno(self):
+        self._login(self.medico_a)
+        url = f'/admin/signos_sintomas/registrodiario/{self.registro_b.pk}/change/'
+        resp = self.client.get(url)
+        # El objeto no está en el queryset del médico → Django admin redirige
+        # (302). En Django 6 el destino es /admin/ (índice). Lo relevante para
+        # seguridad: el formulario de edición NUNCA se renderiza (no 200).
+        self.assertEqual(resp.status_code, 302)
+        self.assertRegex(resp.url, r'^/admin/')
+
+    def test_superuser_puede_editar_cualquier_registro(self):
+        self._login(self.superuser)
+        url = f'/admin/signos_sintomas/registrodiario/{self.registro_b.pk}/change/'
+        self.assertEqual(self.client.get(url).status_code, 200)
+
+    # ------------------------------------------------------------------ #
+    # AlertaAdmin                                                          #
+    # ------------------------------------------------------------------ #
+
+    def test_medico_ve_solo_sus_alertas_en_changelist(self):
+        self._login(self.medico_a)
+        resp = self.client.get('/admin/signos_sintomas/alerta/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Paciente del Doctor A")
+        self.assertNotContains(resp, "Paciente del Doctor B")
+
+    def test_superuser_ve_todas_las_alertas_en_changelist(self):
+        self._login(self.superuser)
+        resp = self.client.get('/admin/signos_sintomas/alerta/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Paciente del Doctor A")
+        self.assertContains(resp, "Paciente del Doctor B")
+
+    def test_medico_no_puede_editar_alerta_ajena(self):
+        self._login(self.medico_a)
+        url = f'/admin/signos_sintomas/alerta/{self.alerta_b.pk}/change/'
+        resp = self.client.get(url)
+        # El objeto no está en el queryset del médico → Django admin redirige
+        # (302). En Django 6 el destino es /admin/ (índice). Lo relevante para
+        # seguridad: el formulario de edición NUNCA se renderiza (no 200).
+        self.assertEqual(resp.status_code, 302)
+        self.assertRegex(resp.url, r'^/admin/')
+
+    def test_medico_no_puede_borrar_alerta_propia(self):
+        # Alertas son registros clínicos; has_delete_permission retorna False
+        # para cualquier no-superuser → 403 en la vista de borrado.
+        self._login(self.medico_a)
+        url = f'/admin/signos_sintomas/alerta/{self.alerta_a.pk}/delete/'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_superuser_puede_acceder_a_alerta_ajena(self):
+        self._login(self.superuser)
+        url = f'/admin/signos_sintomas/alerta/{self.alerta_b.pk}/change/'
+        self.assertEqual(self.client.get(url).status_code, 200)
+
+
+class CacheProductionConfigTests(TestCase):
+    """D1 — Detecta dependencia redis faltante cuando producción usa RedisCache."""
+
+    def test_redis_importable_para_settings_produccion(self):
+        try:
+            import redis  # noqa: F401
+        except ImportError:
+            self.fail(
+                "Paquete 'redis' no instalado. "
+                "settings_production.py usa RedisCache y requiere redis>=5. "
+                "Instalar con: pip install 'redis>=5'"
+            )

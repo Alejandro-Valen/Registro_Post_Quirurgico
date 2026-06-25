@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models import CheckConstraint, Q
 
 
 class Paciente(models.Model):
@@ -47,6 +48,15 @@ class Paciente(models.Model):
         verbose_name = "Paciente"
         verbose_name_plural = "Pacientes"
         ordering = ["-fecha_registro"]
+        constraints = [
+            CheckConstraint(
+                condition=(
+                    Q(tipo_cirugia__isnull=True)
+                    | Q(tipo_cirugia__in=['sugarbaker_hipec', 'colectomia_electiva', 'otra'])
+                ),
+                name='paciente_tipo_cirugia_valido',
+            ),
+        ]
 
     def __str__(self):
         if self.medico_responsable is None:
@@ -163,7 +173,7 @@ class RegistroDiario(models.Model):
             "falsas alertas provenían del sensor de FR)."
         )
     )
-    fecha_registro = models.DateTimeField(auto_now_add=True)
+    fecha_registro = models.DateTimeField(auto_now_add=True, db_index=True)
     dia_postoperatorio = models.PositiveSmallIntegerField(
         editable=False,
         default=0
@@ -173,6 +183,28 @@ class RegistroDiario(models.Model):
         verbose_name = "Registro Diario"
         verbose_name_plural = "Registros Diarios"
         ordering = ["-fecha_registro"]
+        constraints = [
+            CheckConstraint(
+                condition=Q(aspecto_drenaje__in=[
+                    'seroso', 'hematico', 'turbio', 'purulento', 'fecaloide', 'sin_drenaje',
+                ]),
+                name='registrodiario_aspecto_drenaje_valido',
+            ),
+            CheckConstraint(
+                condition=(
+                    Q(cantidad_drenaje__isnull=True)
+                    | Q(cantidad_drenaje__in=['poco', 'normal', 'mucho', 'sin_drenaje'])
+                ),
+                name='registrodiario_cantidad_drenaje_valido',
+            ),
+            CheckConstraint(
+                condition=(
+                    Q(hinchazon_abdominal__isnull=True)
+                    | Q(hinchazon_abdominal__in=['nada', 'algo', 'mucho'])
+                ),
+                name='registrodiario_hinchazon_abdominal_valido',
+            ),
+        ]
 
     def save(self, *args, **kwargs):
         from django.utils import timezone
@@ -237,6 +269,19 @@ class Alerta(models.Model):
         verbose_name = "Alerta"
         verbose_name_plural = "Alertas"
         ordering = ["-fecha_alerta"]
+        constraints = [
+            CheckConstraint(
+                condition=Q(tipo__in=[
+                    'SEPSIS', 'FUGA_ANASTOMOTICA', 'ILEO_PARALITICO',
+                    'DOLOR_AGUDO', 'INTOLERANCIA_ORAL', 'TAQUICARDIA',
+                ]),
+                name='alerta_tipo_valido',
+            ),
+            CheckConstraint(
+                condition=Q(severidad__in=['ALTA', 'MEDIA', 'BAJA']),
+                name='alerta_severidad_valida',
+            ),
+        ]
 
     def __str__(self):
         estado = "Resuelta" if self.resuelta else "ACTIVA"
