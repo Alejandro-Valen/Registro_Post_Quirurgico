@@ -443,11 +443,11 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 
 **Grupo B — Hardening de producción:**
 - [x] B1 — settings.py sin configuración de producción
-- [ ] B2 — Sin LOGGING configurado (datos médicos en logs)
-- [ ] B3 — Path síncrono del webhook (timeout de Twilio)
-- [ ] B4 — `fecha_registro` sin índice eficiente para filtros
-- [ ] B5 — Admin en `/admin/` sin controles adicionales
-- [ ] B6 — Admin sin scoping por médico (Sprint 4)
+- [x] B2 — Sin LOGGING configurado (datos médicos en logs)
+- [x] B3 — Path síncrono del webhook (timeout de Twilio)
+- [x] B4 — `fecha_registro` sin índice eficiente para filtros
+- [x] B5 — Admin en `/admin/` sin controles adicionales
+- [x] B6 — Admin sin scoping por médico (Sprint 4)
 - [ ] B7 — Tests del webhook incompletos
 
 **Grupo C — Backlog:**
