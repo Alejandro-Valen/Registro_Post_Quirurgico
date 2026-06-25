@@ -5,3 +5,4 @@ psycopg2-binary>=2.9
 python-decouple>=3.8
 twilio>=9.10
 django-axes==7.0.1
+redis>=5

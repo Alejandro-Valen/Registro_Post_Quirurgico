@@ -105,6 +105,7 @@ class AlertaAdmin(admin.ModelAdmin):
         return super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
-        if obj is not None and _solo_propios(request):
-            return obj.paciente.medico_responsable == request.user
-        return super().has_delete_permission(request, obj)
+        # Alertas son registros clínicos del sistema — la trazabilidad es
+        # obligatoria. Solo superuser puede borrarlas; el flujo correcto para
+        # médicos es marcar 'resuelta=True', no eliminar el registro.
+        return request.user.is_superuser

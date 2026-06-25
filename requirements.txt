@@ -150,6 +150,7 @@ pywin32==308
 pywinpty==3.0.2
 PyYAML==6.0.3
 pyzmq==26.2.1
+redis==8.0.1
 reedsolo==1.7.0
 referencing==0.37.0
 requests==2.32.5
