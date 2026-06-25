@@ -439,10 +439,10 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 - [x] A3 — Webhook sin idempotencia (MessageSid)
 - [x] A4 — Sin `select_for_update()` en estado conversacional
 - [x] A5 — Sin rate limiting en el webhook
-- [ ] A6 — `DEBUG=True` con Twilio/ngrok real activo
+- [x] A6 — `DEBUG=True` con Twilio/ngrok real activo
 
 **Grupo B — Hardening de producción:**
-- [ ] B1 — settings.py sin configuración de producción
+- [x] B1 — settings.py sin configuración de producción
 - [ ] B2 — Sin LOGGING configurado (datos médicos en logs)
 - [ ] B3 — Path síncrono del webhook (timeout de Twilio)
 - [ ] B4 — `fecha_registro` sin índice eficiente para filtros
