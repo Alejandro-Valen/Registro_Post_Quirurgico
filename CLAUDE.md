@@ -337,22 +337,16 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Funcional end-to-end — merge a Desarrollo POSPUESTO a propósito (ver nota) |
 | Sprint 3.5 | Auditoría de literatura, generalización de alcance/marca y documentación | ✅ Completado |
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
+| Sprint 3-Hardening | Seguridad y robustez pre-producción | ⏳ Pendiente (post-merge, rama sprint-3-hardening) |
 | Sprint 4 | Dashboard médico y notificaciones | ⏳ Pendiente |
 | Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ Pendiente |
 
-**Punto actual:** Sprint 3 funcional end-to-end. **Fase de decisiones
-de arquitectura clínica del `alert_engine` COMPLETA — las 5 variables
-del núcleo clínico reescritas** bajo el modelo de alta sensibilidad:
-drenaje, temperatura, gases, náuseas y dolor (69 tests OK). **Paso 2
-(variables nuevas) COMPLETO — 4 de 4:** tolerancia a líquidos (Regla 6,
-`INTOLERANCIA_ORAL`), hinchazón abdominal (Regla 7, `ILEO_PARALITICO`),
-frecuencia cardíaca (Regla 8, `TAQUICARDIA`) y frecuencia respiratoria
-(solo-dashboard, sin alerta). Pendiente antes del merge: implementar en
-`bot.py` la frecuencia de check-ins ya decidida (2×/día fijo) y hacer un
-repaso final de `alert_engine.py` completo. Ver
-`docs/auditoria_literatura/SINTESIS_CRUZADA_UMBRALES.md` para el detalle
-original de la auditoría. El merge `sprint-3-whatsapp` → `Desarrollo`
-sigue pospuesto hasta cerrar esos pendientes.
+**Punto actual:** Sprint 3 completo (8 reglas del alert_engine, 4
+variables nuevas, 74 tests, `medico_responsable` como FK). Auditoría
+de cierre realizada — ver `AUDITORIA_SPRINT3_CIERRE.md`. **Próximo
+paso inmediato: merge `sprint-3-whatsapp` → `Desarrollo`, luego rama
+`sprint-3-hardening` para resolver Grupo A y B antes de producción
+real.**
 
 - ✅ **Paso 1:** modelo `ConversacionWhatsApp` + campo `cantidad_drenaje` en
   `RegistroDiario` + migración `0002` aplicada.
