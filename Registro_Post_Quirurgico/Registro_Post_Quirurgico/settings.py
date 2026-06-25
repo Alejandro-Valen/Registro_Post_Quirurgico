@@ -1,12 +1,20 @@
 from pathlib import Path
-from decouple import config
+from decouple import config, Csv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = config('SECRET_KEY')
-DEBUG = config('DEBUG', default=True, cast=bool)
+DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = []
+# Hosts permitidos: se definen por .env (separados por coma), NUNCA con wildcard
+# '*' en el código. Dev: agrega tu dominio de ngrok. Prod: el dominio real.
+# Si queda vacío y DEBUG=False, Django rechaza todo (fail-closed seguro).
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='', cast=Csv())
+
+# En desarrollo, garantizar acceso local aunque se haya definido un host de ngrok
+# en .env (definir ALLOWED_HOSTS desactiva el permiso automático de localhost).
+if DEBUG:
+    ALLOWED_HOSTS += ['localhost', '127.0.0.1']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -74,3 +82,17 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# --- Twilio / WhatsApp webhook (Sprint 3) ---
+# Fail-safe: si la variable NO existe en .env, la validación queda ACTIVA.
+# Para desactivarla (solo pruebas locales) hay que escribirla explícitamente:
+#   TWILIO_VALIDATE_SIGNATURE=False
+TWILIO_VALIDATE_SIGNATURE = config('TWILIO_VALIDATE_SIGNATURE', default=True, cast=bool)
+# Secreto: vive solo en .env. default='' para no romper el arranque; la ausencia
+# real se maneja con error claro en el webhook (nunca falla abierto).
+TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
+
+# Detrás de un túnel/proxy (ngrok): que build_absolute_uri() reconstruya la URL
+# pública https que Twilio firmó (imprescindible para validar X-Twilio-Signature).
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

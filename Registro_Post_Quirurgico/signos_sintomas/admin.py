@@ -4,10 +4,19 @@ from .models import Paciente, RegistroDiario, Alerta
 
 @admin.register(Paciente)
 class PacienteAdmin(admin.ModelAdmin):
-    list_display = ['nombre_completo', 'medico_responsable',
+    list_display = ['nombre_completo', 'medico_nombre',
                     'fecha_cirugia', 'activo']
     list_filter = ['activo', 'medico_responsable']
-    search_fields = ['nombre_completo', 'telefono_whatsapp']
+    search_fields = ['nombre_completo', 'telefono_whatsapp',
+                     'medico_responsable__first_name',
+                     'medico_responsable__last_name',
+                     'medico_responsable__username']
+
+    @admin.display(description='Médico responsable')
+    def medico_nombre(self, obj):
+        if obj.medico_responsable is None:
+            return '— Sin asignar'
+        return obj.medico_responsable.get_full_name() or obj.medico_responsable.username
 
 
 @admin.register(RegistroDiario)
