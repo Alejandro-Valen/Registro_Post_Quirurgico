@@ -1524,9 +1524,10 @@ class PacienteMedicoFKTests(TestCase):
 
 
 class AdminScopingTests(TestCase):
-    """Tests de scoping del admin por médico responsable (B6 + hallazgos auditoría)."""
+    """Tests de scoping del admin por médico responsable (B6 + D2 + D5)."""
 
     def setUp(self):
+        from decimal import Decimal
         from django.contrib.auth.models import Permission
         from django.contrib.contenttypes.models import ContentType
 
@@ -1540,12 +1541,15 @@ class AdminScopingTests(TestCase):
         self.superuser = User.objects.create_superuser(
             username='super', password='pass'
         )
-        # Staff users need explicit model permissions to access Django admin.
+        # Los usuarios staff necesitan permisos explícitos de modelo para
+        # acceder al admin — sin esto los 403 vendrían de falta de permiso
+        # general, no del scoping por médico (falso positivo en tests).
         for model in (Paciente, RegistroDiario, Alerta):
             ct = ContentType.objects.get_for_model(model)
             perms = Permission.objects.filter(content_type=ct)
             self.medico_a.user_permissions.add(*perms)
             self.medico_b.user_permissions.add(*perms)
+
         self.paciente_a = Paciente.objects.create(
             nombre_completo="Paciente del Doctor A",
             telefono_whatsapp="+573010000001",
@@ -1558,11 +1562,36 @@ class AdminScopingTests(TestCase):
             fecha_cirugia=timezone.localdate(),
             medico_responsable=self.medico_b,
         )
+        _campos_base = dict(
+            temperatura=Decimal('37.0'),
+            dolor_eva=3,
+            aspecto_drenaje='sin_drenaje',
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        self.registro_a = RegistroDiario.objects.create(
+            paciente=self.paciente_a, **_campos_base
+        )
+        self.registro_b = RegistroDiario.objects.create(
+            paciente=self.paciente_b, **_campos_base
+        )
+        self.alerta_a = Alerta.objects.create(
+            paciente=self.paciente_a,
+            registro_origen=self.registro_a,
+            tipo='SEPSIS', severidad='BAJA', mensaje='Alerta A',
+        )
+        self.alerta_b = Alerta.objects.create(
+            paciente=self.paciente_b,
+            registro_origen=self.registro_b,
+            tipo='SEPSIS', severidad='BAJA', mensaje='Alerta B',
+        )
 
     def _login(self, user):
         self.client.force_login(user)
 
-    # --- Changelist ---
+    # ------------------------------------------------------------------ #
+    # PacienteAdmin                                                        #
+    # ------------------------------------------------------------------ #
 
     def test_medico_ve_solo_sus_pacientes_en_changelist(self):
         self._login(self.medico_a)
@@ -1571,31 +1600,117 @@ class AdminScopingTests(TestCase):
         self.assertContains(resp, "Paciente del Doctor A")
         self.assertNotContains(resp, "Paciente del Doctor B")
 
-    def test_superuser_ve_todos_en_changelist(self):
+    def test_superuser_ve_todos_en_changelist_paciente(self):
         self._login(self.superuser)
         resp = self.client.get('/admin/signos_sintomas/paciente/')
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Paciente del Doctor A")
         self.assertContains(resp, "Paciente del Doctor B")
 
-    # --- URL directa al objeto ajeno ---
-
     def test_medico_no_puede_editar_paciente_ajeno(self):
         self._login(self.medico_a)
         url = f'/admin/signos_sintomas/paciente/{self.paciente_b.pk}/change/'
         resp = self.client.get(url)
-        # has_change_permission(obj) devuelve False → Django admin redirige
-        # al changelist (no muestra el formulario del paciente ajeno).
-        self.assertIn(resp.status_code, (302, 403))
+        # El objeto no está en el queryset del médico → Django admin redirige
+        # (302). En Django 6 el destino es /admin/ (índice). Lo relevante para
+        # seguridad: el formulario de edición NUNCA se renderiza (no 200).
+        self.assertEqual(resp.status_code, 302)
+        self.assertRegex(resp.url, r'^/admin/')
 
     def test_medico_puede_editar_su_propio_paciente(self):
         self._login(self.medico_a)
         url = f'/admin/signos_sintomas/paciente/{self.paciente_a.pk}/change/'
-        resp = self.client.get(url)
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.client.get(url).status_code, 200)
 
     def test_superuser_puede_editar_cualquier_paciente(self):
         self._login(self.superuser)
         url = f'/admin/signos_sintomas/paciente/{self.paciente_b.pk}/change/'
-        resp = self.client.get(url)
+        self.assertEqual(self.client.get(url).status_code, 200)
+
+    # ------------------------------------------------------------------ #
+    # RegistroDiarioAdmin                                                  #
+    # ------------------------------------------------------------------ #
+
+    def test_medico_ve_solo_sus_registros_en_changelist(self):
+        self._login(self.medico_a)
+        resp = self.client.get('/admin/signos_sintomas/registrodiario/')
         self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Paciente del Doctor A")
+        self.assertNotContains(resp, "Paciente del Doctor B")
+
+    def test_superuser_ve_todos_en_changelist_registro(self):
+        self._login(self.superuser)
+        resp = self.client.get('/admin/signos_sintomas/registrodiario/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Paciente del Doctor A")
+        self.assertContains(resp, "Paciente del Doctor B")
+
+    def test_medico_no_puede_editar_registro_ajeno(self):
+        self._login(self.medico_a)
+        url = f'/admin/signos_sintomas/registrodiario/{self.registro_b.pk}/change/'
+        resp = self.client.get(url)
+        # El objeto no está en el queryset del médico → Django admin redirige
+        # (302). En Django 6 el destino es /admin/ (índice). Lo relevante para
+        # seguridad: el formulario de edición NUNCA se renderiza (no 200).
+        self.assertEqual(resp.status_code, 302)
+        self.assertRegex(resp.url, r'^/admin/')
+
+    def test_superuser_puede_editar_cualquier_registro(self):
+        self._login(self.superuser)
+        url = f'/admin/signos_sintomas/registrodiario/{self.registro_b.pk}/change/'
+        self.assertEqual(self.client.get(url).status_code, 200)
+
+    # ------------------------------------------------------------------ #
+    # AlertaAdmin                                                          #
+    # ------------------------------------------------------------------ #
+
+    def test_medico_ve_solo_sus_alertas_en_changelist(self):
+        self._login(self.medico_a)
+        resp = self.client.get('/admin/signos_sintomas/alerta/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Paciente del Doctor A")
+        self.assertNotContains(resp, "Paciente del Doctor B")
+
+    def test_superuser_ve_todas_las_alertas_en_changelist(self):
+        self._login(self.superuser)
+        resp = self.client.get('/admin/signos_sintomas/alerta/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Paciente del Doctor A")
+        self.assertContains(resp, "Paciente del Doctor B")
+
+    def test_medico_no_puede_editar_alerta_ajena(self):
+        self._login(self.medico_a)
+        url = f'/admin/signos_sintomas/alerta/{self.alerta_b.pk}/change/'
+        resp = self.client.get(url)
+        # El objeto no está en el queryset del médico → Django admin redirige
+        # (302). En Django 6 el destino es /admin/ (índice). Lo relevante para
+        # seguridad: el formulario de edición NUNCA se renderiza (no 200).
+        self.assertEqual(resp.status_code, 302)
+        self.assertRegex(resp.url, r'^/admin/')
+
+    def test_medico_no_puede_borrar_alerta_propia(self):
+        # Alertas son registros clínicos; has_delete_permission retorna False
+        # para cualquier no-superuser → 403 en la vista de borrado.
+        self._login(self.medico_a)
+        url = f'/admin/signos_sintomas/alerta/{self.alerta_a.pk}/delete/'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_superuser_puede_acceder_a_alerta_ajena(self):
+        self._login(self.superuser)
+        url = f'/admin/signos_sintomas/alerta/{self.alerta_b.pk}/change/'
+        self.assertEqual(self.client.get(url).status_code, 200)
+
+
+class CacheProductionConfigTests(TestCase):
+    """D1 — Detecta dependencia redis faltante cuando producción usa RedisCache."""
+
+    def test_redis_importable_para_settings_produccion(self):
+        try:
+            import redis  # noqa: F401
+        except ImportError:
+            self.fail(
+                "Paquete 'redis' no instalado. "
+                "settings_production.py usa RedisCache y requiere redis>=5. "
+                "Instalar con: pip install 'redis>=5'"
+            )
