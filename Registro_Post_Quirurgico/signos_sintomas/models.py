@@ -163,7 +163,7 @@ class RegistroDiario(models.Model):
             "falsas alertas provenían del sensor de FR)."
         )
     )
-    fecha_registro = models.DateTimeField(auto_now_add=True)
+    fecha_registro = models.DateTimeField(auto_now_add=True, db_index=True)
     dia_postoperatorio = models.PositiveSmallIntegerField(
         editable=False,
         default=0
