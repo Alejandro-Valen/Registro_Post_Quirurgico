@@ -10,9 +10,10 @@ _MAX_MENSAJE = 2000
 
 
 def _get_client_ip(request):
-    forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if forwarded_for:
-        return forwarded_for.split(',')[0].strip()
+    # Usa REMOTE_ADDR: no es spoofeable por el cliente.
+    # X-Forwarded-For se descarta porque el primer elemento lo pone el cliente
+    # y puede ser falso. El proxy/balanceador de producción debe configurarse
+    # para que REMOTE_ADDR refleje la IP real (Nginx: proxy_set_header).
     return request.META.get('REMOTE_ADDR', '')
 
 

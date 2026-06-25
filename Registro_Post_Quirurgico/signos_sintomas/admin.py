@@ -1,5 +1,11 @@
 from django.contrib import admin
+from django.contrib.auth import get_user_model
 from .models import Paciente, RegistroDiario, Alerta
+
+
+def _solo_propios(request):
+    """True si el usuario debe ver solo sus propios datos (no superuser)."""
+    return not request.user.is_superuser
 
 
 @admin.register(Paciente)
@@ -21,9 +27,25 @@ class PacienteAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         """B6: cada médico solo ve sus propios pacientes. Superuser ve todos."""
         qs = super().get_queryset(request)
-        if request.user.is_superuser:
-            return qs
-        return qs.filter(medico_responsable=request.user)
+        if _solo_propios(request):
+            return qs.filter(medico_responsable=request.user)
+        return qs
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """B6: médico no-superuser solo puede asignarse a sí mismo como responsable."""
+        if db_field.name == 'medico_responsable' and _solo_propios(request):
+            kwargs['queryset'] = get_user_model().objects.filter(pk=request.user.pk)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and _solo_propios(request):
+            return obj.medico_responsable == request.user
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and _solo_propios(request):
+            return obj.medico_responsable == request.user
+        return super().has_delete_permission(request, obj)
 
 
 @admin.register(RegistroDiario)
@@ -36,9 +58,27 @@ class RegistroDiarioAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         """B6: solo registros de pacientes propios del médico. Superuser ve todos."""
         qs = super().get_queryset(request)
-        if request.user.is_superuser:
-            return qs
-        return qs.filter(paciente__medico_responsable=request.user)
+        if _solo_propios(request):
+            return qs.filter(paciente__medico_responsable=request.user)
+        return qs
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """B6: dropdown de paciente limitado a los del médico actual."""
+        if db_field.name == 'paciente' and _solo_propios(request):
+            kwargs['queryset'] = Paciente.objects.filter(
+                medico_responsable=request.user
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and _solo_propios(request):
+            return obj.paciente.medico_responsable == request.user
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and _solo_propios(request):
+            return obj.paciente.medico_responsable == request.user
+        return super().has_delete_permission(request, obj)
 
 
 @admin.register(Alerta)
@@ -55,6 +95,16 @@ class AlertaAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         """B6: solo alertas de pacientes propios del médico. Superuser ve todos."""
         qs = super().get_queryset(request)
-        if request.user.is_superuser:
-            return qs
-        return qs.filter(paciente__medico_responsable=request.user)
+        if _solo_propios(request):
+            return qs.filter(paciente__medico_responsable=request.user)
+        return qs
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and _solo_propios(request):
+            return obj.paciente.medico_responsable == request.user
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and _solo_propios(request):
+            return obj.paciente.medico_responsable == request.user
+        return super().has_delete_permission(request, obj)

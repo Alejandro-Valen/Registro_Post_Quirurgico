@@ -1521,3 +1521,81 @@ class PacienteMedicoFKTests(TestCase):
         medico.delete()
         paciente.refresh_from_db()
         self.assertIsNone(paciente.medico_responsable)
+
+
+class AdminScopingTests(TestCase):
+    """Tests de scoping del admin por médico responsable (B6 + hallazgos auditoría)."""
+
+    def setUp(self):
+        from django.contrib.auth.models import Permission
+        from django.contrib.contenttypes.models import ContentType
+
+        User = get_user_model()
+        self.medico_a = User.objects.create_user(
+            username='dr_a', password='pass', is_staff=True
+        )
+        self.medico_b = User.objects.create_user(
+            username='dr_b', password='pass', is_staff=True
+        )
+        self.superuser = User.objects.create_superuser(
+            username='super', password='pass'
+        )
+        # Staff users need explicit model permissions to access Django admin.
+        for model in (Paciente, RegistroDiario, Alerta):
+            ct = ContentType.objects.get_for_model(model)
+            perms = Permission.objects.filter(content_type=ct)
+            self.medico_a.user_permissions.add(*perms)
+            self.medico_b.user_permissions.add(*perms)
+        self.paciente_a = Paciente.objects.create(
+            nombre_completo="Paciente del Doctor A",
+            telefono_whatsapp="+573010000001",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable=self.medico_a,
+        )
+        self.paciente_b = Paciente.objects.create(
+            nombre_completo="Paciente del Doctor B",
+            telefono_whatsapp="+573010000002",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable=self.medico_b,
+        )
+
+    def _login(self, user):
+        self.client.force_login(user)
+
+    # --- Changelist ---
+
+    def test_medico_ve_solo_sus_pacientes_en_changelist(self):
+        self._login(self.medico_a)
+        resp = self.client.get('/admin/signos_sintomas/paciente/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Paciente del Doctor A")
+        self.assertNotContains(resp, "Paciente del Doctor B")
+
+    def test_superuser_ve_todos_en_changelist(self):
+        self._login(self.superuser)
+        resp = self.client.get('/admin/signos_sintomas/paciente/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Paciente del Doctor A")
+        self.assertContains(resp, "Paciente del Doctor B")
+
+    # --- URL directa al objeto ajeno ---
+
+    def test_medico_no_puede_editar_paciente_ajeno(self):
+        self._login(self.medico_a)
+        url = f'/admin/signos_sintomas/paciente/{self.paciente_b.pk}/change/'
+        resp = self.client.get(url)
+        # has_change_permission(obj) devuelve False → Django admin redirige
+        # al changelist (no muestra el formulario del paciente ajeno).
+        self.assertIn(resp.status_code, (302, 403))
+
+    def test_medico_puede_editar_su_propio_paciente(self):
+        self._login(self.medico_a)
+        url = f'/admin/signos_sintomas/paciente/{self.paciente_a.pk}/change/'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_superuser_puede_editar_cualquier_paciente(self):
+        self._login(self.superuser)
+        url = f'/admin/signos_sintomas/paciente/{self.paciente_b.pk}/change/'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)

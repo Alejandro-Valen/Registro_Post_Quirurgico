@@ -459,6 +459,13 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 - [x] C6 — 403 del webhook revela detalles internos
 - [x] C7 — Endpoint de contacto sin rate limit
 
+**Grupo D — Hallazgos auditoría post-hardening (Codex):**
+- [x] D1 — Cache local-memory no comparte estado entre workers (A3/A5/C7 rompen en multi-worker)
+- [x] D2 — Admin scoping sin `formfield_for_foreignkey` ni `has_*_permission` por objeto
+- [x] D3 — `X-Forwarded-For` spoofeable en rate limit del formulario de contacto
+- [x] D4 — `requirements.txt` interno con Django 6.0.5 / duplicado con el de raíz
+- [x] D5 — Sin tests de acceso admin para médico no-superuser (changelist + URL directa)
+
 ---
 
 ### ⏳ FASE 4 — Dashboard Oncólogo y Notificaciones — PENDIENTE
