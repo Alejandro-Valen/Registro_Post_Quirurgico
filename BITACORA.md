@@ -1240,6 +1240,22 @@ detalles de los necesarios, y el endpoint de contacto web sin rate limit.
 
 ---
 
+## Merge: Sprint 3 → Desarrollo
+**Fecha:** 24/06/2026
+**Commit de merge:** 94ff710
+**Estado:** ✅ Completado — cero conflictos, 74/74 tests OK.
+
+Sprint 3 integrado a Desarrollo. Incluye: bot de WhatsApp (10
+preguntas), 8 reglas del alert_engine bajo modelo de alta sensibilidad,
+4 variables nuevas (tolerancia a líquidos, hinchazón abdominal, FC, FR),
+medico_responsable como ForeignKey(User), fix de zona horaria, y
+auditoría de cierre completa (ver AUDITORIA_SPRINT3_CIERRE.md).
+
+Próxima rama: sprint-3-hardening (Grupo A y B de la auditoría antes
+de producción real), luego Sprint 4 (dashboard del médico).
+
+---
+
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** pendiente
 **Estado:** EN COLA ⏳
