@@ -22,7 +22,7 @@ _TTL_SID_PROCESADO   = 300          # A3: ventana de idempotencia (5 min)
 def webhook_whatsapp(request):
     """Recibe un mensaje de WhatsApp vía Twilio y responde en TwiML."""
     if not _firma_twilio_valida(request):
-        return HttpResponseForbidden("Firma inválida")   # C6: mensaje genérico
+        return HttpResponseForbidden()
 
     sid      = request.POST.get('MessageSid') or request.POST.get('SmsMessageSid', '')
     telefono = request.POST.get('From', '')
