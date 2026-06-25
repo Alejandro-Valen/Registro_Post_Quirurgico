@@ -457,7 +457,7 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 - [x] C4 — Decimales truncados en parsers FC/FR
 - [x] C5 — Mensaje de alerta no visible en list_display
 - [x] C6 — 403 del webhook revela detalles internos
-- [ ] C7 — Endpoint de contacto sin rate limit
+- [x] C7 — Endpoint de contacto sin rate limit
 
 ---
 
