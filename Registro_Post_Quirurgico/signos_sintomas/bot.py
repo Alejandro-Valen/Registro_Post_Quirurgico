@@ -30,6 +30,7 @@ import unicodedata
 
 from decimal import Decimal, InvalidOperation
 
+from django.db import transaction
 from django.utils import timezone
 
 from .alert_engine import evaluar_registro
@@ -189,8 +190,17 @@ def procesar_mensaje(telefono, texto):
     if paciente is None:
         return MSG_NO_REGISTRADO
 
-    conv, _ = ConversacionWhatsApp.objects.get_or_create(paciente=paciente)
-    hoy = timezone.localdate()
+    # A4: bloqueo transaccional — dos mensajes simultáneos del mismo paciente
+    # (doble tap) esperan en cola en vez de leer/escribir el mismo estado.
+    with transaction.atomic():
+        conv, _ = ConversacionWhatsApp.objects.get_or_create(paciente=paciente)
+        conv = ConversacionWhatsApp.objects.select_for_update().get(pk=conv.pk)
+        hoy = timezone.localdate()
+
+        return _procesar_con_conv(conv, paciente, texto, hoy)
+
+
+def _procesar_con_conv(conv, paciente, texto, hoy):
 
     # Nuevo día: si completó en un día anterior, reiniciar el ciclo diario.
     if (conv.estado == ConversacionWhatsApp.ESTADO_COMPLETADO
