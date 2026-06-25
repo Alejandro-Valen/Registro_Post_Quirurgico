@@ -435,7 +435,7 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 
 **Grupo A — Obligatorio antes de pacientes reales:**
 - [x] A1 — Conversación abandonada no reinicia al día siguiente
-- [ ] A2 — FC/FR obligatorias bloquean paciente sin dispositivo
+- [x] A2 — FC/FR obligatorias bloquean paciente sin dispositivo
 - [ ] A3 — Webhook sin idempotencia (MessageSid)
 - [ ] A4 — Sin `select_for_update()` en estado conversacional
 - [ ] A5 — Sin rate limiting en el webhook
