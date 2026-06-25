@@ -1278,6 +1278,36 @@ class BotWhatsAppTests(TestCase):
         self.assertEqual(RegistroDiario.objects.count(), 0)
 
 
+class ParseEnteroRangoDecimalTests(TestCase):
+    """C4 — _parse_entero_rango rechaza decimales con punto y coma."""
+
+    def test_punto_decimal_devuelve_none(self):
+        self.assertIsNone(bot._parse_entero_rango("78.5", 30, 250))
+
+    def test_coma_decimal_devuelve_none(self):
+        self.assertIsNone(bot._parse_entero_rango("78,5", 30, 250))
+
+    def test_entero_valido_pasa(self):
+        self.assertEqual(bot._parse_entero_rango("78", 30, 250), 78)
+
+    def test_fc_decimal_pide_reintento(self):
+        """Flujo real: paciente escribe "78.5" en la pregunta de FC → reintento."""
+        Paciente.objects.create(
+            nombre_completo="Paciente Decimal FC",
+            telefono_whatsapp="+573007778881",
+            fecha_cirugia=timezone.localdate() - timedelta(days=3),
+        )
+        from signos_sintomas import bot as b
+        conv = ConversacionWhatsApp.objects.create(
+            paciente=Paciente.objects.get(telefono_whatsapp="+573007778881"),
+            estado=ConversacionWhatsApp.ESTADO_FRECUENCIA_CARDIACA,
+        )
+        respuesta = b.procesar_mensaje("+573007778881", "78.5")
+        self.assertIn("latidos", respuesta.lower())
+        conv.refresh_from_db()
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_FRECUENCIA_CARDIACA)
+
+
 class BotAbandonoConversacionTests(TestCase):
     """A1 — Conversación abandonada a mitad de flujo en un día anterior."""
 

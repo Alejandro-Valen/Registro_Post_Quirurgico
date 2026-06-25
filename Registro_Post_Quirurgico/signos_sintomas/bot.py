@@ -458,6 +458,10 @@ def _parse_temperatura(texto):
 
 
 def _parse_entero_rango(texto, minimo, maximo):
+    # Rechaza decimales (ej. "78.5" o "78,5") para no truncar en silencio;
+    # el bot pide reintento y el paciente aprende a redondear.
+    if re.search(r'\d+[.,]\d+', texto):
+        return None
     match = re.search(r'\d+', texto)
     if not match:
         return None
