@@ -451,7 +451,7 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 - [x] B7 — Tests del webhook incompletos
 
 **Grupo C — Backlog:**
-- [ ] C1 — Refactor `evaluar_registro()` monolítica
+- [x] C1 — Refactor `evaluar_registro()` monolítica
 - [ ] C2 — Choices sin `CheckConstraint` en BD
 - [ ] C3 — Django 6.0.5 → 6.0.6
 - [ ] C4 — Decimales truncados en parsers FC/FR
