@@ -2,6 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -1379,6 +1380,69 @@ class WebhookWhatsAppTests(TestCase):
             self.client.post(
                 self.url, {'From': 'whatsapp:+573001112233', 'Body': 'hola'}
             )
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=True, TWILIO_AUTH_TOKEN='token_falso')
+    def test_header_ausente_devuelve_403(self):
+        # Sin X-Twilio-Signature en el request → la firma vacía no valida → 403.
+        respuesta = self.client.post(
+            self.url,
+            {'From': 'whatsapp:+573001112233', 'Body': 'hola'},
+            # No se incluye HTTP_X_TWILIO_SIGNATURE
+        )
+        self.assertEqual(respuesta.status_code, 403)
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_body_vacio_devuelve_twiml(self):
+        # Body ausente / vacío no debe romper el webhook; paciente desconocido
+        # recibe respuesta amable.
+        respuesta = self.client.post(
+            self.url,
+            {'From': 'whatsapp:+573009999999', 'Body': ''},
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta['Content-Type'], 'application/xml')
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_idempotencia_mismo_sid_ignora_segundo_mensaje(self):
+        # Twilio puede reintentar un webhook con el mismo MessageSid.
+        # El segundo mensaje con el mismo SID debe devolver TwiML vacío sin
+        # ejecutar la lógica del bot de nuevo.
+        Paciente.objects.create(
+            nombre_completo="Paciente Idempotencia",
+            telefono_whatsapp="+573002223344",
+            fecha_cirugia=timezone.localdate() - timedelta(days=2),
+        )
+        payload = {
+            'From': 'whatsapp:+573002223344',
+            'Body': 'hola',
+            'MessageSid': 'SMidempotencia0001',
+        }
+        primera = self.client.post(self.url, payload)
+        segunda = self.client.post(self.url, payload)
+
+        self.assertEqual(primera.status_code, 200)
+        self.assertEqual(segunda.status_code, 200)
+        # Segunda respuesta es TwiML vacío (sin <Message>)
+        self.assertNotIn(b'<Message>', segunda.content)
+        # Primera sí tiene contenido
+        self.assertIn(b'<Message>', primera.content)
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_rate_limit_excedido_devuelve_twiml_vacio(self):
+        # Más de _LIMITE_MENSAJES_HORA (20) mensajes del mismo número en una
+        # hora → los mensajes excedentes reciben TwiML vacío sin procesar.
+        from signos_sintomas.views import _LIMITE_MENSAJES_HORA
+        telefono = 'whatsapp:+573005556677'
+        # Forzar el contador de cache directamente al límite
+        clave = 'rl_wh_{}'.format(telefono.replace('+', '').replace(':', ''))
+        cache.set(clave, _LIMITE_MENSAJES_HORA, 3600)
+
+        respuesta = self.client.post(
+            self.url,
+            {'From': telefono, 'Body': 'hola'},
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertNotIn(b'<Message>', respuesta.content)
 
 
 class PacienteMedicoFKTests(TestCase):

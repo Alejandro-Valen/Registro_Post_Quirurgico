@@ -448,7 +448,7 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 - [x] B4 — `fecha_registro` sin índice eficiente para filtros
 - [x] B5 — Admin en `/admin/` sin controles adicionales
 - [x] B6 — Admin sin scoping por médico (Sprint 4)
-- [ ] B7 — Tests del webhook incompletos
+- [x] B7 — Tests del webhook incompletos
 
 **Grupo C — Backlog:**
 - [ ] C1 — Refactor `evaluar_registro()` monolítica
