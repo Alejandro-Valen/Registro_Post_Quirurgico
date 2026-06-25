@@ -427,6 +427,40 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 
 ---
 
+### 🔒 FASE 3-HARDENING — Seguridad y Robustez pre-producción
+
+> Rama: `sprint-3-hardening` (desde `Desarrollo` post-merge)
+> Prerequisito: merge de `sprint-3-whatsapp` → `Desarrollo`.
+> Detalle completo de cada hallazgo en `AUDITORIA_SPRINT3_CIERRE.md`.
+
+**Grupo A — Obligatorio antes de pacientes reales:**
+- [ ] A1 — Conversación abandonada no reinicia al día siguiente
+- [ ] A2 — FC/FR obligatorias bloquean paciente sin dispositivo
+- [ ] A3 — Webhook sin idempotencia (MessageSid)
+- [ ] A4 — Sin `select_for_update()` en estado conversacional
+- [ ] A5 — Sin rate limiting en el webhook
+- [ ] A6 — `DEBUG=True` con Twilio/ngrok real activo
+
+**Grupo B — Hardening de producción:**
+- [ ] B1 — settings.py sin configuración de producción
+- [ ] B2 — Sin LOGGING configurado (datos médicos en logs)
+- [ ] B3 — Path síncrono del webhook (timeout de Twilio)
+- [ ] B4 — `fecha_registro` sin índice eficiente para filtros
+- [ ] B5 — Admin en `/admin/` sin controles adicionales
+- [ ] B6 — Admin sin scoping por médico (Sprint 4)
+- [ ] B7 — Tests del webhook incompletos
+
+**Grupo C — Backlog:**
+- [ ] C1 — Refactor `evaluar_registro()` monolítica
+- [ ] C2 — Choices sin `CheckConstraint` en BD
+- [ ] C3 — Django 6.0.5 → 6.0.6
+- [ ] C4 — Decimales truncados en parsers FC/FR
+- [ ] C5 — Mensaje de alerta no visible en list_display
+- [ ] C6 — 403 del webhook revela detalles internos
+- [ ] C7 — Endpoint de contacto sin rate limit
+
+---
+
 ### ⏳ FASE 4 — Dashboard Oncólogo y Notificaciones — PENDIENTE
 > Crear rama: `git checkout -b sprint-4-dashboard`
 
