@@ -1214,6 +1214,45 @@ class BotWhatsAppTests(TestCase):
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_GASES_NAUSEAS)
         self.assertEqual(RegistroDiario.objects.count(), 0)
 
+    def test_fc_saltar_guarda_none_y_avanza(self):
+        # A2: paciente sin oxímetro usa palabra de salto en FC → None, avanza a FR.
+        self._crear_paciente()
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "37.0")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "sí")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "1")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "normal")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "sí, 0")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "nada")
+        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "saltar")
+        self.assertEqual(respuesta, bot.MSG_PREGUNTA_FRECUENCIA_RESPIRATORIA)
+        conv = ConversacionWhatsApp.objects.get()
+        self.assertIsNone(conv.temp_frecuencia_cardiaca)
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_FRECUENCIA_RESPIRATORIA)
+
+    def test_fr_omitir_guarda_none_y_flujo_completa(self):
+        # A2: paciente usa "omitir" en FR → None guardado en RegistroDiario.
+        self._crear_paciente()
+        respuesta = self._completar_flujo(
+            frecuencia_cardiaca="78", frecuencia_respiratoria="omitir"
+        )
+        self.assertEqual(respuesta, bot.MSG_CONFIRMACION)
+        registro = RegistroDiario.objects.get()
+        self.assertEqual(registro.frecuencia_cardiaca, 78)
+        self.assertIsNone(registro.frecuencia_respiratoria)
+
+    def test_flujo_completo_sin_fc_ni_fr_crea_registro_con_nulls(self):
+        # A2: ambas variables saltadas → RegistroDiario creado con FC=None, FR=None.
+        self._crear_paciente()
+        respuesta = self._completar_flujo(
+            frecuencia_cardiaca="no sé", frecuencia_respiratoria="sin dato"
+        )
+        self.assertEqual(respuesta, bot.MSG_CONFIRMACION)
+        registro = RegistroDiario.objects.get()
+        self.assertIsNone(registro.frecuencia_cardiaca)
+        self.assertIsNone(registro.frecuencia_respiratoria)
+
     def test_fc_fuera_de_rango_reintenta(self):
         # Un valor fuera del rango 30-250 lpm se rechaza y pide reintento,
         # sin avanzar de estado ni crear registro.

@@ -127,20 +127,24 @@ MSG_REINTENTO_HINCHAZON = (
 
 MSG_PREGUNTA_FRECUENCIA_CARDIACA = (
     "8️⃣ ¿Cuál es su frecuencia cardíaca (pulso) en este momento? 🌿\n"
-    "Escriba el número de latidos por minuto, por ejemplo: 78"
+    "Escriba el número de latidos por minuto, por ejemplo: 78.\n"
+    "Si no puede medirla ahora, responda con alguna de estas palabras:\n"
+    "*saltar · omitir · no sé · no tengo · sin dato*"
 )
 MSG_REINTENTO_FRECUENCIA_CARDIACA = (
-    "No entendí. Escriba su frecuencia cardíaca como un número de "
-    "latidos por minuto (ej: 78)."
+    "No entendí. Escriba su frecuencia cardíaca en latidos por minuto (ej: 78), "
+    "o responda *saltar* si no puede medirla ahora."
 )
 
 MSG_PREGUNTA_FRECUENCIA_RESPIRATORIA = (
     "9️⃣ ¿Cuál es su frecuencia respiratoria? 🌿\n"
-    "Escriba el número de respiraciones por minuto, por ejemplo: 16"
+    "Escriba el número de respiraciones por minuto, por ejemplo: 16.\n"
+    "Si no puede medirla ahora, responda con alguna de estas palabras:\n"
+    "*saltar · omitir · no sé · no tengo · sin dato*"
 )
 MSG_REINTENTO_FRECUENCIA_RESPIRATORIA = (
-    "No entendí. Escriba su frecuencia respiratoria como un número de "
-    "respiraciones por minuto (ej: 16)."
+    "No entendí. Escriba su frecuencia respiratoria en respiraciones por minuto "
+    "(ej: 16), o responda *saltar* si no puede medirla ahora."
 )
 
 MSG_PREGUNTA_TOLERANCIA_LIQUIDOS = (
@@ -315,19 +319,25 @@ def _procesar_respuesta_flujo(conv, paciente, texto, hoy):
         return MSG_PREGUNTA_FRECUENCIA_CARDIACA
 
     if estado == ConversacionWhatsApp.ESTADO_FRECUENCIA_CARDIACA:
-        valor = _parse_entero_rango(texto, 30, 250)
-        if valor is None:
-            return MSG_REINTENTO_FRECUENCIA_CARDIACA
-        conv.temp_frecuencia_cardiaca = valor
+        if _es_salto(texto):
+            conv.temp_frecuencia_cardiaca = None
+        else:
+            valor = _parse_entero_rango(texto, 30, 250)
+            if valor is None:
+                return MSG_REINTENTO_FRECUENCIA_CARDIACA
+            conv.temp_frecuencia_cardiaca = valor
         conv.estado = ConversacionWhatsApp.ESTADO_FRECUENCIA_RESPIRATORIA
         conv.save()
         return MSG_PREGUNTA_FRECUENCIA_RESPIRATORIA
 
     if estado == ConversacionWhatsApp.ESTADO_FRECUENCIA_RESPIRATORIA:
-        valor = _parse_entero_rango(texto, 5, 60)
-        if valor is None:
-            return MSG_REINTENTO_FRECUENCIA_RESPIRATORIA
-        conv.temp_frecuencia_respiratoria = valor
+        if _es_salto(texto):
+            conv.temp_frecuencia_respiratoria = None
+        else:
+            valor = _parse_entero_rango(texto, 5, 60)
+            if valor is None:
+                return MSG_REINTENTO_FRECUENCIA_RESPIRATORIA
+            conv.temp_frecuencia_respiratoria = valor
         conv.estado = ConversacionWhatsApp.ESTADO_TOLERANCIA_LIQUIDOS
         conv.save()
         return MSG_PREGUNTA_TOLERANCIA_LIQUIDOS
@@ -399,6 +409,17 @@ def _responder_duda(texto):
 # ---------------------------------------------------------------------------
 # Parsers de respuestas clínicas
 # ---------------------------------------------------------------------------
+_PALABRAS_SALTO = frozenset({
+    'saltar', 'omitir', 'no se', 'no se.', 'no sé', 'no sé.',
+    'no puedo', 'no tengo', 'sin dato', 'sin datos',
+})
+
+
+def _es_salto(texto):
+    """Devuelve True si el paciente indicó que no puede proporcionar el dato."""
+    return _sin_acentos(texto.strip().lower()) in _PALABRAS_SALTO
+
+
 def _parse_temperatura(texto):
     """Extrae una temperatura plausible (30.0–45.0 °C). Acepta coma o punto."""
     match = re.search(r'\d{2}(?:[.,]\d)?', texto)
