@@ -434,7 +434,7 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 > Detalle completo de cada hallazgo en `AUDITORIA_SPRINT3_CIERRE.md`.
 
 **Grupo A — Obligatorio antes de pacientes reales:**
-- [ ] A1 — Conversación abandonada no reinicia al día siguiente
+- [x] A1 — Conversación abandonada no reinicia al día siguiente
 - [ ] A2 — FC/FR obligatorias bloquean paciente sin dispositivo
 - [ ] A3 — Webhook sin idempotencia (MessageSid)
 - [ ] A4 — Sin `select_for_update()` en estado conversacional
