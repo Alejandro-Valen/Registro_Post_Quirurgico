@@ -44,9 +44,13 @@ class RegistroDiarioAdmin(admin.ModelAdmin):
 @admin.register(Alerta)
 class AlertaAdmin(admin.ModelAdmin):
     list_display = ['paciente', 'tipo', 'severidad',
-                    'resuelta', 'fecha_alerta']
+                    'resuelta', 'fecha_alerta', 'mensaje_corto']
     list_filter = ['tipo', 'severidad', 'resuelta']
     search_fields = ['paciente__nombre_completo']
+
+    @admin.display(description='Mensaje')
+    def mensaje_corto(self, obj):
+        return obj.mensaje[:80] + '…' if len(obj.mensaje) > 80 else obj.mensaje
 
     def get_queryset(self, request):
         """B6: solo alertas de pacientes propios del médico. Superuser ve todos."""
