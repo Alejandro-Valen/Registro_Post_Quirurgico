@@ -1140,6 +1140,106 @@ Sincronización de docs de este cambio: commits `docs:` en esta misma sesión.
 
 ---
 
+## Auditoría de cierre Sprint 3 — Veredicto y hallazgos
+**Fecha:** 24/06/2026
+**Responsable:** León (Arquitecto IA) con Claude Code (coherencia y lógica clínica) + Codex (seguridad y escalabilidad, pasada web + pasada local)
+**Estado:** COMPLETADO ✅ — ver `AUDITORIA_SPRINT3_CIERRE.md`
+
+### Qué se auditó y quién
+
+Se realizó una auditoría de cierre en dos frentes sobre la rama
+`sprint-3-whatsapp` antes de su merge a `Desarrollo`. Claude Code revisó
+coherencia interna: que todos los estados del bot tengan handler, que
+`_crear_registro()` y `_limpiar_temporales()` operen sobre los mismos 12
+campos, que todas las reglas del `alert_engine` usen `timezone.localdate()`
+sin residuos de UTC, y que la lógica clínica sea consistente con las
+decisiones de arquitectura registradas en CLAUDE.md y el ROADMAP. Codex
+hizo una pasada adversarial de seguridad y escalabilidad: revisó el
+manejo de secretos Twilio, la validación del webhook, race conditions y
+la capacidad de respuesta ante carga.
+
+### El veredicto
+
+**El código es correcto y funcional. El merge a `Desarrollo` puede
+proceder.** Lo que produjo la auditoría no es deuda de corrección
+(el sistema hace lo que dice que hace, los 74 tests pasan), sino deuda
+de robustez: problemas que no rompen lo que hoy funciona pero que sí
+romperían a escala con pacientes reales.
+
+**Lo que NO debe ocurrir es ir de `Desarrollo` a producción real con
+pacientes sin resolver el Grupo A completo.** Producción con Grupo A
+pendiente pone datos médicos reales en riesgo.
+
+### Hallazgos por grupo
+
+**Grupo A — Obligatorio antes de pacientes reales (6 hallazgos):**
+El más importante es la conversación abandonada (A1): si un paciente
+deja el cuestionario a mitad y retoma al día siguiente, el bot mezcla
+datos de ambos días en un solo registro. Le sigue el bloqueo por FC/FR
+(A2): los campos son `null=True` en el modelo —diseñados para captura
+opcional— pero el parser del bot exige un número válido, lo que deja
+atascado a cualquier paciente sin oxímetro disponible. Los otros cuatro
+(idempotencia del webhook ante reintentos de Twilio, ausencia de
+`select_for_update()` para mensajes simultáneos, falta de rate limiting,
+y `DEBUG=True` con Twilio real activo) son todos problemas de
+infraestructura que ningún test de lógica de negocio puede detectar —
+de ahí el valor de la pasada de Codex.
+
+**Grupo B — Hardening de producción (7 hallazgos):**
+Settings sin directivas HTTPS, ausencia de logging filtrado para
+PHI/PII, el path síncrono del webhook que puede exceder el timeout de
+Twilio (y que, al hacerlo, dispara los reintentos de A3), la ausencia
+de un índice eficiente para los filtros de días calendario que son el
+corazón del `alert_engine`, el admin en la URL por defecto sin 2FA ni
+lockout, el admin que aún muestra todos los pacientes a cualquier
+médico (la FK `medico_responsable→User` ya existe; falta el
+`get_queryset()` que la aplique), y tests del webhook que no cubren los
+casos negativos más importantes.
+
+**Grupo C — Backlog sin fecha comprometida (7 ítems):**
+Deuda cosmética y técnica menor: la función `evaluar_registro()` creció
+a ~450 líneas (candidata a extracción de sub-funciones por regla),
+choices sin `CheckConstraint` en BD, actualización de Django 6.0.5→6.0.6,
+decimales truncados silenciosamente en los parsers de FC/FR, el mensaje
+de alerta invisible en `list_display` del admin, un 403 que revela más
+detalles de los necesarios, y el endpoint de contacto web sin rate limit.
+
+### Estado final del sistema al cierre
+
+- **74 tests OK** — 49 del alert_engine (8 reglas, 2 bugs de zona
+  horaria corregidos) + 11 del bot + 4 del webhook + 10 de modelos.
+- **8 reglas clínicas activas** — drenaje (Regla 2, escalera por
+  aspecto), temperatura (Regla 1, ALTA/MEDIA por subfebrícula),
+  gases (Regla 3, escalera por días consecutivos), náuseas (Regla 4,
+  suma diaria + persistencia), dolor (Regla 5, ventanas por
+  dia_postoperatorio + tendencia), tolerancia a líquidos (Regla 6,
+  INTOLERANCIA_ORAL), hinchazón abdominal (Regla 7, ILEO_PARALITICO
+  por empeoramiento), frecuencia cardíaca (Regla 8, TAQUICARDIA por
+  valor absoluto). FR capturada y almacenada, sin regla.
+- **4 variables nuevas del Paso 2** completamente integradas:
+  `tolero_liquidos`, `hinchazon_abdominal`, `frecuencia_cardiaca`,
+  `frecuencia_respiratoria`.
+- **`medico_responsable` como FK** a `auth.User` con `SET_NULL`
+  (commit `eb4a41a`) — base para el scoping del dashboard en Sprint 4.
+- **Flujo del bot en 10 preguntas** (temperatura, dolor, drenaje ×2,
+  gases+náuseas, hinchazón, FC, FR, tolerancia a líquidos).
+- **Documentación sincronizada:** CLAUDE.md, ROADMAP y BITACORA
+  reflejan el estado real del código. `AUDITORIA_SPRINT3_CIERRE.md`
+  creado en la raíz del repo con el detalle técnico de cada hallazgo.
+
+### Próximo paso
+
+1. **Merge `sprint-3-whatsapp` → `Desarrollo`** con aprobación del Arquitecto.
+2. **Rama `sprint-3-hardening`** desde `Desarrollo` para resolver Grupo A
+   y Grupo B antes de cualquier exposición con pacientes reales. Ruta de
+   entrada sugerida: A2 (FC/FR skipeable) → A1 (reinicio de conversación
+   abandonada) → A3+A4 (idempotencia y lock transaccional, naturalmente
+   acoplados).
+3. **Sprint 4 (dashboard + CheckInProgramado + Celery)** arranca sobre
+   la base ya endurecida, no antes.
+
+---
+
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** pendiente
 **Estado:** EN COLA ⏳
