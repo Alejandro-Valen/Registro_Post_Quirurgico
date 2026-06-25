@@ -337,41 +337,24 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Funcional end-to-end — merge a Desarrollo POSPUESTO a propósito (ver nota) |
 | Sprint 3.5 | Auditoría de literatura, generalización de alcance/marca y documentación | ✅ Completado |
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
-| Sprint 3-Hardening | Seguridad y robustez pre-producción | ⏳ Pendiente (post-merge, rama sprint-3-hardening) |
+| Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 20 hallazgos (A1–A6, B1–B7, C1–C7), 88 tests OK, rama sprint-3-hardening |
 | Sprint 4 | Dashboard médico y notificaciones | ⏳ Pendiente |
 | Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ Pendiente |
 
-**Punto actual:** Sprint 3 completo (8 reglas del alert_engine, 4
-variables nuevas, 74 tests, `medico_responsable` como FK). Auditoría
-de cierre realizada — ver `AUDITORIA_SPRINT3_CIERRE.md`. **Próximo
-paso inmediato: merge `sprint-3-whatsapp` → `Desarrollo`, luego rama
-`sprint-3-hardening` para resolver Grupo A y B antes de producción
-real.**
+**Punto actual:** Sprint 3-Hardening completo en rama `sprint-3-hardening`
+(20 hallazgos resueltos: A1–A6, B1–B7, C1–C7; 88 tests OK). **Próximo
+paso inmediato: merge `sprint-3-hardening` → `Desarrollo`, luego Sprint 4
+(dashboard médico).**
 
-- ✅ **Paso 1:** modelo `ConversacionWhatsApp` + campo `cantidad_drenaje` en
-  `RegistroDiario` + migración `0002` aplicada.
-- ✅ **Paso 2:** `bot.py` completo (lógica pura) + `knowledge_base.md`
-  placeholder.
-- ✅ **Paso 3:** `views.py` (webhook Twilio con `webhook_whatsapp` +
-  `_firma_twilio_valida` fail-safe/fail-clear), `urls.py` de la app, bloque
-  Twilio en `settings.py` (`TWILIO_VALIDATE_SIGNATURE` default True,
-  `TWILIO_AUTH_TOKEN`, headers de proxy ngrok), `twilio==9.10.9` +
-  `requirements.txt`, `.env.example`. **22 tests OK** (18 bot/alertas + 4 webhook).
-- ✅ **Paso 4 (conexión real):** sandbox WhatsApp + ngrok + `.env` con credenciales
-  reales. Prueba end-to-end exitosa: mensaje real → webhook → bot →
-  `RegistroDiario` → `alert_engine` → `Alerta`, verificado en BD. Se resolvió un
-  `400` (ALLOWED_HOSTS) y un `403` (firma) — ver BITACORA, sesión Twilio+ngrok.
-- ⏳ **Único pendiente Sprint 3:** merge `sprint-3-whatsapp` → `Desarrollo`.
-
-> **Merge sigue POSPUESTO (decisión del Arquitecto, actualizada tras
-> cierre de Sprint 3.5):** la auditoría de literatura del médico ya se
-> realizó (9 PDFs, transcripciones, documentos institucionales — ver
-> `docs/auditoria_literatura/`) y confirmó que el alcance real es
-> ERAS/cirugía colorrectal en general, no exclusivo de Sugarbaker/HIPEC.
-> Lo que falta antes de mergear es la decisión de qué cambia en los
-> **umbrales del `alert_engine`** a partir de esa evidencia. Mergear
-> ahora obligaría a hacerlo dos veces. Se mergeará una sola vez, después
-> de tomar esas decisiones.
+Resumen de lo resuelto en `sprint-3-hardening`:
+- A: conversación abandonada, FC/FR saltables, idempotencia, lock transaccional,
+  rate limit webhook, settings por entorno.
+- B: headers HTTPS producción, logging, on_commit para alert_engine, índice
+  fecha_registro, URL admin + django-axes, scoping por médico en admin, tests
+  del webhook.
+- C: refactor alert_engine en funciones _evaluar_X, CheckConstraint en BD,
+  Django 6.0.6, rechazo de decimales en FC/FR, mensaje en list_display admin,
+  403 genérico webhook, rate limit formulario de contacto.
 
 **Lección clave de la conexión Twilio:** el Sandbox de WhatsApp firma sus webhooks
 con el **Auth Token PRIMARIO** (Twilio Console → Account Dashboard), NO con el de
