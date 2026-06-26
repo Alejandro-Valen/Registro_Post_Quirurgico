@@ -418,11 +418,11 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
     alerta (Outersterp 2025: 77% de falsas alertas venían del sensor de FR)
   - Nota: estado de herida (fotos) y antecedentes quedan FUERA de
     Sprint 3 (mejora futura / Sprint 4 respectivamente).
-- [ ] **Paso 3 — Revisión de cierre en dos frentes.** Claude Code audita
+- [x] **Paso 3 — Revisión de cierre en dos frentes.** Claude Code audita
   coherencia interna y deuda técnica (alert_engine/modelos); Codex hace
   pasada adversarial de seguridad + escalabilidad; Claude (chat)
   sintetiza ambos en lista priorizada.
-- [ ] **Paso 4 — Resolver lo bloqueante, luego merge** sprint-3-whatsapp
+- [x] **Paso 4 — Resolver lo bloqueante, luego merge** sprint-3-whatsapp
   → Desarrollo con aprobación del Arquitecto.
 
 ---
@@ -472,8 +472,28 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 
 ---
 
-### ⏳ FASE 4 — Dashboard Oncólogo y Notificaciones — PENDIENTE
-> Crear rama: `git checkout -b sprint-4-dashboard`
+### ⏳ FASE 4 — Dashboard Oncólogo y Notificaciones — EN CURSO
+> Rama activa: `sprint-4-dashboard` (creada, sin código todavía — arranca aquí)
+
+**Bloque 0 — Decisiones arquitectónicas (cerradas 26/06/2026):**
+- [x] **0-① Fecha autoritativa:** Opción B — parámetro opcional
+  `fecha_referencia: date` en `evaluar_registro()`. Default:
+  `timezone.localdate(registro.fecha_registro)`. El bot pasa
+  `fecha_referencia=checkin.fecha_dia` al completar el flujo. Corrige el
+  bug de cruce de medianoche en reglas de persistencia (temperatura,
+  gases, náuseas, líquidos, hinchazón).
+- [x] **0-② Deduplicación de alertas:** Opción A+ — una alerta por
+  tipo/día; si la nueva severidad supera la existente ese día, se crea
+  igual (escalamiento intra-día permitido). Comparación con
+  `_ORDEN_SEVERIDAD = {'BAJA': 1, 'MEDIA': 2, 'ALTA': 3}`.
+- [x] **0-③ Alerta de silencio:** tipo `SILENCIO` (choice nuevo en
+  `Alerta.tipo`). Racha contada check a check (mañana→tarde→mañana…):
+  1 silencio → BAJA, 2 consecutivos → MEDIA, 3+ → ALTA. La racha se
+  rompe con cualquier check-in COMPLETADO entre medias.
+- [x] **0-④ Scheduler:** Opción A — management commands + cron del SO.
+  Tres commands: `crear_checkins_diarios`, `cerrar_checkins_vencidos`,
+  `enviar_recordatorios`. Monitoreo y evaluación de migración a Celery
+  diferidos a Sprint 5.
 
 - [ ] Personalizar Django Admin con colores según severidad de alertas
 - [ ] Crear vista detalle_paciente con historial y gráfica temperatura/dolor
@@ -481,25 +501,27 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 - [ ] **Implementación 2×/día (arquitectura CERRADA en FASE 3.6 — leer D1–D5
   y el esquema de `CheckInProgramado` ahí; aquí NO se re-decide, se ejecuta):**
   - [ ] Crear modelo `CheckInProgramado` según el esquema acordado + migración.
-  - [ ] Scheduler (Celery beat / cron): crea los eventos del día con su
-    `orden`/`etiqueta`/`hora_programada` y cierra vencidos PENDIENTE→
-    NO_RESPONDIDO. Incluye el envío matutino 7–10 AM Bogotá ya diferido.
+  - [ ] Scheduler — **DECISIÓN TOMADA (0-④):** management commands +
+    cron del SO. Tres commands: `crear_checkins_diarios` (6:00 AM),
+    `enviar_recordatorios` (7:00 AM), `cerrar_checkins_vencidos` (18:00
+    y 06:00 AM). Cada command loguea resumen de ejecución. Horas de
+    gracia antes de declarar vencido: 10 horas.
   - [ ] Refactor de bot.py: la conversación se vincula al CheckInProgramado
     PENDIENTE del día (la conversación deja de decidir el turno).
-  - [ ] Alerta de silencio (NO_RESPONDIDO) — resolver DECISIÓN ABIERTA:
-    severidad + ¿uno o dos silencios?
-  - [ ] Resolver los 2 gatings (DECISIONES ABIERTAS): deduplicación de
-    alertas y gating pre-operatorio (dia_postoperatorio=0).
+  - [ ] Alerta de silencio (NO_RESPONDIDO) — **DECISIÓN TOMADA (0-③):**
+    tipo `SILENCIO` (choice nuevo). Racha check a check:
+    1 → BAJA, 2 consecutivos → MEDIA, 3+ → ALTA.
+  - [ ] Resolver los 2 gatings:
+    - Deduplicación — **DECISIÓN TOMADA (0-②):** Opción A+ (una alerta
+      por tipo/día; escala si la nueva severidad supera la existente).
+    - Gating pre-operatorio (dia_postoperatorio=0) — DECISIÓN ABIERTA.
   - [ ] **Deuda de diseño detectada en el cruce contra el código
     (detalle y razonamiento en BITACORA.md, entrada del 22/06/2026):**
-    - [ ] **Fecha autoritativa para reglas de días calendario.** El
-      alert_engine agrupa por `fecha_registro__date` (verificado: ~8 usos
-      en alert_engine.py). Si `CheckInProgramado.fecha_dia` (congelado) y
-      `RegistroDiario.fecha_registro` (auto_now_add) divergen en un cruce
-      de medianoche, las reglas cuentan el registro en el día equivocado.
-      DECISIÓN CLÍNICA pendiente: ¿cuál fecha manda para las reglas — la
-      del evento o la del registro? (Riesgo más serio: toca el engine, no
-      solo el bot.)
+    - [ ] **Fecha autoritativa — DECISIÓN TOMADA (0-①):** Opción B.
+      Refactorizar `evaluar_registro()` con parámetro opcional
+      `fecha_referencia`. Los ~8 usos de `fecha_registro__date` en
+      funciones privadas del engine se reemplazan por `fecha_referencia`.
+      Tests existentes no cambian (default mantiene comportamiento actual).
     - [ ] **Reescribir el guard "un registro por día" → "por check-in".**
       bot.py hoy bloquea con `fecha_ultimo_registro` (líneas ~145-146 y
       161-162 → MSG_YA_REGISTRADO); con 2 check-ins/día eso bloquearía el
@@ -536,6 +558,22 @@ del alert_engine, jun 2026):**
 
 - [ ] Desplegar en Railway o Render con PostgreSQL en la nube
 - [ ] Configurar HTTPS y deshabilitar DEBUG
+- [ ] **Scheduler — monitoreo de infraestructura (viene de decisión Sprint 4):**
+  El scheduler usa management commands + cron del SO (Opción A — decisión
+  tomada en Sprint 4). En producción Linux:
+  - Agregar `MAILTO=email-del-desarrollador` al inicio del crontab para
+    recibir email automático cuando cualquier command falle.
+  - Verificar que los tres commands corren correctamente el primer día en
+    producción y que sus logs de resumen son legibles:
+    `crear_checkins_diarios`, `cerrar_checkins_vencidos`,
+    `enviar_recordatorios`.
+  - Evaluar migración a Celery beat si los fallos de cron son frecuentes
+    o se necesita retry automático. La lógica ya está encapsulada en los
+    management commands — la migración es decorar con `@shared_task`.
+- [ ] Configurar monitoreo externo básico (ping al servidor cada 5 min)
+  para detectar caídas totales independientemente del cron.
+- [ ] Nginx: `proxy_set_header REMOTE_ADDR $remote_addr;` para que el
+  rate limit funcione correctamente con la IP real del cliente.
 - [ ] Integrar capa RAG para respuestas a preguntas frecuentes del postoperatorio
 - [ ] Revisión cumplimiento HABEAS DATA Colombia
 - [ ] Entrega final al equipo médico
