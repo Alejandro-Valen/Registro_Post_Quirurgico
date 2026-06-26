@@ -1425,8 +1425,68 @@ código, no clínico.
 ---
 
 ## Sprint 4 — Dashboard y Notificaciones
-**Fecha:** pendiente
-**Estado:** EN COLA ⏳
+**Fecha:** 26/06/2026
+**Responsable:** León (Arquitecto IA) con Claude Code
+**Estado:** EN CURSO ⏳ — Bloque 0 completado, Bloque 1 iniciando
+
+### Qué se hizo
+
+**Bloque 0 — Decisiones arquitectónicas (cerradas en esta sesión):**
+Se tomaron 5 decisiones de diseño que desbloquean toda la implementación
+del Sprint 4. Ninguna implica código — son las decisiones que definen
+cómo se escribe el código de los bloques siguientes.
+
+Adicionalmente se generó un prompt de contexto para uso en chats externos
+(Claude chat / Codex) que resume el estado del proyecto y las decisiones
+tomadas. Se marcaron como completados los Pasos 3 y 4 de FASE 3.6 que
+faltaban en el ROADMAP.
+
+### Decisiones tomadas
+
+**0-① Fecha autoritativa:**
+`evaluar_registro(registro, fecha_referencia=None)` — parámetro opcional.
+Default: `timezone.localdate(registro.fecha_registro)`. El bot pasa
+`fecha_referencia=checkin.fecha_dia` al completar el flujo. Corrige el
+bug de cruce de medianoche en reglas de persistencia (temperatura
+subfebril, gases, náuseas, líquidos, hinchazón). → Bloque 2A.
+
+**0-② Deduplicación de alertas (Opción A+):**
+Una alerta por tipo/día. Si ya existe una del mismo tipo con severidad
+igual o mayor ese día, no se duplica. Si la nueva severidad es mayor
+(escalamiento intra-día), sí se crea. Comparación con
+`_ORDEN_SEVERIDAD = {'BAJA': 1, 'MEDIA': 2, 'ALTA': 3}`. → Bloque 2B.
+
+**0-③ Alerta de silencio:**
+Tipo `SILENCIO` nuevo en `Alerta.tipo`. Racha check a check: 1 → BAJA,
+2 consecutivos → MEDIA, 3+ → ALTA. Racha se rompe con COMPLETADO.
+El Arquitecto propuso BAJA para el primer silencio (vs. MEDIA original)
+— más tolerante con olvidos puntuales, coherente con la escalera del
+engine. → Bloque 4.
+
+**0-④ Scheduler (Opción A — management commands):**
+Tres commands: `crear_checkins_diarios` (6:00 AM),
+`enviar_recordatorios` (7:00 AM), `cerrar_checkins_vencidos` (18:00 y
+06:00 AM). Horas de gracia: 10 horas. Celery diferido a Sprint 5.
+Migración posible sin retrabajo: decorar con `@shared_task`. → Bloque 4.
+
+**0-⑤ Gating POD 0 (Opción A):**
+`_evaluar_dolor()` usará `dia_postoperatorio <= 2` en lugar de
+`in [1, 2]`. Cambio defensivo de 1 línea. Justificación clínica:
+dia_postoperatorio=0 es imposible en operación normal — cirugías de 9+
+horas, alta siempre al día siguiente o después. → Bloque 2A.
+
+### Problemas encontrados y resueltos
+
+Ningún bug en esta sesión. Aclaración clave: el "gating pre-operatorio"
+del ROADMAP sonaba como decisión compleja pero resultó ser una 1 línea
+defensiva. La clarificación fue que dia_postoperatorio=0 no ocurre en
+operación real porque el alta siempre llega después del día de cirugía.
+
+### Próximo paso
+
+**Bloque 1 — Modelo `CheckInProgramado` + migración + tests + admin.**
+Gate de éxito: `python manage.py test signos_sintomas` ≥ 103 tests en
+verde + `python manage.py check` sin errores.
 
 ---
 

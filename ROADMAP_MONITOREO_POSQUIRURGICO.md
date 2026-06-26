@@ -494,6 +494,11 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
   Tres commands: `crear_checkins_diarios`, `cerrar_checkins_vencidos`,
   `enviar_recordatorios`. Monitoreo y evaluación de migración a Celery
   diferidos a Sprint 5.
+- [x] **0-⑤ Gating POD 0:** Opción A — extender ventana de dolor POD
+  1-2 a `dia_postoperatorio <= 2`. Justificación: en el flujo real del
+  sistema dia_postoperatorio=0 es clínicamente imposible (cirugías de
+  9+ horas — el alta ocurre como mínimo el día siguiente). El cambio es
+  defensivo: 1 línea en `_evaluar_dolor()`. Se implementa en Bloque 2A.
 
 - [ ] Personalizar Django Admin con colores según severidad de alertas
 - [ ] Crear vista detalle_paciente con historial y gráfica temperatura/dolor
