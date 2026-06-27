@@ -14,3 +14,7 @@ DEBUG = True
 
 # En desarrollo, localhost siempre permitido aunque .env sobreescriba ALLOWED_HOSTS.
 ALLOWED_HOSTS += ['localhost', '127.0.0.1']
+
+# Email: consola en desarrollo — las alertas ALTA se imprimen, no se envían por SMTP.
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'sistema-monitoreo@local.dev'
