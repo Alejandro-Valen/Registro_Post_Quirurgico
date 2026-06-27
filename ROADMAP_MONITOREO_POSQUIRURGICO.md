@@ -3,7 +3,7 @@
 > **Para agentes IA:** Lee este archivo completo antes de sugerir cualquier acción.
 > Contiene el contexto clínico, el estado actual del proyecto, y los pasos pendientes.
 > El repositorio es: https://github.com/Alejandro-Valen/Registro_Post_Quirurgico
-> Rama principal: `Desarrollo` | Rama activa: `sprint-3-whatsapp` (funcional end-to-end, merge pendiente — ver Sprint 3.5)
+> Rama principal: `Desarrollo` | Rama activa: `sprint-4-dashboard` (Sprint 4 completo, 135 tests OK — pendiente merge a Desarrollo)
 
 ---
 
