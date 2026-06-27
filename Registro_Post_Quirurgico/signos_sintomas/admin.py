@@ -1,11 +1,57 @@
+from datetime import timedelta
+
 from django.contrib import admin
 from django.contrib.auth import get_user_model
-from .models import Paciente, RegistroDiario, Alerta, CheckInProgramado
+from django.utils import timezone
+from django.utils.html import format_html, mark_safe
+
+from .models import Alerta, CheckInProgramado, Paciente, RegistroDiario
 
 
 def _solo_propios(request):
     """True si el usuario debe ver solo sus propios datos (no superuser)."""
     return not request.user.is_superuser
+
+
+def _historial_7_dias(paciente):
+    """Devuelve HTML con tabla de los últimos 7 días de registros del paciente."""
+    hace_7 = timezone.localdate() - timedelta(days=7)
+    registros = (
+        RegistroDiario.objects
+        .filter(paciente=paciente, fecha_registro__date__gte=hace_7)
+        .order_by('-fecha_registro')
+    )
+    if not registros.exists():
+        return '<p style="color:#6b7280;">Sin registros en los últimos 7 días.</p>'
+
+    filas = []
+    for r in registros:
+        fecha = r.fecha_registro.strftime('%d/%m %H:%M')
+        filas.append(
+            f'<tr>'
+            f'<td>{fecha}</td>'
+            f'<td>POD {r.dia_postoperatorio}</td>'
+            f'<td>{r.temperatura} °C</td>'
+            f'<td>{r.dolor_eva}/10</td>'
+            f'<td>{"Sí" if r.presencia_gases else "No"}</td>'
+            f'<td>{r.episodios_nauseas}</td>'
+            f'<td>{r.get_aspecto_drenaje_display() if r.tiene_drenaje else "—"}</td>'
+            f'<td>{"Sí" if r.tolero_liquidos else ("No" if r.tolero_liquidos is False else "—")}</td>'
+            f'<td>{r.frecuencia_cardiaca if r.frecuencia_cardiaca else "—"} lpm</td>'
+            f'</tr>'
+        )
+
+    tabla = (
+        '<table style="width:100%;border-collapse:collapse;font-size:0.85em;">'
+        '<thead><tr style="background:#f3f4f6;">'
+        '<th>Fecha</th><th>POD</th><th>Temp.</th><th>Dolor EVA</th>'
+        '<th>Gases</th><th>Náuseas</th><th>Drenaje</th><th>Toleró liq.</th>'
+        '<th>FC</th>'
+        '</tr></thead>'
+        '<tbody>' + ''.join(filas) + '</tbody>'
+        '</table>'
+    )
+    return tabla
 
 
 @admin.register(Paciente)
@@ -17,6 +63,13 @@ class PacienteAdmin(admin.ModelAdmin):
                      'medico_responsable__first_name',
                      'medico_responsable__last_name',
                      'medico_responsable__username']
+    readonly_fields = ['historial_ultimos_7_dias']
+
+    @admin.display(description='Historial últimos 7 días')
+    def historial_ultimos_7_dias(self, obj):
+        if obj.pk is None:
+            return '—'
+        return mark_safe(_historial_7_dias(obj))
 
     @admin.display(description='Médico responsable')
     def medico_nombre(self, obj):
@@ -81,16 +134,52 @@ class RegistroDiarioAdmin(admin.ModelAdmin):
         return super().has_delete_permission(request, obj)
 
 
+_COLORES_SEVERIDAD = {
+    'ALTA':  ('#7f1d1d', '#fee2e2'),   # rojo oscuro texto, rojo claro fondo
+    'MEDIA': ('#78350f', '#fef3c7'),   # ámbar oscuro texto, ámbar claro fondo
+    'BAJA':  ('#14532d', '#dcfce7'),   # verde oscuro texto, verde claro fondo
+}
+
+
 @admin.register(Alerta)
 class AlertaAdmin(admin.ModelAdmin):
-    list_display = ['paciente', 'tipo', 'severidad',
+    list_display = ['paciente', 'tipo', 'severidad_badge',
                     'resuelta', 'fecha_alerta', 'mensaje_corto']
     list_filter = ['tipo', 'severidad', 'resuelta']
     search_fields = ['paciente__nombre_completo']
+    actions = ['marcar_resuelta']
+
+    @admin.display(description='Severidad', ordering='severidad')
+    def severidad_badge(self, obj):
+        color_texto, color_fondo = _COLORES_SEVERIDAD.get(
+            obj.severidad, ('#374151', '#f3f4f6')
+        )
+        return format_html(
+            '<span style="'
+            'background:{fondo};color:{texto};'
+            'padding:2px 8px;border-radius:4px;'
+            'font-weight:bold;font-size:0.85em;'
+            '">{label}</span>',
+            fondo=color_fondo,
+            texto=color_texto,
+            label=obj.get_severidad_display(),
+        )
 
     @admin.display(description='Mensaje')
     def mensaje_corto(self, obj):
         return obj.mensaje[:80] + '…' if len(obj.mensaje) > 80 else obj.mensaje
+
+    @admin.action(description='Marcar como resuelta')
+    def marcar_resuelta(self, request, queryset):
+        from django.utils import timezone as tz
+        actualizadas = queryset.filter(resuelta=False).update(
+            resuelta=True,
+            fecha_resolucion=tz.now(),
+        )
+        self.message_user(
+            request,
+            f'{actualizadas} alerta(s) marcadas como resueltas.',
+        )
 
     def get_queryset(self, request):
         """B6: solo alertas de pacientes propios del médico. Superuser ve todos."""

@@ -1761,6 +1761,128 @@ class AdminScopingTests(TestCase):
         self.assertEqual(self.client.get(url).status_code, 200)
 
 
+class AlertaAdminAccionesTests(TestCase):
+    """Bloque 5A — Colores severidad + acción marcar_resuelta en AlertaAdmin."""
+
+    def setUp(self):
+        User = get_user_model()
+        from django.contrib.auth.models import Permission
+        from django.contrib.contenttypes.models import ContentType
+        self.superuser = User.objects.create_superuser(
+            username='super5a', password='pass',
+        )
+        self.paciente = Paciente.objects.create(
+            nombre_completo="Paciente 5A",
+            telefono_whatsapp="+573019990001",
+            fecha_cirugia=timezone.localdate(),
+        )
+        campos = dict(
+            temperatura=Decimal('37.0'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+        self.registro = RegistroDiario.objects.create(paciente=self.paciente, **campos)
+        self.alerta = Alerta.objects.create(
+            paciente=self.paciente,
+            registro_origen=self.registro,
+            tipo='SEPSIS', severidad='ALTA', mensaje='Fiebre test',
+        )
+
+    def test_changelist_contiene_badge_severidad(self):
+        """La lista de alertas renderiza el badge de severidad con HTML coloreado."""
+        self.client.force_login(self.superuser)
+        resp = self.client.get('/admin/signos_sintomas/alerta/')
+        self.assertEqual(resp.status_code, 200)
+        # El badge usa border-radius como parte del estilo — confirma que se renderizó HTML
+        self.assertContains(resp, 'border-radius')
+
+    def test_accion_marcar_resuelta(self):
+        """La acción marcar_resuelta actualiza la alerta y registra fecha_resolucion."""
+        self.client.force_login(self.superuser)
+        self.client.post(
+            '/admin/signos_sintomas/alerta/',
+            {
+                'action': 'marcar_resuelta',
+                '_selected_action': [str(self.alerta.pk)],
+            },
+        )
+        self.alerta.refresh_from_db()
+        self.assertTrue(self.alerta.resuelta)
+        self.assertIsNotNone(self.alerta.fecha_resolucion)
+
+
+class AlertaEmailNotificacionTests(TestCase):
+    """Bloque 5C — Email al médico cuando se crea alerta ALTA."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.medico = User.objects.create_user(
+            username='dr_email', password='pass', email='dr@test.com',
+        )
+        self.paciente = Paciente.objects.create(
+            nombre_completo="Paciente Email",
+            telefono_whatsapp="+573019990002",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable=self.medico,
+        )
+        self.registro = RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('37.0'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+
+    def test_alerta_alta_envia_email(self):
+        """Al crear alerta ALTA con médico+email, se envía un email vía on_commit."""
+        from django.core import mail
+        with self.captureOnCommitCallbacks(execute=True):
+            Alerta.objects.create(
+                paciente=self.paciente,
+                registro_origen=self.registro,
+                tipo='SEPSIS',
+                severidad='ALTA',
+                mensaje='Fiebre alta de prueba.',
+            )
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('ALERTA ALTA', mail.outbox[0].subject)
+        self.assertIn('dr@test.com', mail.outbox[0].to)
+
+    def test_alerta_media_no_envia_email(self):
+        """Solo las alertas ALTA envían email — MEDIA y BAJA no."""
+        from django.core import mail
+        with self.captureOnCommitCallbacks(execute=True):
+            Alerta.objects.create(
+                paciente=self.paciente,
+                registro_origen=self.registro,
+                tipo='SEPSIS',
+                severidad='MEDIA',
+                mensaje='Subfebrícula.',
+            )
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_alerta_alta_sin_medico_no_falla(self):
+        """Alerta ALTA en paciente sin médico responsable no lanza excepción."""
+        from django.core import mail
+        paciente_sin_medico = Paciente.objects.create(
+            nombre_completo="Sin Médico",
+            telefono_whatsapp="+573019990003",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable=None,
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente_sin_medico,
+            temperatura=Decimal('37.0'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+        with self.captureOnCommitCallbacks(execute=True):
+            Alerta.objects.create(
+                paciente=paciente_sin_medico,
+                registro_origen=registro,
+                tipo='SEPSIS',
+                severidad='ALTA',
+                mensaje='Sin medico.',
+            )
+        self.assertEqual(len(mail.outbox), 0)
+
+
 class CacheProductionConfigTests(TestCase):
     """D1 — Detecta dependencia redis faltante cuando producción usa RedisCache."""
 
