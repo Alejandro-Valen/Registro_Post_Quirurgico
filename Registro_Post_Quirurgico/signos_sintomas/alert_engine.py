@@ -40,17 +40,34 @@ FC_ALTA_MIN  = 150  # >=150: escalamiento inmediato (protocolos hospitalarios)
 # Escalera de dolor (EVA) por ventana de dia_postoperatorio.
 # Decisión Arquitecto, jun 2026. Base: Delaney 2008, Lee 2022,
 # Outersterp 2025, Coeckelberghs 2025.
+# La primera ventana cubre POD 0-2: dia_postoperatorio=0 no ocurre en
+# operación normal (cirugías de 9+ horas, alta siempre al día siguiente)
+# pero la condición <=2 lo cubre de forma defensiva — decisión 0-⑤ Sprint 4.
 VENTANAS_DOLOR = [
     # (dia_postoperatorio_max_inclusive, eva_baja_min, eva_media_min, eva_alta_min)
-    (2,    5, 7, 9),   # POD 1-2
+    (2,    5, 7, 9),   # POD 0-2 (defensivo: 0 no ocurre en práctica)
     (5,    4, 6, 8),   # POD 3-5
     (None, 3, 5, 7),   # POD 6+ (None = sin límite superior)
 ]
 DOLOR_DIAS_TENDENCIA = 2
 DOLOR_DELTA_TENDENCIA = 3
 
-# Orden de severidad usado por múltiples reglas.
+# Orden de severidad usado por múltiples reglas y por la deduplicación
+# de alertas (decisión 0-② Sprint 4 — Opción A+).
 ORDEN_SEVERIDAD = {'BAJA': 1, 'MEDIA': 2, 'ALTA': 3, None: 0}
+
+
+def _deduplicar(paciente, tipo, severidad, fecha_referencia):
+    """Opción A+ (decisión 0-② Sprint 4): retorna True si ya existe una
+    alerta del mismo tipo/día con severidad igual o mayor.
+    Si retorna True, el llamador debe omitir la creación de la alerta."""
+    alertas_hoy = Alerta.objects.filter(
+        paciente=paciente,
+        tipo=tipo,
+        fecha_alerta__date=fecha_referencia,
+    ).values_list('severidad', flat=True)
+    nueva_orden = ORDEN_SEVERIDAD[severidad]
+    return any(ORDEN_SEVERIDAD[s] >= nueva_orden for s in alertas_hoy)
 
 
 def _severidad_dolor_por_ventana(dia_postoperatorio, dolor_eva):
@@ -85,12 +102,14 @@ def _nivel_hinchazon_dia(paciente, dia):
     return max(niveles) if niveles else None
 
 
-def _evaluar_temperatura(registro):
+def _evaluar_temperatura(registro, fecha_referencia):
     """Regla 1: Temperatura — escalera por días calendario.
     Decisión Arquitecto, jun 2026. Base: Outersterp 2025 (>37.9°C umbral
     de notificación en monitoreo domiciliario, no solo criterio de alta
     hospitalaria como en otros estudios)."""
     if registro.temperatura >= TEMPERATURA_ALTA:
+        if _deduplicar(registro.paciente, 'SEPSIS', 'ALTA', fecha_referencia):
+            return []
         return [Alerta.objects.create(
             paciente=registro.paciente,
             registro_origen=registro,
@@ -103,10 +122,9 @@ def _evaluar_temperatura(registro):
         )]
 
     if TEMPERATURA_SUBFEBRICULA_MIN <= registro.temperatura < TEMPERATURA_ALTA:
-        hoy = timezone.localdate(registro.fecha_registro)
         dias_con_subfebricula = set()
         for offset in range(DIAS_SUBFEBRICULA_PERSISTENTE):
-            dia = hoy - timedelta(days=offset)
+            dia = fecha_referencia - timedelta(days=offset)
             existe = RegistroDiario.objects.filter(
                 paciente=registro.paciente,
                 fecha_registro__date=dia,
@@ -116,6 +134,8 @@ def _evaluar_temperatura(registro):
             if existe:
                 dias_con_subfebricula.add(dia)
         if len(dias_con_subfebricula) >= DIAS_SUBFEBRICULA_PERSISTENTE:
+            if _deduplicar(registro.paciente, 'SEPSIS', 'MEDIA', fecha_referencia):
+                return []
             return [Alerta.objects.create(
                 paciente=registro.paciente,
                 registro_origen=registro,
@@ -132,7 +152,7 @@ def _evaluar_temperatura(registro):
     return []
 
 
-def _evaluar_drenaje(registro):
+def _evaluar_drenaje(registro, fecha_referencia):
     """Regla 2: Drenaje anormal — solo evalúa si el paciente tiene drenaje activo.
     tiene_drenaje=None → registro anterior a esta versión, no se evalúa.
     Escalera: seroso→BAJA, turbio/hemático→MEDIA, purulento/fecaloide→ALTA."""
@@ -140,6 +160,8 @@ def _evaluar_drenaje(registro):
         return []
 
     if registro.aspecto_drenaje in DRENAJES_ALTA:
+        if _deduplicar(registro.paciente, 'FUGA_ANASTOMOTICA', 'ALTA', fecha_referencia):
+            return []
         return [Alerta.objects.create(
             paciente=registro.paciente,
             registro_origen=registro,
@@ -151,6 +173,8 @@ def _evaluar_drenaje(registro):
             )
         )]
     if registro.aspecto_drenaje in DRENAJES_MEDIA:
+        if _deduplicar(registro.paciente, 'FUGA_ANASTOMOTICA', 'MEDIA', fecha_referencia):
+            return []
         return [Alerta.objects.create(
             paciente=registro.paciente,
             registro_origen=registro,
@@ -162,6 +186,8 @@ def _evaluar_drenaje(registro):
             )
         )]
     if registro.aspecto_drenaje in DRENAJES_BAJA:
+        if _deduplicar(registro.paciente, 'FUGA_ANASTOMOTICA', 'BAJA', fecha_referencia):
+            return []
         return [Alerta.objects.create(
             paciente=registro.paciente,
             registro_origen=registro,
@@ -175,16 +201,15 @@ def _evaluar_drenaje(registro):
     return []
 
 
-def _evaluar_gases(registro):
+def _evaluar_gases(registro, fecha_referencia):
     """Regla 3: Ausencia de gases — escalera por días calendario consecutivos.
     Decisión Arquitecto, jun 2026. El paciente ya demostró función
     intestinal al momento del alta (criterio ERAS estándar); dejar de
     tener gases en casa es una regresión, no un estado normal. Un día
     cuenta como "con gases" si hubo al menos un registro positivo en
     cualquier check-in de ese día."""
-    hoy = timezone.localdate(registro.fecha_registro)
     dias_sin_gases_consecutivos = 0
-    dia_revisado = hoy
+    dia_revisado = fecha_referencia
     while True:
         hubo_gases = RegistroDiario.objects.filter(
             paciente=registro.paciente,
@@ -205,6 +230,8 @@ def _evaluar_gases(registro):
         dia_revisado = dia_revisado - timedelta(days=1)
 
     if dias_sin_gases_consecutivos >= DIAS_SIN_GASES_ALTA:
+        if _deduplicar(registro.paciente, 'ILEO_PARALITICO', 'ALTA', fecha_referencia):
+            return []
         return [Alerta.objects.create(
             paciente=registro.paciente,
             registro_origen=registro,
@@ -216,6 +243,8 @@ def _evaluar_gases(registro):
             )
         )]
     if dias_sin_gases_consecutivos >= DIAS_SIN_GASES_MEDIA:
+        if _deduplicar(registro.paciente, 'ILEO_PARALITICO', 'MEDIA', fecha_referencia):
+            return []
         return [Alerta.objects.create(
             paciente=registro.paciente,
             registro_origen=registro,
@@ -227,6 +256,8 @@ def _evaluar_gases(registro):
             )
         )]
     if dias_sin_gases_consecutivos >= DIAS_SIN_GASES_BAJA:
+        if _deduplicar(registro.paciente, 'ILEO_PARALITICO', 'BAJA', fecha_referencia):
+            return []
         return [Alerta.objects.create(
             paciente=registro.paciente,
             registro_origen=registro,
@@ -240,17 +271,16 @@ def _evaluar_gases(registro):
     return []
 
 
-def _evaluar_nauseas(registro):
+def _evaluar_nauseas(registro, fecha_referencia):
     """Regla 4: Náuseas/vómito — suma diaria + persistencia entre días.
     Decisión Arquitecto, jun 2026. Suma: Lee 2022 y Outersterp 2025
     tratan cualquier episodio como señal (no se espera acumulación de
     3+ como la regla anterior). Persistencia 4+ días: Delaney 2008
     (íleo en 27.8% de pacientes con estancia 4+ días vs 11% general) —
     mismo orden de magnitud que el umbral ALTA de la Regla 3 (gases)."""
-    hoy = timezone.localdate(registro.fecha_registro)
     total_episodios_hoy = RegistroDiario.objects.filter(
         paciente=registro.paciente,
-        fecha_registro__date=hoy,
+        fecha_registro__date=fecha_referencia,
     ).aggregate(total=models.Sum('episodios_nauseas'))['total'] or 0
 
     severidad_por_suma = None
@@ -262,7 +292,7 @@ def _evaluar_nauseas(registro):
         severidad_por_suma = 'BAJA'
 
     dias_con_nauseas_consecutivos = 0
-    dia_revisado = hoy
+    dia_revisado = fecha_referencia
     while True:
         hubo_nauseas = RegistroDiario.objects.filter(
             paciente=registro.paciente,
@@ -290,6 +320,9 @@ def _evaluar_nauseas(registro):
     if severidad_final is None:
         return []
 
+    if _deduplicar(registro.paciente, 'ILEO_PARALITICO', severidad_final, fecha_referencia):
+        return []
+
     mensaje = f"{total_episodios_hoy} episodios de náuseas/vómito hoy."
     gano_por_persistencia = (
         ORDEN_SEVERIDAD[severidad_por_persistencia]
@@ -315,7 +348,7 @@ def _evaluar_nauseas(registro):
     )]
 
 
-def _evaluar_dolor(registro):
+def _evaluar_dolor(registro, fecha_referencia):
     """Regla 5: Dolor (DOLOR_AGUDO) — escalera por ventana de
     dia_postoperatorio + capa de tendencia alcista.
     Decisión Arquitecto, jun 2026. La tolerancia de dolor esperado baja
@@ -328,17 +361,16 @@ def _evaluar_dolor(registro):
         registro.dia_postoperatorio, registro.dolor_eva
     )
 
-    hoy = timezone.localdate(registro.fecha_registro)
     promedio_reciente = RegistroDiario.objects.filter(
         paciente=registro.paciente,
-        fecha_registro__date__gte=hoy - timedelta(days=DOLOR_DIAS_TENDENCIA - 1),
-        fecha_registro__date__lte=hoy,
+        fecha_registro__date__gte=fecha_referencia - timedelta(days=DOLOR_DIAS_TENDENCIA - 1),
+        fecha_registro__date__lte=fecha_referencia,
     ).aggregate(promedio=models.Avg('dolor_eva'))['promedio']
 
     promedio_anterior = RegistroDiario.objects.filter(
         paciente=registro.paciente,
-        fecha_registro__date__gte=hoy - timedelta(days=(DOLOR_DIAS_TENDENCIA * 2) - 1),
-        fecha_registro__date__lt=hoy - timedelta(days=DOLOR_DIAS_TENDENCIA - 1),
+        fecha_registro__date__gte=fecha_referencia - timedelta(days=(DOLOR_DIAS_TENDENCIA * 2) - 1),
+        fecha_registro__date__lt=fecha_referencia - timedelta(days=DOLOR_DIAS_TENDENCIA - 1),
     ).aggregate(promedio=models.Avg('dolor_eva'))['promedio']
 
     severidad_por_tendencia = None
@@ -356,6 +388,9 @@ def _evaluar_dolor(registro):
     )
 
     if severidad_final is None:
+        return []
+
+    if _deduplicar(registro.paciente, 'DOLOR_AGUDO', severidad_final, fecha_referencia):
         return []
 
     mensaje = (
@@ -379,7 +414,7 @@ def _evaluar_dolor(registro):
     )]
 
 
-def _evaluar_tolerancia_liquidos(registro):
+def _evaluar_tolerancia_liquidos(registro, fecha_referencia):
     """Regla 6: Intolerancia a líquidos — escalera por días calendario.
     Decisión Arquitecto, jun 2026. Base: tolerancia oral es criterio de
     alta en todos los ERAS revisados; deshidratación = causa #1 de
@@ -390,9 +425,8 @@ def _evaluar_tolerancia_liquidos(registro):
     if registro.tolero_liquidos is not False:
         return []
 
-    hoy = timezone.localdate(registro.fecha_registro)
     dias_sin_tolerar = 0
-    dia_revisado = hoy
+    dia_revisado = fecha_referencia
     while True:
         toleraba = RegistroDiario.objects.filter(
             paciente=registro.paciente,
@@ -413,6 +447,8 @@ def _evaluar_tolerancia_liquidos(registro):
         dia_revisado = dia_revisado - timedelta(days=1)
 
     if dias_sin_tolerar >= DIAS_SIN_TOLERAR_LIQUIDOS_ALTA:
+        if _deduplicar(registro.paciente, 'INTOLERANCIA_ORAL', 'ALTA', fecha_referencia):
+            return []
         return [Alerta.objects.create(
             paciente=registro.paciente,
             registro_origen=registro,
@@ -425,6 +461,8 @@ def _evaluar_tolerancia_liquidos(registro):
             )
         )]
     if dias_sin_tolerar >= DIAS_SIN_TOLERAR_LIQUIDOS_MEDIA:
+        if _deduplicar(registro.paciente, 'INTOLERANCIA_ORAL', 'MEDIA', fecha_referencia):
+            return []
         return [Alerta.objects.create(
             paciente=registro.paciente,
             registro_origen=registro,
@@ -438,7 +476,7 @@ def _evaluar_tolerancia_liquidos(registro):
     return []
 
 
-def _evaluar_hinchazon(registro):
+def _evaluar_hinchazon(registro, fecha_referencia):
     """Regla 7: Hinchazón abdominal — empeoramiento entre días.
     Decisión Arquitecto, jun 2026. Distensión = signo cardinal de íleo.
     Prioriza especificidad: casi todos tienen algo de hinchazón post-op,
@@ -447,10 +485,9 @@ def _evaluar_hinchazon(registro):
     if registro.hinchazon_abdominal not in HINCHAZON_NIVELES:
         return []
 
-    hoy = timezone.localdate(registro.fecha_registro)
-    nivel_hoy = _nivel_hinchazon_dia(registro.paciente, hoy)
-    nivel_ayer = _nivel_hinchazon_dia(registro.paciente, hoy - timedelta(days=1))
-    nivel_antier = _nivel_hinchazon_dia(registro.paciente, hoy - timedelta(days=2))
+    nivel_hoy    = _nivel_hinchazon_dia(registro.paciente, fecha_referencia)
+    nivel_ayer   = _nivel_hinchazon_dia(registro.paciente, fecha_referencia - timedelta(days=1))
+    nivel_antier = _nivel_hinchazon_dia(registro.paciente, fecha_referencia - timedelta(days=2))
 
     severidad_hinchazon = None
 
@@ -469,7 +506,7 @@ def _evaluar_hinchazon(registro):
 
     # Condición ALTA: "mucho" (2) sostenido 4 días consecutivos
     dias_mucho = 0
-    dia_rev = hoy
+    dia_rev = fecha_referencia
     while True:
         nivel_dia = _nivel_hinchazon_dia(registro.paciente, dia_rev)
         if nivel_dia is None:
@@ -484,6 +521,9 @@ def _evaluar_hinchazon(registro):
         severidad_hinchazon = 'ALTA'
 
     if severidad_hinchazon is None:
+        return []
+
+    if _deduplicar(registro.paciente, 'ILEO_PARALITICO', severidad_hinchazon, fecha_referencia):
         return []
 
     mensajes_h = {
@@ -502,7 +542,7 @@ def _evaluar_hinchazon(registro):
     )]
 
 
-def _evaluar_frecuencia_cardiaca(registro):
+def _evaluar_frecuencia_cardiaca(registro, fecha_referencia):
     """Regla 8: Frecuencia cardíaca elevada (taquicardia) — valor absoluto.
     Decisión Arquitecto, jun 2026. Solo se vigila FC alta, no bradicardia.
     Sin lógica de días calendario: el valor por sí solo ya es significativo.
@@ -522,6 +562,9 @@ def _evaluar_frecuencia_cardiaca(registro):
     else:
         return []
 
+    if _deduplicar(registro.paciente, 'TAQUICARDIA', severidad_fc, fecha_referencia):
+        return []
+
     mensajes_fc = {
         'BAJA': f"Frecuencia cardíaca de {fc} lpm (taquicardia leve). Monitorear.",
         'MEDIA': f"Frecuencia cardíaca de {fc} lpm. Requiere evaluación — llamar al médico.",
@@ -536,15 +579,23 @@ def _evaluar_frecuencia_cardiaca(registro):
     )]
 
 
-def evaluar_registro(registro):
-    """Orquesta las 8 reglas clínicas y retorna todas las alertas creadas."""
+def evaluar_registro(registro, fecha_referencia=None):
+    """Orquesta las 8 reglas clínicas y retorna todas las alertas creadas.
+
+    fecha_referencia: fecha calendario que el engine usa como 'hoy' para
+    agrupar registros por día. Default: fecha local del registro.
+    El bot pasa checkin.fecha_dia para corregir cruces de medianoche
+    (decisión 0-① Sprint 4)."""
+    if fecha_referencia is None:
+        fecha_referencia = timezone.localdate(registro.fecha_registro)
+
     alertas = []
-    alertas += _evaluar_temperatura(registro)
-    alertas += _evaluar_drenaje(registro)
-    alertas += _evaluar_gases(registro)
-    alertas += _evaluar_nauseas(registro)
-    alertas += _evaluar_dolor(registro)
-    alertas += _evaluar_tolerancia_liquidos(registro)
-    alertas += _evaluar_hinchazon(registro)
-    alertas += _evaluar_frecuencia_cardiaca(registro)
+    alertas += _evaluar_temperatura(registro, fecha_referencia)
+    alertas += _evaluar_drenaje(registro, fecha_referencia)
+    alertas += _evaluar_gases(registro, fecha_referencia)
+    alertas += _evaluar_nauseas(registro, fecha_referencia)
+    alertas += _evaluar_dolor(registro, fecha_referencia)
+    alertas += _evaluar_tolerancia_liquidos(registro, fecha_referencia)
+    alertas += _evaluar_hinchazon(registro, fecha_referencia)
+    alertas += _evaluar_frecuencia_cardiaca(registro, fecha_referencia)
     return alertas

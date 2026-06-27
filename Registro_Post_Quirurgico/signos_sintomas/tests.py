@@ -1795,3 +1795,198 @@ class CheckInProgramadoModelTests(TestCase):
         self.assertIn(str(self.hoy), str(checkin))
         self.assertIn('MAÑANA', str(checkin))
         self.assertIn('PENDIENTE', str(checkin))
+
+
+class AlertFechaReferenciaTests(TestCase):
+    """Bloque 2A — parámetro fecha_referencia en evaluar_registro (decisión 0-①)."""
+
+    def _paciente(self, tel):
+        return Paciente.objects.create(
+            nombre_completo="Paciente FechaRef",
+            telefono_whatsapp=tel,
+            fecha_cirugia=timezone.localdate() - timedelta(days=10),
+        )
+
+    def _reg_sin_gases(self, paciente, dias_atras=0):
+        reg = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=False,
+            episodios_nauseas=0,
+        )
+        if dias_atras:
+            RegistroDiario.objects.filter(pk=reg.pk).update(
+                fecha_registro=timezone.now() - timedelta(days=dias_atras)
+            )
+        return reg
+
+    def test_sin_fecha_referencia_usa_fecha_local_del_registro(self):
+        """Backward compat: evaluar_registro sin fecha_referencia usa la
+        fecha local del registro. Un día sin gases → BAJA ILEO_PARALITICO."""
+        paciente = self._paciente("+573008889001")
+        reg = self._reg_sin_gases(paciente)
+        alertas = evaluar_registro(reg)
+        ileo = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(ileo), 1)
+        self.assertEqual(ileo[0].severidad, "BAJA")
+
+    def test_fecha_referencia_explicita_cambia_agrupamiento(self):
+        """Cruce de medianoche: registro con fecha_registro=hoy pertenece al
+        check-in de ayer. Con fecha_referencia=ayer el engine busca
+        fecha_registro__date=ayer. El registro nocturno (fecha_registro=hoy)
+        no entra en ese grupo → 2 días sin gases (ayer+antier) → MEDIA,
+        en vez de 3 días (hoy+ayer+antier) → ALTA que daría sin fecha_referencia."""
+        paciente = self._paciente("+573008889002")
+        ayer = timezone.localdate() - timedelta(days=1)
+
+        self._reg_sin_gases(paciente, dias_atras=2)  # antier
+        self._reg_sin_gases(paciente, dias_atras=1)  # ayer
+        reg_nocturno = self._reg_sin_gases(paciente, dias_atras=0)  # fecha_registro=hoy
+
+        alertas = evaluar_registro(reg_nocturno, fecha_referencia=ayer)
+        ileo = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(ileo), 1)
+        self.assertEqual(ileo[0].severidad, "MEDIA")  # 2 días (antier+ayer)
+
+    def test_sin_fecha_referencia_tres_dias_da_alta(self):
+        """Control: mismo setup con fecha_referencia=hoy (default) agrupa
+        hoy+ayer+antier → ALTA (3 días sin gases)."""
+        paciente = self._paciente("+573008889003")
+        self._reg_sin_gases(paciente, dias_atras=2)
+        self._reg_sin_gases(paciente, dias_atras=1)
+        reg_hoy = self._reg_sin_gases(paciente)
+
+        alertas = evaluar_registro(reg_hoy)  # default = hoy
+        ileo = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(ileo), 1)
+        self.assertEqual(ileo[0].severidad, "ALTA")  # 3 días
+
+
+class AlertDeduplicacionTests(TestCase):
+    """Bloque 2B — deduplicación Opción A+: una alerta por tipo/día,
+    escalamiento intra-día permitido (decisión 0-②)."""
+
+    def _paciente(self, tel):
+        return Paciente.objects.create(
+            nombre_completo="Paciente Dedup",
+            telefono_whatsapp=tel,
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),
+        )
+
+    def _reg_fc(self, paciente, fc):
+        return RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+            frecuencia_cardiaca=fc,
+        )
+
+    def _reg_temp(self, paciente, temp):
+        return RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal(str(temp)),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+
+    def test_misma_severidad_mismo_dia_bloquea_duplicado(self):
+        """Dos check-ins el mismo día con la misma condición y severidad:
+        el segundo no crea una alerta duplicada del mismo tipo."""
+        paciente = self._paciente("+573008881001")
+        alertas1 = evaluar_registro(self._reg_fc(paciente, 150))  # ALTA TAQUICARDIA
+        self.assertEqual(len([a for a in alertas1 if a.tipo == "TAQUICARDIA"]), 1)
+
+        alertas2 = evaluar_registro(self._reg_fc(paciente, 155))  # también ALTA → bloqueado
+        self.assertEqual(len([a for a in alertas2 if a.tipo == "TAQUICARDIA"]), 0)
+        self.assertEqual(Alerta.objects.filter(tipo="TAQUICARDIA").count(), 1)
+
+    def test_escalamiento_intradiario_crea_alerta_mayor(self):
+        """Mañana BAJA → tarde MEDIA: la MEDIA no es bloqueada porque su
+        severidad es mayor. Opción A+ permite escalamiento intra-día."""
+        paciente = self._paciente("+573008881002")
+        alertas1 = evaluar_registro(self._reg_fc(paciente, 105))  # BAJA
+        self.assertEqual([a for a in alertas1 if a.tipo == "TAQUICARDIA"][0].severidad, "BAJA")
+
+        alertas2 = evaluar_registro(self._reg_fc(paciente, 120))  # MEDIA > BAJA → no bloqueado
+        taqui2 = [a for a in alertas2 if a.tipo == "TAQUICARDIA"]
+        self.assertEqual(len(taqui2), 1)
+        self.assertEqual(taqui2[0].severidad, "MEDIA")
+        self.assertEqual(Alerta.objects.filter(tipo="TAQUICARDIA").count(), 2)
+
+    def test_severidad_menor_mismo_dia_bloqueada(self):
+        """Mañana ALTA → tarde BAJA del mismo tipo: la BAJA es bloqueada.
+        Una alerta no puede 'bajar' de severidad una vez alcanzada."""
+        paciente = self._paciente("+573008881003")
+        evaluar_registro(self._reg_fc(paciente, 150))  # ALTA
+        self.assertEqual(Alerta.objects.filter(tipo="TAQUICARDIA").count(), 1)
+
+        alertas2 = evaluar_registro(self._reg_fc(paciente, 103))  # BAJA → bloqueado
+        self.assertEqual(len([a for a in alertas2 if a.tipo == "TAQUICARDIA"]), 0)
+        self.assertEqual(Alerta.objects.filter(tipo="TAQUICARDIA").count(), 1)
+
+    def test_diferentes_dias_no_se_bloquean(self):
+        """La deduplicación es diaria: ALTA ayer NO bloquea ALTA hoy.
+        Se parchea fecha_alerta al día anterior porque auto_now_add siempre
+        pone el timestamp de ahora — en producción la alerta de ayer fue
+        creada realmente ayer, aquí hay que simularlo con update()."""
+        paciente = self._paciente("+573008881004")
+        ayer = timezone.localdate() - timedelta(days=1)
+
+        reg_ayer = self._reg_temp(paciente, "38.0")
+        RegistroDiario.objects.filter(pk=reg_ayer.pk).update(
+            fecha_registro=timezone.now() - timedelta(days=1)
+        )
+        evaluar_registro(reg_ayer, fecha_referencia=ayer)
+        # Simular que la alerta fue creada ayer (en producción sí lo sería)
+        Alerta.objects.filter(paciente=paciente, tipo="SEPSIS").update(
+            fecha_alerta=timezone.now() - timedelta(days=1)
+        )
+        self.assertEqual(Alerta.objects.filter(tipo="SEPSIS").count(), 1)
+
+        alertas_hoy = evaluar_registro(self._reg_temp(paciente, "38.1"))
+        self.assertEqual(len([a for a in alertas_hoy if a.tipo == "SEPSIS"]), 1)
+        self.assertEqual(Alerta.objects.filter(tipo="SEPSIS").count(), 2)
+
+    def test_diferentes_tipos_mismo_dia_no_se_bloquean(self):
+        """SEPSIS e ILEO_PARALITICO son tipos distintos: coexisten en el mismo día."""
+        paciente = self._paciente("+573008881005")
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("38.0"),  # SEPSIS ALTA
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=False,  # ILEO BAJA
+            episodios_nauseas=0,
+        )
+        alertas = evaluar_registro(registro)
+        tipos = {a.tipo for a in alertas}
+        self.assertIn("SEPSIS", tipos)
+        self.assertIn("ILEO_PARALITICO", tipos)
+
+    def test_gases_baja_y_nauseas_alta_mismo_dia_generan_dos_ileo(self):
+        """Gases=False (BAJA) y nauseas=5 (ALTA) en el mismo registro:
+        _evaluar_gases crea ILEO BAJA, luego _evaluar_nauseas prueba ALTA →
+        ALTA > BAJA → no bloqueada → se crean 2 alertas ILEO (escalamiento
+        intra-evaluación, Opción A+ lo permite porque la severidad sube)."""
+        paciente = self._paciente("+573008881006")
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=False,  # → ILEO BAJA
+            episodios_nauseas=5,    # → ILEO ALTA
+        )
+        alertas = evaluar_registro(registro)
+        ileo = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
+        self.assertEqual(len(ileo), 2)
+        severidades = {a.severidad for a in ileo}
+        self.assertIn("BAJA", severidades)
+        self.assertIn("ALTA", severidades)
