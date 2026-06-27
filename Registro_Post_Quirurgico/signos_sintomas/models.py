@@ -383,3 +383,98 @@ class ConversacionWhatsApp(models.Model):
 
     def __str__(self):
         return f"{self.paciente.nombre_completo} — {self.get_estado_display()}"
+
+
+class CheckInProgramado(models.Model):
+    """
+    Representa un evento de check-in programado para un paciente activo.
+
+    El scheduler crea 2 instancias por paciente activo cada día (mañana y
+    tarde). El bot las completa cuando el paciente responde. Si el paciente
+    no responde, el scheduler las cierra como NO_RESPONDIDO y el engine
+    genera una alerta de silencio.
+
+    Decisiones de diseño (cerradas Sprint 4 — no re-discutir):
+    - fecha_dia se congela al crear; nunca se recalcula en save() para evitar
+      el bug de cruce de medianoche.
+    - El turno se etiqueta por evento (lo fija el scheduler), nunca por la
+      hora en que el paciente responde.
+    - Solo se persisten datos crudos (hora_programada, fecha_respuesta);
+      latencia y % tardío se derivan en el dashboard.
+    """
+
+    ESTADO_PENDIENTE     = 'PENDIENTE'
+    ESTADO_COMPLETADO    = 'COMPLETADO'
+    ESTADO_NO_RESPONDIDO = 'NO_RESPONDIDO'
+    ESTADO_CHOICES = [
+        (ESTADO_PENDIENTE,     'Pendiente'),
+        (ESTADO_COMPLETADO,    'Completado'),
+        (ESTADO_NO_RESPONDIDO, 'No respondido'),
+    ]
+
+    ETIQUETA_MANANA = 'MAÑANA'
+    ETIQUETA_TARDE  = 'TARDE'
+    ETIQUETA_CHOICES = [
+        (ETIQUETA_MANANA, 'Mañana'),
+        (ETIQUETA_TARDE,  'Tarde'),
+    ]
+
+    paciente        = models.ForeignKey(
+        Paciente,
+        on_delete=models.PROTECT,
+        related_name='checkins',
+    )
+    fecha_dia       = models.DateField(
+        help_text="Día calendario del evento. Se congela al crear — no se recalcula en save()."
+    )
+    orden           = models.PositiveSmallIntegerField(
+        help_text="Posición del check-in en el día: 1=mañana, 2=tarde. Clave robusta del sistema."
+    )
+    etiqueta        = models.CharField(
+        max_length=10,
+        choices=ETIQUETA_CHOICES,
+        help_text="Etiqueta legible para el médico. La fija el scheduler al crear el evento."
+    )
+    hora_programada = models.DateTimeField(
+        help_text="Momento en que el sistema disparó (o debía disparar) el prompt al paciente."
+    )
+    fecha_respuesta = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Momento en que el paciente completó el flujo. null = aún no respondió."
+    )
+    estado          = models.CharField(
+        max_length=20,
+        choices=ESTADO_CHOICES,
+        default=ESTADO_PENDIENTE,
+    )
+    registro        = models.OneToOneField(
+        RegistroDiario,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='checkin',
+        help_text="RegistroDiario creado al completar el flujo. Se vincula en transacción atómica."
+    )
+
+    class Meta:
+        verbose_name        = "Check-in Programado"
+        verbose_name_plural = "Check-ins Programados"
+        ordering            = ['fecha_dia', 'orden']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['paciente', 'fecha_dia', 'orden'],
+                name='unique_checkin_paciente_dia_orden',
+            ),
+            CheckConstraint(
+                condition=Q(estado__in=['PENDIENTE', 'COMPLETADO', 'NO_RESPONDIDO']),
+                name='checkin_estado_valido',
+            ),
+            CheckConstraint(
+                condition=Q(etiqueta__in=['MAÑANA', 'TARDE']),
+                name='checkin_etiqueta_valida',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.paciente} — {self.fecha_dia} {self.etiqueta} ({self.estado})"

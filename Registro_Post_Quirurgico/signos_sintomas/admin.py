@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth import get_user_model
-from .models import Paciente, RegistroDiario, Alerta
+from .models import Paciente, RegistroDiario, Alerta, CheckInProgramado
 
 
 def _solo_propios(request):
@@ -108,4 +108,26 @@ class AlertaAdmin(admin.ModelAdmin):
         # Alertas son registros clínicos del sistema — la trazabilidad es
         # obligatoria. Solo superuser puede borrarlas; el flujo correcto para
         # médicos es marcar 'resuelta=True', no eliminar el registro.
+        return request.user.is_superuser
+
+
+@admin.register(CheckInProgramado)
+class CheckInProgramadoAdmin(admin.ModelAdmin):
+    list_display  = ['paciente', 'fecha_dia', 'etiqueta', 'orden',
+                     'estado', 'hora_programada', 'fecha_respuesta']
+    list_filter   = ['estado', 'etiqueta', 'fecha_dia']
+    search_fields = ['paciente__nombre_completo']
+    readonly_fields = ['hora_programada', 'fecha_respuesta', 'fecha_dia',
+                       'orden', 'etiqueta', 'registro']
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if _solo_propios(request):
+            return qs.filter(paciente__medico_responsable=request.user)
+        return qs
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser

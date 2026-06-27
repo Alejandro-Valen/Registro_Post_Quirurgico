@@ -4,13 +4,14 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
+from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from . import bot
 from .alert_engine import evaluar_registro
-from .models import Alerta, ConversacionWhatsApp, Paciente, RegistroDiario
+from .models import Alerta, CheckInProgramado, ConversacionWhatsApp, Paciente, RegistroDiario
 
 
 class AlertEngineTests(TestCase):
@@ -1714,3 +1715,83 @@ class CacheProductionConfigTests(TestCase):
                 "settings_production.py usa RedisCache y requiere redis>=5. "
                 "Instalar con: pip install 'redis>=5'"
             )
+
+
+class CheckInProgramadoModelTests(TestCase):
+    """Bloque 1 — Modelo CheckInProgramado: constraints, defaults y relaciones."""
+
+    def setUp(self):
+        self.paciente = Paciente.objects.create(
+            nombre_completo="Paciente CheckIn",
+            telefono_whatsapp="+573009990001",
+            fecha_cirugia=timezone.localdate() - timedelta(days=3),
+        )
+        self.hoy = timezone.localdate()
+        self.hora_programada = timezone.now().replace(hour=8, minute=0, second=0, microsecond=0)
+
+    def _crear_checkin(self, orden=1, etiqueta=CheckInProgramado.ETIQUETA_MANANA, **kwargs):
+        defaults = dict(
+            paciente=self.paciente,
+            fecha_dia=self.hoy,
+            orden=orden,
+            etiqueta=etiqueta,
+            hora_programada=self.hora_programada,
+        )
+        defaults.update(kwargs)
+        return CheckInProgramado.objects.create(**defaults)
+
+    def test_creacion_exitosa_campos_validos(self):
+        checkin = self._crear_checkin()
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_PENDIENTE)
+        self.assertEqual(checkin.etiqueta, CheckInProgramado.ETIQUETA_MANANA)
+        self.assertEqual(checkin.orden, 1)
+        self.assertIsNone(checkin.fecha_respuesta)
+        self.assertIsNone(checkin.registro)
+
+    def test_estado_default_es_pendiente(self):
+        checkin = self._crear_checkin(orden=2, etiqueta=CheckInProgramado.ETIQUETA_TARDE)
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_PENDIENTE)
+
+    def test_unique_constraint_mismo_paciente_dia_orden(self):
+        self._crear_checkin(orden=1)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self._crear_checkin(orden=1)
+
+    def test_dos_checkins_mismo_dia_distinto_orden_permitidos(self):
+        manana = self._crear_checkin(orden=1, etiqueta=CheckInProgramado.ETIQUETA_MANANA)
+        tarde  = self._crear_checkin(orden=2, etiqueta=CheckInProgramado.ETIQUETA_TARDE)
+        self.assertEqual(CheckInProgramado.objects.filter(paciente=self.paciente, fecha_dia=self.hoy).count(), 2)
+        self.assertNotEqual(manana.pk, tarde.pk)
+
+    def test_fecha_dia_no_es_auto_now_add(self):
+        ayer = self.hoy - timedelta(days=1)
+        checkin = self._crear_checkin(fecha_dia=ayer)
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.fecha_dia, ayer)
+
+    def test_registro_onetooone_puede_asignarse(self):
+        from decimal import Decimal
+        checkin = self._crear_checkin()
+        registro = RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=3,
+            aspecto_drenaje="seroso",
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        checkin.registro = registro
+        checkin.estado = CheckInProgramado.ESTADO_COMPLETADO
+        checkin.fecha_respuesta = timezone.now()
+        checkin.save()
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.registro.pk, registro.pk)
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_COMPLETADO)
+        self.assertIsNotNone(checkin.fecha_respuesta)
+
+    def test_str_representacion(self):
+        checkin = self._crear_checkin()
+        self.assertIn(str(self.hoy), str(checkin))
+        self.assertIn('MAÑANA', str(checkin))
+        self.assertIn('PENDIENTE', str(checkin))
