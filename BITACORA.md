@@ -1427,7 +1427,7 @@ código, no clínico.
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** 26/06/2026
 **Responsable:** León (Arquitecto IA) con Claude Code
-**Estado:** EN CURSO ⏳ — Bloque 0 completado, Bloque 1 iniciando
+**Estado:** EN CURSO ⏳ — Bloques 0, 1, 2A y 2B completados
 
 ### Qué se hizo
 
@@ -1482,11 +1482,85 @@ del ROADMAP sonaba como decisión compleja pero resultó ser una 1 línea
 defensiva. La clarificación fue que dia_postoperatorio=0 no ocurre en
 operación real porque el alta siempre llega después del día de cirugía.
 
+---
+
+### Bloque 1 — CheckInProgramado (26/06/2026, sesión 2)
+
+**Qué se hizo:**
+- Modelo `CheckInProgramado` agregado al final de `models.py`. Campos:
+  `paciente` (FK PROTECT), `fecha_dia` (DateField, no auto), `orden`
+  (PositiveSmallInt), `etiqueta` (MAÑANA/TARDE), `hora_programada`,
+  `fecha_respuesta` (null), `estado` (PENDIENTE/COMPLETADO/NO_RESPONDIDO),
+  `registro` (OneToOne a RegistroDiario, null). Constraints: UniqueConstraint
+  (paciente+fecha_dia+orden) + 2 CheckConstraints en BD para estado y etiqueta.
+- Migración `0012_checkin_programado` generada con `makemigrations` y aplicada
+  exitosamente.
+- `CheckInProgramadoAdmin` en `admin.py`: `readonly_fields` para todos los
+  campos de sistema, `has_add_permission=False` (los crea el scheduler),
+  `has_delete_permission` solo superuser. Scoping por médico responsable.
+- 7 tests en `CheckInProgramadoModelTests` (constraints, defaults, OneToOne,
+  str, etc.). Suite: **110 tests OK**.
+- Commit: `b445b9b` en `sprint-4-dashboard`.
+
+---
+
+### Bloques 2A y 2B — alert_engine.py refactor (26/06/2026, sesión 2)
+
+**Qué se hizo:**
+
+**Bloque 2A — fecha_referencia:**
+- `evaluar_registro(registro, fecha_referencia=None)` — la firma cambió. Si
+  `fecha_referencia=None`, el default es `timezone.localdate(registro.fecha_registro)`.
+- Las 6 funciones privadas con lógica de días calendario reciben ahora
+  `fecha_referencia` como parámetro en lugar de computar
+  `timezone.localdate(registro.fecha_registro)` cada una por su cuenta.
+  Esto corrige el bug de cruce de medianoche: el bot puede pasar
+  `fecha_referencia=checkin.fecha_dia` y el engine agrupa correctamente.
+- Las 2 funciones sin lógica de fechas (`_evaluar_drenaje`,
+  `_evaluar_frecuencia_cardiaca`) también reciben `fecha_referencia` para
+  que puedan pasar la fecha a `_deduplicar` sin requerir otro parámetro.
+- Gating POD 0 (decisión 0-⑤): la condición `dia_postoperatorio <= 2` ya
+  existía en `VENTANAS_DOLOR`. Solo se actualizó el comentario de la tupla
+  para que diga "POD 0-2" en lugar de "POD 1-2". No hubo cambio de lógica.
+- 3 tests en `AlertFechaReferenciaTests`: backward compat, cruce de medianoche
+  da MEDIA en vez de ALTA, control con default ALTA.
+
+**Bloque 2B — Deduplicación Opción A+:**
+- Nueva función `_deduplicar(paciente, tipo, severidad, fecha_referencia)`:
+  filtra `Alerta` por `paciente`, `tipo` y `fecha_alerta__date=fecha_referencia`,
+  retorna `True` si ya existe una alerta de igual o mayor severidad (usando
+  `ORDEN_SEVERIDAD` que ya existía en el engine). Si `True`, el llamador hace
+  `return []` sin crear la alerta.
+- Guard insertado antes de cada `Alerta.objects.create()` en las 8 funciones
+  privadas. Permite escalamiento intra-día (BAJA→MEDIA→ALTA) pero bloquea
+  duplicados y retrocesos (ALTA→MEDIA bloqueada).
+- 6 tests en `AlertDeduplicacionTests`: misma severidad bloqueada, escalamiento
+  intra-día pasa, severidad menor bloqueada, días distintos no se bloquean
+  (requiere `update()` en `fecha_alerta` para simular alert de ayer), tipos
+  distintos coexisten, gases+náuseas mismo día generan ILEO BAJA + ALTA.
+- Suite total: **119 tests OK**.
+- Commit: `c7baeee` en `sprint-4-dashboard`.
+
+**Problemas encontrados y resueltos:**
+
+1. **Reescritura total del engine vs. ediciones parciales:** dada la cantidad
+   de cambios (todos los `def _evaluar_*` tocados), se optó por reescribir
+   el archivo completo. Previene errores de edición parcial.
+
+2. **Test `test_diferentes_dias_no_se_bloquean` fallaba (0 != 1):** la
+   deduplicación filtra por `fecha_alerta__date`, pero `fecha_alerta` es
+   `auto_now_add=True` — se crea con el timestamp actual. En el test, la
+   alerta "de ayer" se creaba con `fecha_alerta=ahora=hoy`, así que la
+   deduplicación de "hoy" la encontraba y bloqueaba la nueva. Solución:
+   `Alerta.objects.filter(...).update(fecha_alerta=timezone.now() - timedelta(days=1))`
+   después de crear la alerta "de ayer", simulando que fue creada ayer.
+
 ### Próximo paso
 
-**Bloque 1 — Modelo `CheckInProgramado` + migración + tests + admin.**
-Gate de éxito: `python manage.py test signos_sintomas` ≥ 103 tests en
-verde + `python manage.py check` sin errores.
+**Bloque 3 — Refactor de bot.py** (guard por CheckInProgramado PENDIENTE +
+vínculo OneToOne transaccional). Antes de implementar hay una decisión
+de arquitectura pendiente: ¿qué mensaje se muestra al paciente cuando
+escribe y no hay CheckInProgramado PENDIENTE para ese día?
 
 ---
 

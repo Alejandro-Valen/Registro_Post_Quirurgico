@@ -498,14 +498,16 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
   1-2 a `dia_postoperatorio <= 2`. Justificación: en el flujo real del
   sistema dia_postoperatorio=0 es clínicamente imposible (cirugías de
   9+ horas — el alta ocurre como mínimo el día siguiente). El cambio es
-  defensivo: 1 línea en `_evaluar_dolor()`. Se implementa en Bloque 2A.
+  defensivo: la condición `<= 2` ya lo cubría; solo se actualizó el
+  comentario en `VENTANAS_DOLOR`. Implementado en Bloque 2A (26/06/2026).
 
 - [ ] Personalizar Django Admin con colores según severidad de alertas
 - [ ] Crear vista detalle_paciente con historial y gráfica temperatura/dolor
 - [ ] Implementar notificación al médico por email/SMS cuando hay alerta roja
 - [ ] **Implementación 2×/día (arquitectura CERRADA en FASE 3.6 — leer D1–D5
   y el esquema de `CheckInProgramado` ahí; aquí NO se re-decide, se ejecuta):**
-  - [ ] Crear modelo `CheckInProgramado` según el esquema acordado + migración.
+  - [x] Crear modelo `CheckInProgramado` según el esquema acordado + migración.
+    (Bloque 1 — 26/06/2026; migración 0012, 7 tests, admin con scoping)
   - [ ] Scheduler — **DECISIÓN TOMADA (0-④):** management commands +
     cron del SO. Tres commands: `crear_checkins_diarios` (6:00 AM),
     `enviar_recordatorios` (7:00 AM), `cerrar_checkins_vencidos` (18:00
@@ -516,17 +518,17 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
   - [ ] Alerta de silencio (NO_RESPONDIDO) — **DECISIÓN TOMADA (0-③):**
     tipo `SILENCIO` (choice nuevo). Racha check a check:
     1 → BAJA, 2 consecutivos → MEDIA, 3+ → ALTA.
-  - [ ] Resolver los 2 gatings:
-    - Deduplicación — **DECISIÓN TOMADA (0-②):** Opción A+ (una alerta
-      por tipo/día; escala si la nueva severidad supera la existente).
-    - Gating pre-operatorio (dia_postoperatorio=0) — DECISIÓN ABIERTA.
+  - [x] Resolver los 2 gatings (Bloque 2B — 26/06/2026):
+    - Deduplicación — **IMPLEMENTADA (0-②):** `_deduplicar()` en cada
+      `Alerta.objects.create()` del engine. 6 tests `AlertDeduplicacionTests`.
+    - Gating pre-operatorio — **CERRADO (0-⑤):** `VENTANAS_DOLOR[0]` ya
+      cubre POD 0 con `dia_postoperatorio <= 2`. Solo comentario actualizado.
   - [ ] **Deuda de diseño detectada en el cruce contra el código
     (detalle y razonamiento en BITACORA.md, entrada del 22/06/2026):**
-    - [ ] **Fecha autoritativa — DECISIÓN TOMADA (0-①):** Opción B.
-      Refactorizar `evaluar_registro()` con parámetro opcional
-      `fecha_referencia`. Los ~8 usos de `fecha_registro__date` en
-      funciones privadas del engine se reemplazan por `fecha_referencia`.
-      Tests existentes no cambian (default mantiene comportamiento actual).
+    - [x] **Fecha autoritativa — IMPLEMENTADA (0-①, Bloque 2A, 26/06/2026):**
+      `evaluar_registro(registro, fecha_referencia=None)`. Los 6 usos de
+      `fecha_registro__date` en funciones privadas reemplazados por el
+      parámetro. 3 tests `AlertFechaReferenciaTests`. Tests existentes: OK.
     - [ ] **Reescribir el guard "un registro por día" → "por check-in".**
       bot.py hoy bloquea con `fecha_ultimo_registro` (líneas ~145-146 y
       161-162 → MSG_YA_REGISTRADO); con 2 check-ins/día eso bloquearía el
