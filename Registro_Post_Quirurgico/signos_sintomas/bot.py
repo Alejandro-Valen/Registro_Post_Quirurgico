@@ -34,7 +34,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .alert_engine import evaluar_registro
-from .models import ConversacionWhatsApp, Paciente, RegistroDiario
+from .models import CheckInProgramado, ConversacionWhatsApp, Paciente, RegistroDiario
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +46,13 @@ MSG_NO_REGISTRADO = (
     "Por favor comunícate con tu médico para activarlo. Estamos para acompañarte."
 )
 MSG_YA_REGISTRADO = (
-    "Ya registramos tus datos de hoy ✅ Gracias por cuidarte. Nos vemos mañana 🌿"
+    "¡Tus datos de hoy ya están registrados! ✅ "
+    "Si tienes alguna duda sobre tu recuperación, puedes escribirme aquí 🌿"
+)
+MSG_SIN_CHECKIN = (
+    "Por ahora no tienes un reporte pendiente. "
+    "Te escribiré cuando sea la hora 🌿 "
+    "Si tienes alguna duda sobre tu recuperación, puedes preguntarme aquí."
 )
 MSG_CONFIRMACION = (
     "¡Listo! ✅ Hemos registrado tu reporte de hoy. Gracias por cuidarte 🌿 "
@@ -201,45 +207,59 @@ def procesar_mensaje(telefono, texto):
 
 
 def _procesar_con_conv(conv, paciente, texto, hoy):
-
-    # Nuevo día: si completó en un día anterior, reiniciar el ciclo diario.
-    if (conv.estado == ConversacionWhatsApp.ESTADO_COMPLETADO
-            and conv.fecha_ultimo_registro != hoy):
-        _reiniciar(conv)
-    elif conv.estado not in (
-        ConversacionWhatsApp.ESTADO_INICIO,
-        ConversacionWhatsApp.ESTADO_COMPLETADO,
-    ):
-        # A1: conversación abandonada a mitad de flujo en un día anterior.
-        # Los datos parciales se descartan; el día anterior queda sin registro.
-        if timezone.localdate(conv.fecha_actualizacion) < hoy:
-            _limpiar_temporales(conv)
-            conv.estado = ConversacionWhatsApp.ESTADO_TEMPERATURA
-            conv.save()
-            return MSG_ABANDONO_REINICIO
-
     en_flujo = conv.estado not in (
         ConversacionWhatsApp.ESTADO_INICIO,
         ConversacionWhatsApp.ESTADO_COMPLETADO,
     )
 
-    # Dudas (FAQ) — solo cuando el paciente no está respondiendo el registro.
-    if not en_flujo:
-        respuesta_duda = _responder_duda(texto)
-        if respuesta_duda is not None:
-            return respuesta_duda
+    # A1: conversación abandonada a mitad de flujo en un día anterior.
+    # Los datos parciales se descartan; el día anterior queda sin registro.
+    if en_flujo and timezone.localdate(conv.fecha_actualizacion) < hoy:
+        _limpiar_temporales(conv)
+        # Si hay check-in PENDIENTE hoy, ir directo a TEMPERATURA (el mensaje
+        # de abandono ya pregunta la temperatura — sin paso extra para el paciente).
+        checkin_hoy = CheckInProgramado.objects.filter(
+            paciente=paciente,
+            fecha_dia=hoy,
+            estado=CheckInProgramado.ESTADO_PENDIENTE,
+        ).order_by('orden').first()
+        conv.estado = (
+            ConversacionWhatsApp.ESTADO_TEMPERATURA if checkin_hoy
+            else ConversacionWhatsApp.ESTADO_INICIO
+        )
+        conv.save()
+        return MSG_ABANDONO_REINICIO
 
-    # Ya completó hoy.
-    if conv.estado == ConversacionWhatsApp.ESTADO_COMPLETADO:
-        return MSG_YA_REGISTRADO
+    # Si ya estamos en mitad del flujo de hoy, continuar respondiendo.
+    if en_flujo:
+        return _procesar_respuesta_flujo(conv, paciente, texto, hoy)
 
-    # INICIO -> arrancar el cuestionario.
-    if conv.estado == ConversacionWhatsApp.ESTADO_INICIO:
+    # Fuera del flujo (INICIO o COMPLETADO): FAQ disponible siempre.
+    respuesta_duda = _responder_duda(texto)
+    if respuesta_duda is not None:
+        return respuesta_duda
+
+    # Buscar el CheckInProgramado PENDIENTE de hoy.
+    checkin = CheckInProgramado.objects.filter(
+        paciente=paciente,
+        fecha_dia=hoy,
+        estado=CheckInProgramado.ESTADO_PENDIENTE,
+    ).order_by('orden').first()
+
+    if checkin is not None:
         conv.estado = ConversacionWhatsApp.ESTADO_TEMPERATURA
         conv.save()
         return MSG_PREGUNTA_TEMPERATURA
 
-    return _procesar_respuesta_flujo(conv, paciente, texto, hoy)
+    # No hay check-in pendiente — ¿completó alguno hoy?
+    if CheckInProgramado.objects.filter(
+        paciente=paciente,
+        fecha_dia=hoy,
+        estado=CheckInProgramado.ESTADO_COMPLETADO,
+    ).exists():
+        return MSG_YA_REGISTRADO
+
+    return MSG_SIN_CHECKIN
 
 
 # ---------------------------------------------------------------------------
@@ -360,7 +380,7 @@ def _procesar_respuesta_flujo(conv, paciente, texto, hoy):
             conv.temp_tolero_liquidos = False
         else:
             return MSG_REINTENTO_TOLERANCIA_LIQUIDOS
-        _crear_registro(conv, paciente)
+        _crear_registro(conv, paciente, hoy)
         _finalizar(conv, hoy)
         return MSG_CONFIRMACION
 
@@ -369,18 +389,17 @@ def _procesar_respuesta_flujo(conv, paciente, texto, hoy):
     return MSG_PREGUNTA_TEMPERATURA
 
 
-def _crear_registro(conv, paciente):
-    """Crea el RegistroDiario definitivo y programa la evaluación de alertas.
+def _crear_registro(conv, paciente, hoy):
+    """Crea el RegistroDiario definitivo, lo vincula al CheckInProgramado
+    PENDIENTE de hoy (Bloque 3) y programa la evaluación de alertas.
 
-    B3: la evaluación del alert_engine (múltiples queries históricas) corre en
-    un hilo post-commit para no bloquear la respuesta a Twilio, cuyo timeout
-    es 15 s. transaction.on_commit() garantiza que el hilo solo arranca
-    después de que el RegistroDiario sea visible en la BD (el commit de la
-    transacción de A4 ya ocurrió). Las alertas quedan en BD para el oncólogo.
+    El vínculo OneToOne (checkin.registro) y el cambio de estado del check-in
+    ocurren dentro del mismo bloque atomic que la creación del registro, así no
+    pueden quedar registros huérfanos ni check-ins COMPLETADO sin registro.
 
-    Limitación conocida: si el proceso cae antes de que el hilo termine, las
-    alertas no se generan para ese registro. Solución definitiva: Celery en
-    Sprint 4.
+    fecha_referencia=checkin.fecha_dia corrige el cruce de medianoche: si el
+    paciente responde un check-in de ayer después de las 00:00, el engine agrupa
+    los datos por el día correcto (decisión 0-①).
     """
     registro = RegistroDiario.objects.create(
         paciente=paciente,
@@ -398,11 +417,25 @@ def _crear_registro(conv, paciente):
         tolero_liquidos=conv.temp_tolero_liquidos,
     )
 
-    # B3: diferir evaluar_registro a post-commit (fuera del bloque atomic de A4)
-    # para liberar el select_for_update antes de hacer las queries históricas.
-    # Sigue siendo síncrono en el mismo hilo de la request — la solución
-    # completamente asíncrona (sin bloqueo de Twilio) requiere Celery (Sprint 4).
-    transaction.on_commit(lambda: evaluar_registro(registro))
+    # Vincular al CheckInProgramado PENDIENTE de hoy (primero en orden).
+    checkin = CheckInProgramado.objects.filter(
+        paciente=paciente,
+        fecha_dia=hoy,
+        estado=CheckInProgramado.ESTADO_PENDIENTE,
+    ).order_by('orden').first()
+
+    if checkin is not None:
+        checkin.registro = registro
+        checkin.estado = CheckInProgramado.ESTADO_COMPLETADO
+        checkin.fecha_respuesta = timezone.now()
+        checkin.save()
+        fecha_referencia = checkin.fecha_dia
+    else:
+        fecha_referencia = hoy
+
+    transaction.on_commit(
+        lambda: evaluar_registro(registro, fecha_referencia=fecha_referencia)
+    )
     return registro
 
 

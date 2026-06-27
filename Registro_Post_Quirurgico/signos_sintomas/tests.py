@@ -1088,10 +1088,20 @@ class BotWhatsAppTests(TestCase):
     TELEFONO_TWILIO = "whatsapp:+573001112233"
 
     def _crear_paciente(self):
-        return Paciente.objects.create(
+        paciente = Paciente.objects.create(
             nombre_completo="Paciente Bot",
             telefono_whatsapp=self.TELEFONO,
-            fecha_cirugia=timezone.localdate() - timedelta(days=5),        )
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),
+        )
+        # Bloque 3: el bot requiere CheckInProgramado PENDIENTE para iniciar el flujo.
+        CheckInProgramado.objects.create(
+            paciente=paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now(),
+        )
+        return paciente
 
     def _completar_flujo(self, gases_nauseas="sí, 0", temperatura="37.0",
                          tiene_drenaje="sí", aspecto="1", cantidad="normal",
@@ -1278,6 +1288,37 @@ class BotWhatsAppTests(TestCase):
         )
         self.assertEqual(RegistroDiario.objects.count(), 0)
 
+    def test_sin_checkin_pendiente_muestra_mensaje(self):
+        """Bloque 3: si no hay CheckInProgramado PENDIENTE hoy, el bot devuelve MSG_SIN_CHECKIN."""
+        Paciente.objects.create(
+            nombre_completo="Paciente Sin CheckIn",
+            telefono_whatsapp=self.TELEFONO,
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),
+        )
+        # Sin CheckInProgramado → el bot responde MSG_SIN_CHECKIN y no crea RegistroDiario
+        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
+        self.assertEqual(respuesta, bot.MSG_SIN_CHECKIN)
+        self.assertEqual(RegistroDiario.objects.count(), 0)
+
+    def test_ya_registrado_via_checkin_completado(self):
+        """Bloque 3: si el CheckInProgramado del día ya está COMPLETADO, responde MSG_YA_REGISTRADO."""
+        self._crear_paciente()
+        # Completar el flujo → checkin queda COMPLETADO
+        self._completar_flujo()
+        # Nuevo mensaje del mismo día
+        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
+        self.assertEqual(respuesta, bot.MSG_YA_REGISTRADO)
+
+    def test_checkin_vinculado_al_registro_al_completar(self):
+        """Bloque 3: al completar el flujo, el CheckInProgramado queda COMPLETADO y vinculado al RegistroDiario."""
+        self._crear_paciente()
+        self._completar_flujo()
+        registro = RegistroDiario.objects.get()
+        checkin = CheckInProgramado.objects.get()
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_COMPLETADO)
+        self.assertEqual(checkin.registro, registro)
+        self.assertIsNotNone(checkin.fecha_respuesta)
+
 
 class ParseEnteroRangoDecimalTests(TestCase):
     """C4 — _parse_entero_rango rechaza decimales con punto y coma."""
@@ -1316,11 +1357,19 @@ class BotAbandonoConversacionTests(TestCase):
     TELEFONO_TWILIO = "whatsapp:+573001119999"
 
     def _crear_paciente(self):
-        return Paciente.objects.create(
+        paciente = Paciente.objects.create(
             nombre_completo="Paciente Abandono",
             telefono_whatsapp=self.TELEFONO,
             fecha_cirugia=timezone.localdate() - timedelta(days=5),
         )
+        CheckInProgramado.objects.create(
+            paciente=paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now(),
+        )
+        return paciente
 
     def test_conversacion_en_flujo_ayer_reinicia_con_aviso(self):
         paciente = self._crear_paciente()
@@ -1379,10 +1428,19 @@ class WebhookWhatsAppTests(TestCase):
 
     @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
     def test_post_valido_devuelve_twiml(self):
-        Paciente.objects.create(
+        paciente = Paciente.objects.create(
             nombre_completo="Paciente Webhook",
             telefono_whatsapp="+573001112233",
-            fecha_cirugia=timezone.localdate() - timedelta(days=3),        )
+            fecha_cirugia=timezone.localdate() - timedelta(days=3),
+        )
+        # Bloque 3: el bot requiere CheckInProgramado PENDIENTE para iniciar el flujo
+        CheckInProgramado.objects.create(
+            paciente=paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now(),
+        )
         respuesta = self.client.post(
             self.url, {'From': 'whatsapp:+573001112233', 'Body': 'hola'}
         )
@@ -1970,7 +2028,7 @@ class AlertDeduplicacionTests(TestCase):
         self.assertIn("SEPSIS", tipos)
         self.assertIn("ILEO_PARALITICO", tipos)
 
-    def test_gases_baja_y_nauseas_alta_mismo_dia_generan_dos_ileo(self):
+    def test_gases_baja_y_nauseas_alta_mismo_dia_generan_dos_ileo(self):  # noqa: E501
         """Gases=False (BAJA) y nauseas=5 (ALTA) en el mismo registro:
         _evaluar_gases crea ILEO BAJA, luego _evaluar_nauseas prueba ALTA →
         ALTA > BAJA → no bloqueada → se crean 2 alertas ILEO (escalamiento
