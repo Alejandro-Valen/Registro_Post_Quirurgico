@@ -501,44 +501,49 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
   defensivo: la condición `<= 2` ya lo cubría; solo se actualizó el
   comentario en `VENTANAS_DOLOR`. Implementado en Bloque 2A (26/06/2026).
 
-- [ ] Personalizar Django Admin con colores según severidad de alertas
-- [ ] Crear vista detalle_paciente con historial y gráfica temperatura/dolor
-- [ ] Implementar notificación al médico por email/SMS cuando hay alerta roja
-- [ ] **Implementación 2×/día (arquitectura CERRADA en FASE 3.6 — leer D1–D5
+- [x] Personalizar Django Admin con colores según severidad de alertas
+  (Bloque 5A — 26/06/2026: badge HTML inline, acción marcar_resuelta)
+- [x] Crear vista detalle_paciente con historial y gráfica temperatura/dolor
+  (Bloque 5B — 26/06/2026: historial_ultimos_7_dias como readonly_field en PacienteAdmin)
+- [x] Implementar notificación al médico por email/SMS cuando hay alerta roja
+  (Bloque 5C — 26/06/2026: signals.py post_save + on_commit; backend consola en dev)
+- [x] **Implementación 2×/día (arquitectura CERRADA en FASE 3.6 — leer D1–D5
   y el esquema de `CheckInProgramado` ahí; aquí NO se re-decide, se ejecuta):**
   - [x] Crear modelo `CheckInProgramado` según el esquema acordado + migración.
     (Bloque 1 — 26/06/2026; migración 0012, 7 tests, admin con scoping)
-  - [ ] Scheduler — **DECISIÓN TOMADA (0-④):** management commands +
+  - [x] Scheduler — **DECISIÓN TOMADA (0-④):** management commands +
     cron del SO. Tres commands: `crear_checkins_diarios` (6:00 AM),
     `enviar_recordatorios` (7:00 AM), `cerrar_checkins_vencidos` (18:00
     y 06:00 AM). Cada command loguea resumen de ejecución. Horas de
     gracia antes de declarar vencido: 10 horas.
-  - [ ] Refactor de bot.py: la conversación se vincula al CheckInProgramado
+    (Bloque 4 — 26/06/2026: 3 management commands, 8 tests, migración 0013)
+  - [x] Refactor de bot.py: la conversación se vincula al CheckInProgramado
     PENDIENTE del día (la conversación deja de decidir el turno).
-  - [ ] Alerta de silencio (NO_RESPONDIDO) — **DECISIÓN TOMADA (0-③):**
+    (Bloque 3 — 26/06/2026: _procesar_con_conv + _crear_registro reemplazados;
+    guard por CheckInProgramado PENDIENTE; 3 tests nuevos; 122 tests OK)
+  - [x] Alerta de silencio (NO_RESPONDIDO) — **DECISIÓN TOMADA (0-③):**
     tipo `SILENCIO` (choice nuevo). Racha check a check:
     1 → BAJA, 2 consecutivos → MEDIA, 3+ → ALTA.
+    (Bloque 4 — 26/06/2026: cerrar_checkins_vencidos + modelo Alerta actualizado)
   - [x] Resolver los 2 gatings (Bloque 2B — 26/06/2026):
     - Deduplicación — **IMPLEMENTADA (0-②):** `_deduplicar()` en cada
       `Alerta.objects.create()` del engine. 6 tests `AlertDeduplicacionTests`.
     - Gating pre-operatorio — **CERRADO (0-⑤):** `VENTANAS_DOLOR[0]` ya
       cubre POD 0 con `dia_postoperatorio <= 2`. Solo comentario actualizado.
-  - [ ] **Deuda de diseño detectada en el cruce contra el código
+  - [x] **Deuda de diseño detectada en el cruce contra el código
     (detalle y razonamiento en BITACORA.md, entrada del 22/06/2026):**
     - [x] **Fecha autoritativa — IMPLEMENTADA (0-①, Bloque 2A, 26/06/2026):**
       `evaluar_registro(registro, fecha_referencia=None)`. Los 6 usos de
       `fecha_registro__date` en funciones privadas reemplazados por el
       parámetro. 3 tests `AlertFechaReferenciaTests`. Tests existentes: OK.
-    - [ ] **Reescribir el guard "un registro por día" → "por check-in".**
-      bot.py hoy bloquea con `fecha_ultimo_registro` (líneas ~145-146 y
-      161-162 → MSG_YA_REGISTRADO); con 2 check-ins/día eso bloquearía el
-      segundo. El refactor debe expresar la guarda en términos del evento
-      PENDIENTE, no de la fecha.
-    - [ ] **Vínculo OneToOne transaccional.** Al completar el flujo,
-      asociar el RegistroDiario al CheckInProgramado PENDIENTE dentro de
-      una transacción, para no dejar eventos COMPLETADO sin `registro` ni
-      registros huérfanos.
-- [ ] Demo funcional con 1 paciente ficticio para el equipo médico
+    - [x] **Reescribir el guard "un registro por día" → "por check-in".**
+      Implementado en Bloque 3 (26/06/2026): `_procesar_con_conv` guarda
+      por CheckInProgramado PENDIENTE/COMPLETADO, no por `fecha_ultimo_registro`.
+    - [x] **Vínculo OneToOne transaccional.** Implementado en Bloque 3
+      (26/06/2026): `_crear_registro` vincula RegistroDiario al CheckInProgramado
+      PENDIENTE dentro de la misma transacción; lo marca COMPLETADO.
+- [x] Demo funcional con 1 paciente ficticio para el equipo médico
+  (Bloque 6 — 26/06/2026: seed_demo management command, demo_medico/demo1234)
 
 **Decisiones de diseño pendientes (anotadas durante la implementación
 del alert_engine, jun 2026):**

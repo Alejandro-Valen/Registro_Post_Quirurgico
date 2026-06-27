@@ -338,25 +338,30 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.5 | Auditoría de literatura, generalización de alcance/marca y documentación | ✅ Completado |
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
-| Sprint 4 | Dashboard médico y notificaciones | ⏳ Pendiente — rama sprint-4-dashboard |
+| Sprint 4 | Dashboard médico y notificaciones | ✅ Completado — 6 bloques, 135 tests OK, rama sprint-4-dashboard |
 | Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ Pendiente |
 
-**Punto actual:** Sprint 3-Hardening mergeado a `Desarrollo` (25/06/2026).
-24 hallazgos resueltos: A1–A6, B1–B7, C1–C7, D1–D5. 103 tests OK.
-**Próximo paso: Sprint 4 — Dashboard médico. Rama: `sprint-4-dashboard`.**
+**Punto actual:** Sprint 4 completado (26/06/2026). 6 bloques implementados.
+135 tests OK. Rama: `sprint-4-dashboard` (pendiente merge a Desarrollo con
+aprobación del Arquitecto).
+**Próximo paso: merge sprint-4-dashboard → Desarrollo, luego Sprint 5.**
 
-Resumen de lo resuelto en `sprint-3-hardening`:
-- A: conversación abandonada, FC/FR saltables, idempotencia, lock transaccional,
-  rate limit webhook, settings por entorno.
-- B: headers HTTPS producción, logging, on_commit para alert_engine, índice
-  fecha_registro, URL admin + django-axes, scoping por médico en admin, tests
-  del webhook.
-- C: refactor alert_engine en funciones _evaluar_X, CheckConstraint en BD,
-  Django 6.0.6, rechazo de decimales en FC/FR, mensaje en list_display admin,
-  403 genérico webhook, rate limit formulario de contacto.
-- D (auditoría post-hardening): RedisCache + paquete redis, AlertaAdmin solo
-  superuser puede borrar, REMOTE_ADDR en lugar de X-Forwarded-For,
-  requirements reorganizados, tests de scoping completos.
+Resumen de lo resuelto en `sprint-4-dashboard`:
+- Bloque 1: modelo CheckInProgramado + migración 0012 + admin con scoping.
+- Bloque 2A: `evaluar_registro(registro, fecha_referencia=None)` — corrige
+  cruce de medianoche. 3 tests AlertFechaReferenciaTests.
+- Bloque 2B: deduplicación Opción A+ (`_deduplicar()`). 6 tests AlertDeduplicacionTests.
+- Bloque 3: bot.py refactorizado — guard por CheckInProgramado PENDIENTE,
+  `_crear_registro` vincula OneToOne y pasa fecha_referencia=checkin.fecha_dia.
+  3 tests nuevos. 122 tests OK.
+- Bloque 4: 3 management commands (crear_checkins_diarios, enviar_recordatorios,
+  cerrar_checkins_vencidos), alerta SILENCIO, migración 0013. 8 tests. 130 OK.
+- Bloque 5A: badge HTML severidad en admin, acción marcar_resuelta. 2 tests.
+- Bloque 5B: historial_ultimos_7_dias como readonly_field en PacienteAdmin.
+- Bloque 5C: signals.py — email al médico por alerta ALTA vía on_commit.
+  settings_local.py con EMAIL_BACKEND=console para dev. 3 tests. 135 OK.
+- Bloque 6: seed_demo (paciente Camilo Rueda, 10 días, 27 alertas).
+  Credenciales demo: demo_medico / demo1234.
 
 **Lección clave de la conexión Twilio:** el Sandbox de WhatsApp firma sus webhooks
 con el **Auth Token PRIMARIO** (Twilio Console → Account Dashboard), NO con el de
@@ -370,9 +375,12 @@ para que `REMOTE_ADDR` refleje la IP real del cliente. El rate limit del formula
 de contacto (`home/views.py`) y del webhook (`views.py`) dependen de que esto esté
 correcto en producción. Se resuelve en FASE 5 (despliegue), no en el código Django.
 
-**Diferido explícitamente (no es parte del Sprint 3):**
-- FASE 4 — envío automático matutino 7:00-10:00 AM Bogotá vía Celery/cron, y
-  notificación al médico por email/SMS ante alerta roja.
+**Diferido explícitamente (Sprint 5):**
+- Cron del SO para los 3 management commands del scheduler (crear_checkins_diarios,
+  enviar_recordatorios, cerrar_checkins_vencidos).
+- Integración Twilio saliente en `enviar_recordatorios` (stub en Sprint 4).
+- Configuración SMTP real en `settings_production.py`.
+- Vista separada historial paciente (URL y template propios con gráficas).
 - FASE 5 — capa RAG real leyendo `knowledge_base.md` con contenido
   derivado de la auditoría de literatura ya realizada (ver
   `docs/auditoria_literatura/`); pendiente de que se decidan primero los

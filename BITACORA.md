@@ -1427,7 +1427,7 @@ código, no clínico.
 ## Sprint 4 — Dashboard y Notificaciones
 **Fecha:** 26/06/2026
 **Responsable:** León (Arquitecto IA) con Claude Code
-**Estado:** EN CURSO ⏳ — Bloques 0, 1, 2A y 2B completados
+**Estado:** COMPLETADO ✅ — Bloques 0, 1, 2A, 2B, 3, 4, 5A, 5B, 5C, 6 completados. 135 tests OK.
 
 ### Qué se hizo
 
@@ -1555,12 +1555,152 @@ operación real porque el alta siempre llega después del día de cirugía.
    `Alerta.objects.filter(...).update(fecha_alerta=timezone.now() - timedelta(days=1))`
    después de crear la alerta "de ayer", simulando que fue creada ayer.
 
-### Próximo paso
+---
 
-**Bloque 3 — Refactor de bot.py** (guard por CheckInProgramado PENDIENTE +
-vínculo OneToOne transaccional). Antes de implementar hay una decisión
-de arquitectura pendiente: ¿qué mensaje se muestra al paciente cuando
-escribe y no hay CheckInProgramado PENDIENTE para ese día?
+### Bloque 3 — bot.py refactor (26/06/2026, sesión 3)
+
+**Qué se hizo:**
+
+- `_procesar_con_conv` completamente reemplazado. Nueva lógica:
+  1. Si estado != INICIO/COMPLETADO y `fecha_actualizacion` < hoy → abandono:
+     limpiar temporales, buscar CheckInProgramado PENDIENTE hoy. Si existe →
+     ESTADO_TEMPERATURA (next msg = temperatura). Si no → ESTADO_INICIO.
+  2. Si en flujo hoy → `_procesar_respuesta_flujo` (sin cambios).
+  3. FAQ siempre disponible (no depende de check-in).
+  4. Si hay CheckInProgramado PENDIENTE → poner ESTADO_TEMPERATURA + devolver
+     MSG_PREGUNTA_TEMPERATURA.
+  5. Si hay CheckInProgramado COMPLETADO hoy → devolver MSG_YA_REGISTRADO.
+  6. Si no hay ninguno → devolver MSG_SIN_CHECKIN.
+- `_crear_registro` completamente reemplazado. Vincula el RegistroDiario al
+  CheckInProgramado PENDIENTE (SELECT orden ASC) dentro de la misma llamada:
+  `checkin.registro = registro; checkin.estado = COMPLETADO;
+  checkin.fecha_respuesta = now(); checkin.save()`. Luego llama
+  `evaluar_registro(registro, fecha_referencia=checkin.fecha_dia)`.
+- MSG_YA_REGISTRADO y MSG_SIN_CHECKIN actualizados con mensajes que dejan
+  la puerta abierta para la futura integración de IA/RAG.
+- Tests actualizados: `_crear_paciente` en `BotWhatsAppTests` y
+  `BotAbandonoConversacionTests` crean CheckInProgramado PENDIENTE.
+  `WebhookWhatsAppTests.test_post_valido` también actualizado.
+- 3 tests nuevos: MSG_SIN_CHECKIN (sin checkin, sin RegistroDiario),
+  MSG_YA_REGISTRADO (vía checkin COMPLETADO), vínculo checkin↔registro.
+- Suite: **122 tests OK**. Commit: `dafd319`.
+
+**Decisión de arquitectura tomada (sesión 3):**
+- MSG_SIN_CHECKIN = "Por ahora no tienes un reporte pendiente. Te escribiré
+  cuando sea la hora 🌿 Si tienes alguna duda sobre tu recuperación, puedes
+  preguntarme aquí." — formulado para que la futura integración de IA/RAG
+  sea un reemplazo del final de la frase, sin retrabajo de flujo.
+- MSG_YA_REGISTRADO = "¡Tus datos de hoy ya están registrados! ✅ Si tienes
+  alguna duda sobre tu recuperación, puedes escribirme aquí 🌿"
+
+**Problema encontrado y resuelto:**
+- `test_sin_checkin_pendiente_muestra_mensaje` fallaba: el test asumía que
+  no se creaba `ConversacionWhatsApp`, pero `procesar_mensaje` siempre la
+  crea vía `get_or_create`. La aserción correcta es que no se crea
+  `RegistroDiario`, no que la conversación no exista.
+- `test_post_valido_devuelve_twiml` fallaba: el test del webhook no creaba
+  CheckInProgramado → bot devolvía MSG_SIN_CHECKIN. Solución: agregar
+  `CheckInProgramado.objects.create(...)` en el setUp del test.
+
+---
+
+### Bloque 4 — Scheduler + alerta SILENCIO (26/06/2026, sesión 3)
+
+**Qué se hizo:**
+
+**Modelo:**
+- `Alerta.tipo`: nuevo choice `SILENCIO` (paciente sin respuesta).
+- `Alerta.registro_origen`: ahora `null=True, blank=True` — las alertas
+  SILENCIO no tienen RegistroDiario (el paciente no respondió).
+- `CheckConstraint alerta_tipo_valido` actualizado para incluir SILENCIO.
+- Migración `0013_bloque4_silencio_registro_origen_nullable` generada y aplicada.
+
+**Management commands (signos_sintomas/management/commands/):**
+- `crear_checkins_diarios.py`: `get_or_create` de 2 CheckInProgramado por
+  paciente activo (orden=1 MAÑANA 7:00, orden=2 TARDE 14:00). Idempotente.
+  Loguea resumen. Cron: 6:00 AM Bogotá.
+- `enviar_recordatorios.py`: stub — loguea los check-ins PENDIENTE con
+  hora_programada <= ahora. La llamada real a Twilio está diferida a Sprint 5.
+  Cron: 7:00 AM Bogotá.
+- `cerrar_checkins_vencidos.py`: cierra PENDIENTE con >10 h desde
+  hora_programada → NO_RESPONDIDO + alerta SILENCIO. Función `_calcular_racha`:
+  cuenta NO_RESPONDIDO consecutivos anteriores al actual (orden cronológico
+  estricto: fecha_dia + orden), racha incluye el actual. Corte al primer
+  COMPLETADO o PENDIENTE anterior. `_severidad_silencio`: racha 1 → BAJA,
+  2 → MEDIA, 3+ → ALTA. Cron: 18:00 y 06:00 AM Bogotá.
+
+**Tests:** 8 nuevos en `SchedulerTests`. Suite: **130 tests OK**.
+Commits: Bloque 4 en `c7593cc`.
+
+---
+
+### Bloques 5A, 5B, 5C — Admin dashboard + email (26/06/2026, sesión 3)
+
+**Bloque 5A — Colores en admin + acción marcar_resuelta:**
+- `AlertaAdmin.severidad_badge()`: badge HTML inline con `format_html`.
+  ALTA=rojo (#7f1d1d fondo #fee2e2), MEDIA=ámbar (#78350f fondo #fef3c7),
+  BAJA=verde (#14532d fondo #dcfce7). Funciona sin CSS extra — todo inline.
+- `marcar_resuelta`: acción admin para selección múltiple. Actualiza
+  `resuelta=True` + `fecha_resolucion=timezone.now()` con un solo `queryset.update()`.
+- 2 tests: badge en changelist contiene `border-radius`, acción actualiza alerta.
+
+**Bloque 5B — Historial 7 días en ficha de paciente:**
+- `_historial_7_dias(paciente)`: función que genera tabla HTML con los últimos
+  7 días de RegistroDiario: fecha, POD, temperatura, dolor EVA, gases, náuseas,
+  drenaje, tolerancia líquidos, FC. Usa `mark_safe`.
+- `PacienteAdmin.historial_ultimos_7_dias`: campo `readonly_field` que llama
+  la función anterior. Se muestra en el formulario de cambio del paciente en
+  el admin. Sin templates extra — HTML en Python.
+
+**Bloque 5C — Email al médico por alerta ALTA:**
+- `signals.py`: señal `post_save` en `Alerta`. Si `created=True` y
+  `severidad='ALTA'` y el paciente tiene médico con email: agenda
+  `send_mail` en `on_commit`. Si no tiene médico o email, loguea WARNING.
+  `fail_silently=False` — errores se loguean, no se silencian.
+- `apps.py`: `ready()` importa signals para registrarlas al arrancar.
+- `settings_local.py`: `EMAIL_BACKEND = console` + `DEFAULT_FROM_EMAIL`
+  para dev (evita errores de conexión SMTP).
+- 3 tests: email enviado por ALTA, MEDIA no envía, paciente sin médico no falla.
+- Suite: **135 tests OK**. Commit: `4bbddb4`.
+
+---
+
+### Bloque 6 — Seed demo (26/06/2026, sesión 3)
+
+**Qué se hizo:**
+- `seed_demo.py`: management command con 10 días de RegistroDiario para
+  paciente ficticio Camilo Andrés Rueda Vargas (tel +573001234567).
+  Datos diseñados para mostrar variedad clínica: fiebre día 3 (SEPSIS ALTA),
+  drenaje turbio día 5 (FUGA MEDIA), drenaje purulento día 9 (FUGA ALTA),
+  intolerancia oral día 6, taquicardia leve día 7. El alert_engine genera
+  27 alertas automáticamente al correr el seed.
+- Crea superuser `demo_medico / demo1234` si no existe.
+- Opción `--borrar` para eliminar y recrear desde cero.
+- Crea CheckInProgramado COMPLETADO por día para que el historial sea
+  consistente con el modelo de datos real.
+- Idempotente: si el paciente demo ya existe, no re-crea (sin `--borrar`).
+- Suite: **135 tests OK**. Commit: `ea4a739`.
+
+### Decisiones tomadas en sesión 3
+
+- **Mejoras futuras documentadas en ROADMAP:** vista separada historial paciente
+  (URL/template propios con gráficas — Sprint 5+), integración IA/RAG en bot
+  (NotebookLM / sistema RAG — prerequisito: decidir umbrales alert_engine).
+- **Vista historial Opción A:** historial como `readonly_field` en la ficha
+  del paciente del admin. Sin URL/template propios (diferidos a Sprint 5+).
+- **Email Opción A+:** señal `post_save` con `on_commit` — garantiza que la
+  alerta existe en BD antes de enviar el email. El campo `medico_responsable`
+  puede ser null → la señal maneja ese caso con WARNING, sin excepción.
+
+### Pendiente para Sprint 5
+
+- Merge `sprint-4-dashboard → Desarrollo` (con aprobación del Arquitecto).
+- Configurar cron del SO (Windows Task Scheduler o Linux cron) para los
+  3 management commands del scheduler.
+- Configurar SMTP real en `settings_production.py`.
+- Proxy Nginx con `proxy_set_header REMOTE_ADDR` (pendiente de Sprint 3).
+- Twilio saliente en `enviar_recordatorios` (stub → llamada real).
+- RAG / IA en el bot (prerequisito: decisiones de umbrales alert_engine).
 
 ---
 
