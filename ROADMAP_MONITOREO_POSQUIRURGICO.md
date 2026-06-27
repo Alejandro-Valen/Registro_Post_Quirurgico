@@ -558,6 +558,24 @@ del alert_engine, jun 2026):**
   `resuelta`, cómo distinguir falsos positivos de casos reales, y cómo
   se visualiza la escalera de severidad BAJA/MEDIA/ALTA en pantalla.
 
+**Mejoras futuras (decisiones diferidas explícitamente, no bloqueantes):**
+- [ ] **Vista de historial del paciente — versión completa (Sprint 5+):**
+  Sprint 4 implementa el historial como sección dentro del admin
+  (`change_view` de `PacienteAdmin`, Opción A). La versión completa sería
+  una URL y template propios (`/signos_sintomas/paciente/<id>/historial/`)
+  con gráfica de temperatura, EVA y alertas a lo largo del tiempo. Requiere
+  decisión de si el dashboard médico permanece en Django Admin o evoluciona
+  a una app independiente.
+- [ ] **Integración IA/RAG en el chat del paciente (Sprint 5+):**
+  Cuando el paciente escribe fuera de un check-in programado, hoy recibe
+  un mensaje neutro + FAQ predefinidos. La mejora es conectar ese flujo a
+  un agente IA con acceso a un sistema RAG (NotebookLM u otro) que responda
+  dudas clínicas sobre el procedimiento con límites conservadores. El bot
+  ya abre la puerta con "Si tienes alguna duda, puedes preguntarme aquí."
+  — el mensaje no necesita cambiar cuando se implemente la capa IA.
+  Prerrequisito: decisión de umbrales/contenido de `knowledge_base.md`
+  (pendiente desde Sprint 3.5).
+
 ---
 
 ### ⏳ FASE 5 — Producción — PENDIENTE
