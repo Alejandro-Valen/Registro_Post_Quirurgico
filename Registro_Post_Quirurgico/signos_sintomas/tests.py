@@ -2048,3 +2048,132 @@ class AlertDeduplicacionTests(TestCase):
         severidades = {a.severidad for a in ileo}
         self.assertIn("BAJA", severidades)
         self.assertIn("ALTA", severidades)
+
+
+class SchedulerTests(TestCase):
+    """Bloque 4 — Management commands del scheduler y alerta SILENCIO."""
+
+    def _paciente(self, tel="+573009990001"):
+        return Paciente.objects.create(
+            nombre_completo="Paciente Scheduler",
+            telefono_whatsapp=tel,
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),
+            activo=True,
+        )
+
+    def _checkin(self, paciente, orden=1, etiqueta=None, dias_atras=0,
+                 estado=CheckInProgramado.ESTADO_PENDIENTE, horas_atras=0):
+        if etiqueta is None:
+            etiqueta = CheckInProgramado.ETIQUETA_MANANA
+        fecha_dia = timezone.localdate() - timedelta(days=dias_atras)
+        hora_prog = timezone.now() - timedelta(hours=horas_atras)
+        ci = CheckInProgramado.objects.create(
+            paciente=paciente,
+            fecha_dia=fecha_dia,
+            orden=orden,
+            etiqueta=etiqueta,
+            hora_programada=hora_prog,
+            estado=estado,
+        )
+        return ci
+
+    # -------------------------------------------------------------------------
+    # crear_checkins_diarios
+    # -------------------------------------------------------------------------
+
+    def test_crear_checkins_crea_dos_por_paciente(self):
+        """Crea 2 check-ins (mañana y tarde) para el paciente activo de hoy."""
+        from django.core.management import call_command
+        self._paciente()
+        call_command('crear_checkins_diarios', verbosity=0)
+        self.assertEqual(CheckInProgramado.objects.count(), 2)
+        ordenes = set(CheckInProgramado.objects.values_list('orden', flat=True))
+        self.assertEqual(ordenes, {1, 2})
+
+    def test_crear_checkins_es_idempotente(self):
+        """Llamar el comando dos veces no duplica check-ins."""
+        from django.core.management import call_command
+        self._paciente()
+        call_command('crear_checkins_diarios', verbosity=0)
+        call_command('crear_checkins_diarios', verbosity=0)
+        self.assertEqual(CheckInProgramado.objects.count(), 2)
+
+    def test_crear_checkins_ignora_pacientes_inactivos(self):
+        """Pacientes con activo=False no reciben check-ins."""
+        from django.core.management import call_command
+        paciente = self._paciente()
+        paciente.activo = False
+        paciente.save()
+        call_command('crear_checkins_diarios', verbosity=0)
+        self.assertEqual(CheckInProgramado.objects.count(), 0)
+
+    # -------------------------------------------------------------------------
+    # cerrar_checkins_vencidos y alerta SILENCIO
+    # -------------------------------------------------------------------------
+
+    def test_checkin_pendiente_dentro_de_gracia_no_se_cierra(self):
+        """Check-in con < 10 horas desde hora_programada: no se toca."""
+        from django.core.management import call_command
+        paciente = self._paciente()
+        self._checkin(paciente, horas_atras=5)  # 5 h < 10 h de gracia
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+        checkin = CheckInProgramado.objects.get()
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_PENDIENTE)
+        self.assertEqual(Alerta.objects.count(), 0)
+
+    def test_checkin_vencido_se_cierra_y_crea_alerta_silencio_baja(self):
+        """1 check-in sin respuesta → racha 1 → SILENCIO BAJA."""
+        from django.core.management import call_command
+        paciente = self._paciente()
+        self._checkin(paciente, horas_atras=11)  # > 10 h → vencido
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+        checkin = CheckInProgramado.objects.get()
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
+        alerta = Alerta.objects.get(tipo='SILENCIO')
+        self.assertEqual(alerta.severidad, 'BAJA')
+        self.assertIsNone(alerta.registro_origen)
+
+    def test_dos_checkins_consecutivos_dan_silencio_media(self):
+        """2 check-ins NO_RESPONDIDO consecutivos → racha 2 → SILENCIO MEDIA."""
+        from django.core.management import call_command
+        paciente = self._paciente()
+        # Ayer: ya estaba NO_RESPONDIDO
+        ci_ayer = self._checkin(paciente, orden=1, dias_atras=1, horas_atras=25)
+        ci_ayer.estado = CheckInProgramado.ESTADO_NO_RESPONDIDO
+        ci_ayer.save()
+        # Hoy: vence ahora
+        self._checkin(paciente, orden=1, horas_atras=11)
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+        alerta = Alerta.objects.filter(tipo='SILENCIO').order_by('-fecha_alerta').first()
+        self.assertEqual(alerta.severidad, 'MEDIA')
+
+    def test_tres_checkins_consecutivos_dan_silencio_alta(self):
+        """3+ check-ins NO_RESPONDIDO consecutivos → racha 3 → SILENCIO ALTA."""
+        from django.core.management import call_command
+        paciente = self._paciente()
+        for orden, dias in [(1, 2), (2, 1)]:
+            ci = self._checkin(paciente, orden=orden, dias_atras=dias, horas_atras=50)
+            ci.estado = CheckInProgramado.ESTADO_NO_RESPONDIDO
+            ci.save()
+        self._checkin(paciente, orden=1, horas_atras=11)
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+        alerta = Alerta.objects.filter(tipo='SILENCIO').order_by('-fecha_alerta').first()
+        self.assertEqual(alerta.severidad, 'ALTA')
+
+    def test_checkin_completado_rompe_racha(self):
+        """Un check-in COMPLETADO entre medias reinicia la racha → SILENCIO BAJA."""
+        from django.core.management import call_command
+        paciente = self._paciente()
+        # Anteayer: NO_RESPONDIDO
+        ci_viejo = self._checkin(paciente, orden=1, dias_atras=2, horas_atras=50)
+        ci_viejo.estado = CheckInProgramado.ESTADO_NO_RESPONDIDO
+        ci_viejo.save()
+        # Ayer: COMPLETADO → rompe la racha
+        ci_completado = self._checkin(paciente, orden=2, dias_atras=1, horas_atras=25)
+        ci_completado.estado = CheckInProgramado.ESTADO_COMPLETADO
+        ci_completado.save()
+        # Hoy: vence ahora → racha debe ser 1 (solo este)
+        self._checkin(paciente, orden=1, horas_atras=11)
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+        alerta = Alerta.objects.filter(tipo='SILENCIO').order_by('-fecha_alerta').first()
+        self.assertEqual(alerta.severidad, 'BAJA')

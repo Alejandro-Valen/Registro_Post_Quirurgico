@@ -232,6 +232,7 @@ class Alerta(models.Model):
         ('DOLOR_AGUDO',       'Dolor Agudo Incontrolable'),
         ('INTOLERANCIA_ORAL', 'Intolerancia a Líquidos — Riesgo de Deshidratación'),
         ('TAQUICARDIA',       'Frecuencia Cardíaca Elevada — Taquicardia'),
+        ('SILENCIO',          'Paciente Sin Respuesta — Check-in No Completado'),
     ]
     SEVERIDAD_CHOICES = [
         ('ALTA',  'Alta — Ir a urgencias'),
@@ -247,7 +248,9 @@ class Alerta(models.Model):
         RegistroDiario,
         on_delete=models.PROTECT,
         related_name='alertas',
-        help_text="El registro diario que disparó esta alerta"
+        null=True,
+        blank=True,
+        help_text="El registro diario que disparó esta alerta. Null para alertas SILENCIO (sin respuesta)."
     )
     tipo = models.CharField(max_length=30, choices=TIPO_CHOICES)
     severidad = models.CharField(max_length=10, choices=SEVERIDAD_CHOICES)
@@ -273,7 +276,7 @@ class Alerta(models.Model):
             CheckConstraint(
                 condition=Q(tipo__in=[
                     'SEPSIS', 'FUGA_ANASTOMOTICA', 'ILEO_PARALITICO',
-                    'DOLOR_AGUDO', 'INTOLERANCIA_ORAL', 'TAQUICARDIA',
+                    'DOLOR_AGUDO', 'INTOLERANCIA_ORAL', 'TAQUICARDIA', 'SILENCIO',
                 ]),
                 name='alerta_tipo_valido',
             ),
