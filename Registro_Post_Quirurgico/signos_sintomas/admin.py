@@ -56,10 +56,10 @@ def _historial_7_dias(paciente):
 
 @admin.register(Paciente)
 class PacienteAdmin(admin.ModelAdmin):
-    list_display = ['nombre_completo', 'medico_nombre',
+    list_display = ['nombre_completo', 'cedula', 'medico_nombre',
                     'fecha_cirugia', 'activo']
     list_filter = ['activo', 'medico_responsable']
-    search_fields = ['nombre_completo', 'telefono_whatsapp',
+    search_fields = ['nombre_completo', 'cedula', 'telefono_whatsapp',
                      'medico_responsable__first_name',
                      'medico_responsable__last_name',
                      'medico_responsable__username']

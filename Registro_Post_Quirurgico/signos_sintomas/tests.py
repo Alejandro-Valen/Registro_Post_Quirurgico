@@ -2299,3 +2299,103 @@ class SchedulerTests(TestCase):
         call_command('cerrar_checkins_vencidos', verbosity=0)
         alerta = Alerta.objects.filter(tipo='SILENCIO').order_by('-fecha_alerta').first()
         self.assertEqual(alerta.severidad, 'BAJA')
+
+
+class PacienteCedulaTests(TestCase):
+    """Sprint 5, Bloque 1A — campo cedula (P-4: identificador único, obligatorio)."""
+
+    def test_paciente_sin_cedula_no_rompe_creacion(self):
+        """Registros legado (sin cedula) siguen pudiéndose crear — null permitido."""
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Legado",
+            telefono_whatsapp="+573001112222",
+            fecha_cirugia=timezone.localdate(),
+        )
+        self.assertIsNone(paciente.cedula)
+
+    def test_cedula_duplicada_viola_unicidad(self):
+        Paciente.objects.create(
+            nombre_completo="Paciente Uno",
+            cedula="123456789",
+            telefono_whatsapp="+573001112223",
+            fecha_cirugia=timezone.localdate(),
+        )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Paciente.objects.create(
+                    nombre_completo="Paciente Dos",
+                    cedula="123456789",
+                    telefono_whatsapp="+573001112224",
+                    fecha_cirugia=timezone.localdate(),
+                )
+
+    def test_dos_pacientes_sin_cedula_no_violan_unicidad(self):
+        """NULL no cuenta como duplicado en la restricción unique (Postgres)."""
+        Paciente.objects.create(
+            nombre_completo="Paciente Sin Cedula 1",
+            telefono_whatsapp="+573001112225",
+            fecha_cirugia=timezone.localdate(),
+        )
+        Paciente.objects.create(
+            nombre_completo="Paciente Sin Cedula 2",
+            telefono_whatsapp="+573001112226",
+            fecha_cirugia=timezone.localdate(),
+        )
+        self.assertEqual(Paciente.objects.count(), 2)
+
+
+class DesactivarPacientesVencidosTests(TestCase):
+    """Sprint 5, Bloque 1B — desactivación automática a 10 días postop (P-5)."""
+
+    def _paciente(self, dias_cirugia, tel, activo=True):
+        return Paciente.objects.create(
+            nombre_completo="Paciente Vencimiento",
+            telefono_whatsapp=tel,
+            fecha_cirugia=timezone.localdate() - timedelta(days=dias_cirugia),
+            activo=activo,
+        )
+
+    def test_paciente_con_10_dias_se_desactiva(self):
+        from django.core.management import call_command
+        paciente = self._paciente(dias_cirugia=10, tel="+573002220001")
+        call_command('desactivar_pacientes_vencidos', verbosity=0)
+        paciente.refresh_from_db()
+        self.assertFalse(paciente.activo)
+
+    def test_paciente_con_9_dias_no_se_desactiva(self):
+        from django.core.management import call_command
+        paciente = self._paciente(dias_cirugia=9, tel="+573002220002")
+        call_command('desactivar_pacientes_vencidos', verbosity=0)
+        paciente.refresh_from_db()
+        self.assertTrue(paciente.activo)
+
+    def test_paciente_ya_inactivo_no_se_toca(self):
+        """Desactivado manualmente por el médico antes de los 10 días: no lo reprocesa."""
+        from django.core.management import call_command
+        paciente = self._paciente(dias_cirugia=3, tel="+573002220003", activo=False)
+        call_command('desactivar_pacientes_vencidos', verbosity=0)
+        paciente.refresh_from_db()
+        self.assertFalse(paciente.activo)
+
+    def test_dry_run_no_modifica_bd(self):
+        from django.core.management import call_command
+        paciente = self._paciente(dias_cirugia=10, tel="+573002220004")
+        call_command('desactivar_pacientes_vencidos', '--dry-run', verbosity=0)
+        paciente.refresh_from_db()
+        self.assertTrue(paciente.activo)
+
+    def test_segunda_ejecucion_mismo_dia_es_idempotente(self):
+        from django.core.management import call_command
+        paciente = self._paciente(dias_cirugia=12, tel="+573002220005")
+        call_command('desactivar_pacientes_vencidos', verbosity=0)
+        call_command('desactivar_pacientes_vencidos', verbosity=0)
+        paciente.refresh_from_db()
+        self.assertFalse(paciente.activo)
+
+    def test_scheduler_no_crea_checkins_tras_desactivacion(self):
+        """crear_checkins_diarios, corrido después, ignora al paciente recién desactivado."""
+        from django.core.management import call_command
+        self._paciente(dias_cirugia=10, tel="+573002220006")
+        call_command('desactivar_pacientes_vencidos', verbosity=0)
+        call_command('crear_checkins_diarios', verbosity=0)
+        self.assertEqual(CheckInProgramado.objects.count(), 0)

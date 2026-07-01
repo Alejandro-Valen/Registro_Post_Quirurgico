@@ -13,6 +13,18 @@ class Paciente(models.Model):
         ('otra',                'Otra cirugía colorrectal'),
     ]
     nombre_completo = models.CharField(max_length=200)
+    cedula = models.CharField(
+        max_length=20,
+        unique=True,
+        null=True,
+        blank=False,
+        verbose_name="Cédula",
+        help_text=(
+            "Número de documento de identidad — identificador principal del "
+            "paciente (P-4, decisión 01/07/2026). Obligatorio para pacientes "
+            "nuevos; null solo permitido en registros previos a esta versión."
+        ),
+    )
     telefono_whatsapp = models.CharField(
         max_length=20,
         unique=True,
