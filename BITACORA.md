@@ -1812,8 +1812,45 @@ requerido antes de que cualquier paciente real use el sistema.
 
 Con esto no quedan preguntas de arquitectura abiertas para Sprint 5.
 
-### Pendiente inmediato
+### Bloque 1 — Cédula y desactivación automática (01/07/2026)
 
-- Ejecutar Bloque 1 (cédula + desactivación automática a 10 días) como
-  primer bloque de código de Sprint 5 — ver checklist de tareas en
-  ROADMAP FASE 5.
+**Qué se hizo:**
+- **1A — Campo `cedula` en `Paciente`:** `CharField(max_length=20,
+  unique=True, null=True, blank=False)`. `null=True` para no romper
+  pacientes ni tests existentes (incluye el paciente demo de `seed_demo`);
+  `blank=False` para que sea obligatorio en el Admin/formularios de
+  pacientes nuevos, según P-4. Migración `0014_paciente_cedula.py`.
+  Agregado a `list_display` y `search_fields` de `PacienteAdmin`.
+- **1B — `desactivar_pacientes_vencidos`:** management command nuevo,
+  mismo estilo que `crear_checkins_diarios`. `DIAS_SEGUIMIENTO = 10`
+  (P-5). Usa `timezone.localdate()`. Flag `--dry-run` que loguea sin
+  modificar BD. Solo actúa sobre `Paciente.objects.filter(activo=True)`,
+  así que es idempotente sin lógica extra (correrlo dos veces el mismo
+  día no reprocesa a quien ya desactivó). La desactivación manual desde
+  el Admin (`activo=False`) sigue funcionando igual, sin cambios.
+- **9 tests nuevos:** `PacienteCedulaTests` (3: creación sin cédula,
+  unicidad violada, dos pacientes sin cédula no chocan entre sí —
+  confirma que Postgres no trata NULL=NULL como duplicado) y
+  `DesactivarPacientesVencidosTests` (6: POD 10 se desactiva, POD 9 no,
+  paciente ya inactivo no se toca, `--dry-run` no modifica BD, segunda
+  ejecución el mismo día es idempotente, `crear_checkins_diarios` no crea
+  check-ins para el paciente recién desactivado).
+- Verificado con `--dry-run` contra la BD de desarrollo real: detectó
+  correctamente a "Camilo Andrés Rueda Vargas" (POD 15, del seed_demo) y
+  a otro paciente de prueba con POD 21 — no se ejecutó el comando sin
+  `--dry-run` para no alterar los datos demo existentes.
+- Suite: **144 tests OK** (135 + 9). `manage.py check` limpio.
+  `manage.py migrate` aplicado sin errores.
+
+### Pendiente para continuar Sprint 5
+
+- Bloque 2: eliminar emojis de `bot.py` (P-11) y actualizar tests.
+- Bloque 3: filtros en `PacienteAdmin` (activo, tipo_cirugia, alertas sin
+  resolver) + historial configurable por días (P-8).
+- Bloque 4: gráficas Chart.js en la ficha del paciente (P-9) — usar
+  `json.dumps()` para los datos.
+- Bloque 5: agregar variables `EMAIL_*` a `settings_production.py`
+  existente (Gmail + contraseña de aplicación) — no reemplazar el archivo.
+- Bloque 6: `docs/cron_setup.md` y `docs/transferencia_cuentas.md`.
+- Bloque 7: consentimiento informado mínimo (P-15) — contenido lo redacta
+  o valida el médico.

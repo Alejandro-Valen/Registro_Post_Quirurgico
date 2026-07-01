@@ -649,9 +649,17 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   coherente con P-2/P-3 (cuentas del equipo, mantenimiento mínimo) y con
   volumen bajo de correo (solo alertas ALTA, un médico).
 
-**Tareas de código (orden sugerido, ninguna implementada todavía):**
-- [ ] Campo `cedula` en `Paciente` (obligatorio, único) + migración (P-4)
-- [ ] Management command `desactivar_pacientes_vencidos` — 10 días postop o manual (P-5)
+**Tareas de código (orden sugerido):**
+- [x] **Bloque 1 (01/07/2026):** Campo `cedula` en `Paciente` — `unique=True`,
+  `null=True` (no rompe pacientes/tests previos), `blank=False` (obligatorio
+  en formularios nuevos). Migración `0014_paciente_cedula`. Agregado a
+  `list_display`/`search_fields` en `PacienteAdmin` (P-4).
+- [x] **Bloque 1 (01/07/2026):** Management command
+  `desactivar_pacientes_vencidos` — `DIAS_SEGUIMIENTO=10`, usa
+  `timezone.localdate()`, soporta `--dry-run`, idempotente (solo actúa
+  sobre `activo=True`). La desactivación manual desde el Admin sigue
+  disponible sin cambios (P-5). 9 tests nuevos (`PacienteCedulaTests`,
+  `DesactivarPacientesVencidosTests`). **144 tests OK.**
 - [ ] Eliminar emojis de `bot.py` y actualizar tests (P-11)
 - [ ] Filtros en `PacienteAdmin` (activo, tipo_cirugia, alertas sin resolver)
 - [ ] Historial configurable por días (default 7) en vez de `_historial_7_dias` fijo (P-8)
