@@ -2053,3 +2053,89 @@ del `alert_engine`.
   o valida el médico.
 - Mejora futura: rediseño del formato del correo de alerta ALTA + datos
   de contacto del paciente (ver nota del Bloque 5 arriba).
+
+---
+
+## Cierre de sesión — 01/07/2026 (Sprint 5, Bloques 1-6)
+
+**Responsable:** León (Arquitecto IA) con Claude Code
+**Estado:** Sprint 5 en curso — Bloques 1 a 6 completos, 159 tests OK.
+Rama activa: `sprint-5-produccion`, sincronizada con `origin` (working
+tree limpio, sin cambios pendientes de commit).
+
+**Resumen de la sesión (orden cronológico):**
+1. Confirmado el merge `sprint-4-dashboard → Desarrollo` (fast-forward)
+   y creada `sprint-5-produccion`.
+2. Auditoría completa del ROADMAP contra el historial real de git —
+   corregidas 4 desincronizaciones y actualizada la estructura de
+   carpetas contra el filesystem real.
+3. Recibido y auditado un documento externo de instrucciones para
+   Sprint 5 (13 decisiones de producto + 7 bloques). Se detectaron y
+   corrigieron varios problemas antes de implementar: `settings_production.py`
+   ya existía con más hardening del que el documento proponía crear;
+   ejemplos de código con `related_name` inexistente (`alerta_set` en
+   vez de `alertas`); un enfoque de turno por hora que contradecía la
+   decisión D2 ya cerrada del proyecto.
+4. Las 13 decisiones de producto (P-1 a P-15) se confirmaron
+   explícitamente en esta sesión — con una corrección del propio
+   Arquitecto (descartó una decisión sobre ampliar el FAQ del bot que
+   había sido un error de transcripción).
+5. Bloques 1-6 implementados, cada uno con su propia auditoría de
+   seguridad/coherencia antes de escribir código, tests dedicados, y
+   commits separados de código y documentación:
+   - Bloque 1: cédula + desactivación automática a 10 días.
+   - Bloque 2: emojis eliminados del bot.
+   - Bloque 3: filtros de `PacienteAdmin` + historial configurable.
+   - Bloque 4: gráficas Chart.js — con un rediseño completo a mitad de
+     camino tras revisión visual del Arquitecto, que además destapó un
+     bug real de zona horaria (UTC vs. Bogotá) no reportado por nadie.
+   - Bloque 5: SMTP real, probado end-to-end con una alerta ALTA real
+     (troubleshooting de contraseña de aplicación de Gmail sin exponer
+     el secreto en ningún momento).
+   - Bloque 6: documentación de cron y transferencia de cuentas — de
+     paso se corrigió un docstring que documentaba el orden de ejecución
+     al revés de lo correcto.
+6. Total de tests: **135 → 159** (24 nuevos). `manage.py check` limpio
+   en todo momento. `manage.py check --deploy` con `settings_production`
+   también limpio (con valores de `.env` de desarrollo, no de un dominio
+   real todavía).
+
+**Decisiones clave tomadas:**
+- Cron en Linux (Railway/Render), no Windows Task Scheduler.
+- SMTP con Gmail + contraseña de aplicación.
+- Las 13 decisiones de producto P-1 a P-15 (ver tabla en ROADMAP FASE 5).
+
+**Problemas encontrados y resueltos (no omitir ninguno, son el valor real de esta bitácora):**
+- Error 535 `BadCredentials` de Gmail — causado por la contraseña de
+  aplicación pegada con espacios (18 caracteres en vez de 16), y luego
+  por un carácter faltante al quitarlos (15 en vez de 16). Resuelto
+  regenerando/copiando la contraseña completa. Diagnosticado sin
+  exponer el valor real en ningún momento (solo longitud y presencia de
+  espacios).
+- `related_name` equivocado (`alerta_set` en vez de `alertas`) propuesto
+  en instrucciones externas, en dos bloques distintos (3 y 4) — mismo
+  tipo de error, corregido ambas veces antes de implementar.
+- Bug de zona horaria (UTC vs. Bogotá) en el cálculo de turno M/T y en
+  las fechas del historial — no reportado por nadie, encontrado al
+  auditar el rediseño del Bloque 4.
+- Docstring incorrecto en `desactivar_pacientes_vencidos.py` sobre el
+  orden de ejecución respecto a `crear_checkins_diarios` — encontrado al
+  escribir `docs/cron_setup.md` (Bloque 6).
+
+**Qué queda pendiente para la próxima sesión — paso exacto:**
+1. **Bloque 7 (HABEAS DATA):** consentimiento informado mínimo antes de
+   pacientes reales. Requiere que el Arquitecto decida/valide el
+   contenido del texto de consentimiento (con el médico) antes de tocar
+   código — no se inventa contenido legal/clínico. Una vez aprobado:
+   agregar campos `consentimiento_informado` y `fecha_consentimiento` a
+   `Paciente` + guard en `bot.py` que impida iniciar el flujo si el
+   paciente no ha consentido.
+2. Mejora futura anotada (no bloqueante): rediseñar el formato del
+   correo de alerta ALTA (HTML, mejor estructura) y agregar datos de
+   contacto del paciente al cuerpo del mensaje (`signals.py`).
+3. Resto de Sprint 5 sin empezar: desplegar en Railway/Render, Twilio
+   saliente real en `enviar_recordatorios`, monitoreo externo básico,
+   ajuste de Nginx `REMOTE_ADDR`.
+4. Hallazgo pendiente de decidir (no bloqueante): `demo_medico` es
+   superusuario y no representa la experiencia real de un médico —
+   evaluar si conviene una segunda cuenta demo no-superusuario.

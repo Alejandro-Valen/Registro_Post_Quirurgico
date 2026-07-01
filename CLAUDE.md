@@ -346,29 +346,44 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-6/7 completos, rama `sprint-5-produccion` |
 
-**Punto actual:** Sprint 4 mergeado a `Desarrollo` (fast-forward, 01/07/2026).
-Rama activa: `sprint-5-produccion`, creada desde `Desarrollo` post-merge.
-**Próximo paso: Sprint 5 — cron del SO para los 3 management commands del
-scheduler (ver sección "Diferido explícitamente" abajo).**
+**Punto actual (01/07/2026):** Sprint 5 con Bloques 1 a 6 completos, 159
+tests OK. Rama activa: `sprint-5-produccion`. Falta solo el **Bloque 7**
+(HABEAS DATA / consentimiento informado) — bloqueado a propósito hasta
+que el Arquitecto decida explícitamente el contenido, no se implementa
+sin esa aprobación.
+**Próximo paso: retomar con el Bloque 7, o priorizar la mejora del
+formato del correo de alerta ALTA (ver nota más abajo) si el Arquitecto
+lo prefiere primero.**
 
-Resumen de lo resuelto en `sprint-4-dashboard`:
-- Bloque 1: modelo CheckInProgramado + migración 0012 + admin con scoping.
-- Bloque 2A: `evaluar_registro(registro, fecha_referencia=None)` — corrige
-  cruce de medianoche. 3 tests AlertFechaReferenciaTests.
-- Bloque 2B: deduplicación Opción A+ (`_deduplicar()`). 6 tests AlertDeduplicacionTests.
-- Bloque 3: bot.py refactorizado — guard por CheckInProgramado PENDIENTE,
-  `_crear_registro` vincula OneToOne y pasa fecha_referencia=checkin.fecha_dia.
-  3 tests nuevos. 122 tests OK.
-- Bloque 4: 3 management commands (crear_checkins_diarios, enviar_recordatorios,
-  cerrar_checkins_vencidos), alerta SILENCIO, migración 0013. 8 tests. 130 OK.
-- Bloque 5A: badge HTML severidad en admin, acción marcar_resuelta. 2 tests.
-- Bloque 5B: historial_ultimos_7_dias como readonly_field en PacienteAdmin.
-- Bloque 5C: signals.py — email al médico por alerta ALTA vía on_commit.
-  settings_local.py con EMAIL_BACKEND=console para dev. 3 tests. 135 OK.
-- Bloque 6: seed_demo (paciente Camilo Rueda, 10 días, 27 alertas).
-  Credenciales demo: demo_medico / demo1234.
+Decisiones de producto P-1 a P-15 confirmadas en sesión (01/07/2026) —
+ver tabla completa en `ROADMAP_MONITOREO_POSQUIRURGICO.md`, FASE 5.
+
+Resumen de lo resuelto en `sprint-5-produccion` (Bloques 1-6):
+- Bloque 1: campo `Paciente.cedula` (único, obligatorio para nuevos,
+  migración 0014) + command `desactivar_pacientes_vencidos` (10 días
+  postop, `--dry-run`, idempotente). 9 tests.
+- Bloque 2: emojis eliminados de todos los mensajes de `bot.py` (P-11).
+- Bloque 3: `TieneAlertaActivaFilter` en `PacienteAdmin` (usa
+  `alertas__resuelta`, el `related_name` real) + historial configurable
+  por días (`_historial_paciente`, selector `?dias=7/14/30`). 6 tests.
+- Bloque 4: gráficas Chart.js (temperatura/dolor/FC) en la ficha del
+  paciente, con selector 7/14/30 días sin recarga de página, turno M/T
+  por `CheckInProgramado.etiqueta` real (no por hora — decisión D2), y
+  puntos rojos para alertas ALTA sin resolver. 9 tests.
+- Bloque 5: SMTP real (`EMAIL_*` en `settings_production.py` existente)
+  — probado end-to-end con una alerta ALTA real, correo recibido y
+  confirmado. **Mejora futura anotada, no implementada:** rediseñar el
+  formato del correo (HTML, mejor estructura) + agregar datos de
+  contacto del paciente al cuerpo.
+- Bloque 6: `docs/cron_setup.md` (4 commands, orden obligatorio:
+  `desactivar_pacientes_vencidos` **antes** de `crear_checkins_diarios`)
+  y `docs/transferencia_cuentas.md`.
+
+Ambas preguntas de arquitectura que quedaban abiertas ya se resolvieron:
+cron en **Linux** (Railway/Render, no Windows Task Scheduler) y SMTP con
+**Gmail + contraseña de aplicación**.
 
 **Lección clave de la conexión Twilio:** el Sandbox de WhatsApp firma sus webhooks
 con el **Auth Token PRIMARIO** (Twilio Console → Account Dashboard), NO con el de
@@ -376,22 +391,25 @@ Test Credentials; usar el de Test causa `403`. Para ngrok free, `ALLOWED_HOSTS`
 usa el comodín `.ngrok-free.dev` (el subdominio cambia en cada reinicio). Detalle
 completo en BITACORA.md.
 
-**Pendiente de producción (no bloquea Sprint 4):** el proxy/balanceador Nginx
-debe configurarse con `proxy_set_header REMOTE_ADDR $remote_addr;` (o equivalente)
-para que `REMOTE_ADDR` refleje la IP real del cliente. El rate limit del formulario
+**Pendiente de producción:** el proxy/balanceador Nginx debe configurarse con
+`proxy_set_header REMOTE_ADDR $remote_addr;` (o equivalente) para que
+`REMOTE_ADDR` refleje la IP real del cliente. El rate limit del formulario
 de contacto (`home/views.py`) y del webhook (`views.py`) dependen de que esto esté
-correcto en producción. Se resuelve en FASE 5 (despliegue), no en el código Django.
+correcto en producción. Se resuelve al desplegar, no en el código Django.
 
-**Diferido explícitamente (Sprint 5):**
-- Cron del SO para los 3 management commands del scheduler (crear_checkins_diarios,
-  enviar_recordatorios, cerrar_checkins_vencidos).
-- Integración Twilio saliente en `enviar_recordatorios` (stub en Sprint 4).
-- Configuración SMTP real en `settings_production.py`.
-- Vista separada historial paciente (URL y template propios con gráficas).
-- FASE 5 — capa RAG real leyendo `knowledge_base.md` con contenido
-  derivado de la auditoría de literatura ya realizada (ver
-  `docs/auditoria_literatura/`); pendiente de que se decidan primero los
-  umbrales del `alert_engine`.
+**Diferido explícitamente:**
+- **Bloque 7 (HABEAS DATA):** consentimiento informado mínimo antes de
+  pacientes reales. Requiere aprobación explícita del Arquitecto y
+  contenido redactado o validado por el médico — nunca inventado.
+- Desplegar en Railway o Render con PostgreSQL en la nube.
+- Integración Twilio saliente real en `enviar_recordatorios` (stub hoy).
+- Rediseño del formato del correo de alerta ALTA + datos de contacto del
+  paciente (anotado en Bloque 5, no implementado).
+- Vista separada historial paciente (URL y template propios).
+- RAG/MCP en el bot — Sprint 6, con corpus de `knowledge_base.md`
+  validado por el médico (decisión P-13); pendiente de que se decidan
+  primero los umbrales del `alert_engine`.
+- OpenMed (anonimización PII) — Sprint 6, solo referencia (P-14).
 
 ---
 
