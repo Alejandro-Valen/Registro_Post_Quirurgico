@@ -679,8 +679,62 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   URL (clamp 1-90) porque los `readonly_fields` solo reciben `obj`, no
   `request`. 6 tests nuevos (filtro de alertas + selector de historial).
   **150 tests OK.**
-- [ ] Gráficas Chart.js en la ficha del paciente — temperatura, dolor, FC (P-9;
-  usar `json.dumps()` para los datos, no f-string directo)
+- [x] **Bloque 4 (01/07/2026, con rediseño post-revisión visual):** Gráficas
+  Chart.js en la ficha del paciente (P-9) — 3 gráficas separadas
+  (temperatura con línea punteada de umbral 37.9°C, dolor EVA 0-10, FC con
+  líneas punteadas de umbral 101/110 lpm), cada una con su propio
+  `new Chart()`, no una sola gráfica multi-eje.
+  - **Selector de período independiente del historial:** los 3 rangos
+    (7/14/30 días) se precalculan en el servidor y se embeben una sola
+    vez como JSON; el médico cambia de rango en el navegador sin recargar
+    la página. El selector del historial en tabla (Bloque 3B, `?dias=`)
+    sigue siendo aparte, con recarga de página.
+  - **Puntos rojos = alerta ALTA sin resolver** en ese registro exacto,
+    vía `registro_origen` (no por coincidencia de fecha).
+  - **Turno (M/T) por `CheckInProgramado.etiqueta` real**, no por la hora
+    de respuesta del paciente — corrige un enfoque propuesto que violaba
+    la decisión D2 ya cerrada (Sprint 3.6: "el turno lo fija el evento,
+    nunca la hora en que el paciente responde"). Fallback por hora solo
+    para registros legado sin check-in vinculado.
+  - **Bug de zona horaria corregido:** el fallback por hora y las fechas
+    del historial en tabla usaban `fecha_registro.hour`/`.strftime()`
+    crudo — con `USE_TZ=True` eso está en UTC, no en hora de Bogotá. Un
+    registro de las 8am Bogotá se habría clasificado como tarde. Ahora
+    usa `timezone.localtime()`.
+  - **FC nula viaja como `null` (hueco en la línea), nunca como `0`** —
+    ya estaba bien desde la primera versión (el "bug" reportado en la
+    instrucción externa no existía en el código real).
+  - Todos los datos van por `json.dumps()` en un único objeto `DATOS`,
+    nunca interpolados directo en el HTML/JS.
+  - Simplificación consciente: las "bandas de color" de FC quedaron como
+    líneas de umbral punteadas, no zonas de fondo — evita depender de un
+    plugin adicional de Chart.js solo por estética. Versión de Chart.js
+    fijada (`4.4.0`, no "latest") para evitar romperse con actualizaciones
+    del CDN.
+  - **9 tests nuevos** (`GraficaSignosVitalesTests`, reemplazan los 3 de
+    la primera versión): sin registros no carga Chart.js; FC nula
+    serializa `null`; los 3 períodos llegan precalculados; turno por
+    check-in vinculado (no por hora); respaldo por hora en zona horaria
+    correcta para datos legado; punto de alerta ALTA marcado/no marcado;
+    versión fija del CDN; selector de gráfica independiente del
+    historial. **159 tests OK.** `manage.py check` limpio.
+  - **Verificado con datos reales del seed_demo:** con la ventana de 7
+    días solo se ven 3 de los 10 registros del paciente demo — no es un
+    bug, es correcto: `seed_demo` fija fechas del 17-26 de junio de 2026,
+    y con la fecha real del sistema (01/07/2026) esos registros quedan
+    entre 5 y 14 días atrás. Con "14 días" o "30 días" se ven los 10.
+  - **No verificado:** la renderización real de Chart.js en un navegador
+    (fuera de las herramientas disponibles en esta sesión) — sí se
+    verificó con el test client de Django que el HTML/JSON generado es
+    válido y con los valores esperados.
+  - **Hallazgo colateral (no bloqueante, anotado para decidir después):**
+    `demo_medico` (creado por `seed_demo`) es superusuario — ve *todo*
+    `/admin/` (Usuarios, Grupos, pacientes de cualquiera), a diferencia
+    de una cuenta de médico real (staff, no-superuser), que solo ve
+    Alertas/Pacientes/Registros Diarios/Check-ins Programados y solo sus
+    propios pacientes (verificado creando una cuenta de prueba). Pendiente
+    decidir si vale la pena una cuenta demo no-superusuario para probar
+    la experiencia real del médico.
 - [ ] Desplegar en Railway o Render con PostgreSQL en la nube
 - [ ] SMTP real: agregar variables `EMAIL_*` a `settings_production.py`
   **existente** (no reemplazar el archivo — ya tiene DEBUG=False, HSTS,

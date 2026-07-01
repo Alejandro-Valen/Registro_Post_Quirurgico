@@ -1884,10 +1884,86 @@ Con esto no quedan preguntas de arquitectura abiertas para Sprint 5.
   `?dias=30`, valor inválido usa el default.
 - Suite: **150 tests OK** (144 + 6). `manage.py check` limpio.
 
+### Bloque 4 — Gráficas Chart.js, con rediseño post-revisión visual (01/07/2026)
+
+**Contexto:** se implementó una primera versión (3 gráficas separadas,
+`json.dumps()`, selector acoplado al `?dias=` del historial). Antes de
+commitear, el Arquitecto trajo una segunda instrucción externa con
+capturas de pantalla señalando dos "bugs" y pidiendo un rediseño visual
+completo (turnos M/T en vez de hora exacta, puntos de alerta en rojo,
+selector sin recarga de página, líneas de umbral más finas).
+
+**Auditoría de la segunda instrucción antes de implementar (no se copió
+tal cual):**
+- El **"Bug 1" (FC nula graficada como 0) no existía** en el código ya
+  escrito — la primera versión ya pasaba `frecuencia_cardiaca` crudo
+  (con `None`, nunca `or 0`) y `spanGaps: true`. Se verificó con test
+  antes de aceptar el diagnóstico.
+- El código de ejemplo de la instrucción traía **el mismo tipo de error
+  que ya se había corregido en el Bloque 3**: `.prefetch_related('alerta_set')`
+  — el `related_name` real es `alertas`. Además hacía una query de
+  `Alerta` por cada registro dentro de un loop (N+1). Se reemplazó por
+  una sola query batched contra `registro_origen`, más precisa que
+  adivinar por coincidencia de fecha.
+- **Determinar el turno por la hora de respuesta (`hora < 12`) contradecía
+  la decisión D2, ya cerrada en Sprint 3.6**, que existe justo para evitar
+  esto ("el turno lo fija el evento programado, nunca la hora en que el
+  paciente responde"). Se implementó usando `CheckInProgramado.etiqueta`
+  real, vinculado por FK, con respaldo por hora solo para registros
+  legado sin check-in vinculado.
+- **Se encontró un bug adicional no reportado por nadie**, al tocar esa
+  misma lógica: el respaldo por hora y las fechas de la tabla de
+  historial usaban `fecha_registro.hour` / `.strftime()` directo sobre un
+  datetime aware — con `USE_TZ=True` eso es hora **UTC**, no Bogotá. Un
+  registro de las 8am Bogotá (13:00 UTC) se habría clasificado como
+  turno "T" en vez de "M". Corregido con `timezone.localtime()` en los
+  dos lugares. Es el mismo tipo de error que la "Norma de zona horaria"
+  de CLAUDE.md ya advierte para cálculos de fecha — aquí aplicaba
+  también a la hora, no solo a la fecha.
+- No se usó el patrón de f-string gigante con doble-llaves (`{{`/`}}`)
+  que traía el ejemplo para todo el bloque JS — alto riesgo de romper por
+  una llave mal escapada en un bloque tan largo. Se separó en una
+  plantilla de texto plano con dos placeholders (`__PID__`, `__CTX__`)
+  reemplazados por `.replace()`, sin arriesgar el parseo de Python.
+
+**Qué quedó implementado (versión final, la que se commiteó):**
+- 3 `<canvas>` independientes (temperatura, dolor EVA, FC), cada uno con
+  su propio `Chart()`.
+- Selector 7/14/30 días **sin recargar la página** — los 3 rangos vienen
+  precalculados como un solo objeto `DATOS` serializado con `json.dumps()`.
+  Independiente del selector del historial en tabla (Bloque 3B), que
+  sigue con `?dias=` y recarga de página.
+- Puntos rojos = alerta ALTA sin resolver en ese registro exacto.
+- Turno M/T por `CheckInProgramado.etiqueta`, con respaldo por hora local
+  (Bogotá) para datos legado.
+- Líneas de umbral punteadas y finas (37.9°C, 101/110 lpm) en vez de
+  zonas de fondo — evita depender de un plugin adicional de Chart.js.
+- Chart.js con versión fijada (`4.4.0`) vía CDN, no "latest".
+- **9 tests nuevos** (`GraficaSignosVitalesTests`, reemplazan los 3 de la
+  primera versión). **159 tests OK.** `manage.py check` limpio.
+- Verificado contra los datos reales del seed_demo: con la ventana de "7
+  días" solo se ven 3 de los 10 registros del paciente demo — **no es un
+  bug**, es correcto: `seed_demo` fija fechas del 17-26 de junio de 2026
+  y con la fecha real del sistema (01/07/2026) esos registros ya quedan
+  entre 5 y 14 días atrás. Con "14 días" o "30 días" se ven los 10.
+- **No verificado:** la renderización real de Chart.js en un navegador
+  (fuera de las herramientas de esta sesión). Sí se verificó con el test
+  client de Django que el HTML/JSON generado es válido y trae los
+  valores esperados.
+
+**Hallazgo colateral, explorando el flujo real del médico (no bloqueante,
+sin acción tomada todavía):** `demo_medico` (creado por `seed_demo`) es
+**superusuario** — ve todo `/admin/` (Usuarios, Grupos, pacientes de
+cualquier médico), a diferencia de una cuenta de médico real (staff,
+no-superuser), que solo ve 4 modelos (Alertas, Pacientes, Registros
+Diarios, Check-ins Programados) y solo sus propios pacientes — verificado
+creando y luego borrando una cuenta de prueba no-superuser. Queda
+pendiente decidir si conviene una segunda cuenta demo no-superusuario
+para poder probar la experiencia real de un médico sin tener que armar la
+cuenta a mano cada vez.
+
 ### Pendiente para continuar Sprint 5
 
-- Bloque 4: gráficas Chart.js en la ficha del paciente (P-9) — usar
-  `json.dumps()` para los datos, no interpolación directa en f-string.
 - Bloque 5: agregar variables `EMAIL_*` a `settings_production.py`
   existente (Gmail + contraseña de aplicación) — no reemplazar el archivo.
 - Bloque 6: `docs/cron_setup.md` y `docs/transferencia_cuentas.md`.
