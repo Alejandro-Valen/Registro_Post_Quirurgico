@@ -2399,3 +2399,76 @@ class DesactivarPacientesVencidosTests(TestCase):
         call_command('desactivar_pacientes_vencidos', verbosity=0)
         call_command('crear_checkins_diarios', verbosity=0)
         self.assertEqual(CheckInProgramado.objects.count(), 0)
+
+
+class PacienteAdminFiltrosHistorialTests(TestCase):
+    """Sprint 5, Bloque 3 — filtro de alertas activas e historial configurable (P-8)."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.medico = User.objects.create_superuser(username='dr_bloque3', password='pass')
+        self.paciente_con_alerta = Paciente.objects.create(
+            nombre_completo="Paciente Con Alerta Activa",
+            telefono_whatsapp="+573020000001",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable=self.medico,
+        )
+        self.paciente_sin_alerta = Paciente.objects.create(
+            nombre_completo="Paciente Sin Alerta Activa",
+            telefono_whatsapp="+573020000002",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable=self.medico,
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=self.paciente_con_alerta,
+            temperatura=Decimal('38.0'),
+            dolor_eva=3,
+            aspecto_drenaje='sin_drenaje',
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        Alerta.objects.create(
+            paciente=self.paciente_con_alerta,
+            registro_origen=registro,
+            tipo='SEPSIS', severidad='ALTA', mensaje='Fiebre',
+            resuelta=False,
+        )
+        self.client.force_login(self.medico)
+
+    # -------------------------------------------------------------------
+    # TieneAlertaActivaFilter
+    # -------------------------------------------------------------------
+
+    def test_filtro_alerta_activa_si_muestra_solo_pacientes_con_alerta_sin_resolver(self):
+        resp = self.client.get('/admin/signos_sintomas/paciente/?alerta_activa=si')
+        self.assertContains(resp, "Paciente Con Alerta Activa")
+        self.assertNotContains(resp, "Paciente Sin Alerta Activa")
+
+    def test_filtro_alerta_activa_no_excluye_pacientes_con_alerta_pendiente(self):
+        resp = self.client.get('/admin/signos_sintomas/paciente/?alerta_activa=no')
+        self.assertContains(resp, "Paciente Sin Alerta Activa")
+        self.assertNotContains(resp, "Paciente Con Alerta Activa")
+
+    def test_sin_filtro_muestra_ambos_pacientes(self):
+        resp = self.client.get('/admin/signos_sintomas/paciente/')
+        self.assertContains(resp, "Paciente Con Alerta Activa")
+        self.assertContains(resp, "Paciente Sin Alerta Activa")
+
+    # -------------------------------------------------------------------
+    # Historial configurable por días
+    # -------------------------------------------------------------------
+
+    def _url_change(self, paciente):
+        return f'/admin/signos_sintomas/paciente/{paciente.pk}/change/'
+
+    def test_historial_default_es_7_dias(self):
+        resp = self.client.get(self._url_change(self.paciente_con_alerta))
+        self.assertContains(resp, '<strong>7 días</strong>', html=False)
+
+    def test_historial_respeta_parametro_dias_de_la_url(self):
+        resp = self.client.get(self._url_change(self.paciente_con_alerta) + '?dias=30')
+        self.assertContains(resp, '<strong>30 días</strong>', html=False)
+
+    def test_historial_valor_invalido_usa_default(self):
+        resp = self.client.get(self._url_change(self.paciente_con_alerta) + '?dias=abc')
+        self.assertContains(resp, '<strong>7 días</strong>', html=False)

@@ -13,16 +13,41 @@ def _solo_propios(request):
     return not request.user.is_superuser
 
 
-def _historial_7_dias(paciente):
-    """Devuelve HTML con tabla de los últimos 7 días de registros del paciente."""
-    hace_7 = timezone.localdate() - timedelta(days=7)
+DIAS_HISTORIAL_DEFAULT = 7
+DIAS_HISTORIAL_OPCIONES = [7, 14, 30]
+
+
+def _clamp_dias_historial(valor):
+    """Convierte el parámetro ?dias= de la URL a un entero seguro (1-90)."""
+    try:
+        dias = int(valor)
+    except (TypeError, ValueError):
+        return DIAS_HISTORIAL_DEFAULT
+    return max(1, min(dias, 90))
+
+
+def _selector_dias_historial(dias_actual):
+    """Enlaces '7 días / 14 días / 30 días' — P-8: historial configurable por el médico."""
+    enlaces = []
+    for dias in DIAS_HISTORIAL_OPCIONES:
+        if dias == dias_actual:
+            enlaces.append(f'<strong>{dias} días</strong>')
+        else:
+            enlaces.append(f'<a href="?dias={dias}">{dias} días</a>')
+    return f'<p style="margin:0 0 6px;">Ver: {" · ".join(enlaces)}</p>'
+
+
+def _historial_paciente(paciente, dias=DIAS_HISTORIAL_DEFAULT):
+    """Devuelve HTML con selector de rango + tabla de registros del paciente."""
+    selector = _selector_dias_historial(dias)
+    desde = timezone.localdate() - timedelta(days=dias)
     registros = (
         RegistroDiario.objects
-        .filter(paciente=paciente, fecha_registro__date__gte=hace_7)
+        .filter(paciente=paciente, fecha_registro__date__gte=desde)
         .order_by('-fecha_registro')
     )
     if not registros.exists():
-        return '<p style="color:#6b7280;">Sin registros en los últimos 7 días.</p>'
+        return selector + f'<p style="color:#6b7280;">Sin registros en los últimos {dias} días.</p>'
 
     filas = []
     for r in registros:
@@ -51,25 +76,51 @@ def _historial_7_dias(paciente):
         '<tbody>' + ''.join(filas) + '</tbody>'
         '</table>'
     )
-    return tabla
+    return selector + tabla
+
+
+class TieneAlertaActivaFilter(admin.SimpleListFilter):
+    """Filtro de pacientes por alertas sin resolver."""
+    title = 'alertas activas'
+    parameter_name = 'alerta_activa'
+
+    def lookups(self, request, model_admin):
+        return [
+            ('si', 'Con alertas sin resolver'),
+            ('no', 'Sin alertas pendientes'),
+        ]
+
+    def queryset(self, request, queryset):
+        if self.value() == 'si':
+            return queryset.filter(alertas__resuelta=False).distinct()
+        if self.value() == 'no':
+            return queryset.exclude(alertas__resuelta=False).distinct()
+        return queryset
 
 
 @admin.register(Paciente)
 class PacienteAdmin(admin.ModelAdmin):
     list_display = ['nombre_completo', 'cedula', 'medico_nombre',
                     'fecha_cirugia', 'activo']
-    list_filter = ['activo', 'medico_responsable']
+    list_filter = ['activo', 'tipo_cirugia', 'medico_responsable', TieneAlertaActivaFilter]
     search_fields = ['nombre_completo', 'cedula', 'telefono_whatsapp',
                      'medico_responsable__first_name',
                      'medico_responsable__last_name',
                      'medico_responsable__username']
-    readonly_fields = ['historial_ultimos_7_dias']
+    readonly_fields = ['historial_paciente']
 
-    @admin.display(description='Historial últimos 7 días')
-    def historial_ultimos_7_dias(self, obj):
+    def get_readonly_fields(self, request, obj=None):
+        # Captura ?dias= de la URL para que historial_paciente() lo use al
+        # renderizar — los readonly_fields solo reciben `obj`, no `request`.
+        self._dias_historial = _clamp_dias_historial(request.GET.get('dias'))
+        return super().get_readonly_fields(request, obj)
+
+    @admin.display(description='Historial del paciente')
+    def historial_paciente(self, obj):
         if obj.pk is None:
             return '—'
-        return mark_safe(_historial_7_dias(obj))
+        dias = getattr(self, '_dias_historial', DIAS_HISTORIAL_DEFAULT)
+        return mark_safe(_historial_paciente(obj, dias=dias))
 
     @admin.display(description='Médico responsable')
     def medico_nombre(self, obj):
