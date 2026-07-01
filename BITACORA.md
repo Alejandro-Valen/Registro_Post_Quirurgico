@@ -1802,10 +1802,18 @@ explícitamente que HABEAS DATA (P-15) es parte del alcance de Sprint 5
 —no un "nice to have" diferido— con consentimiento informado mínimo
 requerido antes de que cualquier paciente real use el sistema.
 
+### Últimas 2 preguntas de arquitectura — resueltas en sesión (01/07/2026)
+
+- **Cron:** Linux (Railway/Render, ya era el destino de deploy decidido en
+  el ROADMAP — no había nada nuevo que decidir). Windows Task Scheduler
+  descartado.
+- **SMTP:** Gmail con contraseña de aplicación — coherente con cuentas del
+  equipo y bajo volumen de correo (solo alertas ALTA).
+
+Con esto no quedan preguntas de arquitectura abiertas para Sprint 5.
+
 ### Pendiente inmediato
 
-- Resolver las 2 preguntas de arquitectura abiertas: ubicación del cron
-  (Windows Task Scheduler vs. Linux VPS), proveedor SMTP real.
 - Ejecutar Bloque 1 (cédula + desactivación automática a 10 días) como
   primer bloque de código de Sprint 5 — ver checklist de tareas en
   ROADMAP FASE 5.

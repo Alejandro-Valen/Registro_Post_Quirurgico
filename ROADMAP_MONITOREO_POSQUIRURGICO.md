@@ -640,9 +640,14 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   del resto de Sprint 5. Requiere texto de consentimiento redactado o
   validado por el médico — no inventar contenido clínico/legal.
 
-**Preguntas de arquitectura aún sin resolver (pausa antes de implementar):**
-- [ ] Ubicación del cron: ¿Windows Task Scheduler (servidor de Alejandro) o Linux VPS?
-- [ ] Proveedor SMTP real: ¿Gmail con contraseña de aplicación, SendGrid, u otro?
+**Preguntas de arquitectura — resueltas en sesión (01/07/2026):**
+- [x] Ubicación del cron: **Linux** (Railway/Render, ya decidido como destino
+  de deploy — cron del contenedor o el servicio nativo de "Cron Jobs" de la
+  plataforma). Windows Task Scheduler queda descartado: el plan es cuentas
+  del proyecto en la nube (P-1/P-2), no correr desde la máquina de Alejandro.
+- [x] Proveedor SMTP real: **Gmail con contraseña de aplicación** —
+  coherente con P-2/P-3 (cuentas del equipo, mantenimiento mínimo) y con
+  volumen bajo de correo (solo alertas ALTA, un médico).
 
 **Tareas de código (orden sugerido, ninguna implementada todavía):**
 - [ ] Campo `cedula` en `Paciente` (obligatorio, único) + migración (P-4)
