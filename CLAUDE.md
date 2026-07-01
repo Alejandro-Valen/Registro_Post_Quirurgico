@@ -48,7 +48,7 @@ exista una decisión formal sobre afiliación.
 
 - **URL:** https://github.com/Alejandro-Valen/Registro_Post_Quirurgico
 - **Rama principal:** `Desarrollo`
-- **Rama activa:** `sprint-3-whatsapp` (León)
+- **Rama activa:** `sprint-5-produccion` (León)
 
 ---
 
@@ -338,13 +338,13 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.5 | Auditoría de literatura, generalización de alcance/marca y documentación | ✅ Completado |
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
-| Sprint 4 | Dashboard médico y notificaciones | ✅ Completado — 6 bloques, 135 tests OK, rama sprint-4-dashboard |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ Pendiente |
+| Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — rama `sprint-5-produccion` |
 
-**Punto actual:** Sprint 4 completado (26/06/2026). 6 bloques implementados.
-135 tests OK. Rama: `sprint-4-dashboard` (pendiente merge a Desarrollo con
-aprobación del Arquitecto).
-**Próximo paso: merge sprint-4-dashboard → Desarrollo, luego Sprint 5.**
+**Punto actual:** Sprint 4 mergeado a `Desarrollo` (fast-forward, 01/07/2026).
+Rama activa: `sprint-5-produccion`, creada desde `Desarrollo` post-merge.
+**Próximo paso: Sprint 5 — cron del SO para los 3 management commands del
+scheduler (ver sección "Diferido explícitamente" abajo).**
 
 Resumen de lo resuelto en `sprint-4-dashboard`:
 - Bloque 1: modelo CheckInProgramado + migración 0012 + admin con scoping.
