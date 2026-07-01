@@ -8,6 +8,8 @@ Variables de entorno OBLIGATORIAS en producción (además de las del .env base):
     DJANGO_ALLOWED_HOSTS   — dominio real, ej: "midominio.com"
     CSRF_TRUSTED_ORIGINS   — origen HTTPS, ej: "https://midominio.com"
     SECRET_KEY             — clave larga y aleatoria (no reutilizar la de desarrollo)
+    EMAIL_HOST_USER        — cuenta de Gmail del proyecto (Sprint 5, Bloque 5)
+    EMAIL_HOST_PASSWORD    — contraseña de aplicación de esa cuenta (NUNCA la normal)
 
 B1: configuración de producción con cabeceras HTTPS, cookies seguras y HSTS.
 A6: DEBUG hardcodeado a False — nunca True en producción.
@@ -46,3 +48,17 @@ CACHES = {
         'LOCATION': config('REDIS_URL', default='redis://localhost:6379/1'),
     }
 }
+
+# Sprint 5, Bloque 5 — SMTP real para el email de alerta ALTA (signals.py).
+# En desarrollo (settings_local.py) el backend sigue siendo consola — esto
+# solo aplica cuando corre con DJANGO_SETTINGS_MODULE=...settings_production.
+# EMAIL_HOST_USER/EMAIL_HOST_PASSWORD no tienen default: si faltan en el
+# .env de producción, decouple falla fuerte (fail-clear) en vez de arrancar
+# el servidor sin poder enviar correo.
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = config('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER)
