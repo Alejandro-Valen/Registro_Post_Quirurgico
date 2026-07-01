@@ -1778,13 +1778,34 @@ Commits: Bloque 4 en `c7593cc`.
   historia ya pusheada es una operación destructiva que no se justifica
   solo por preferencia estética de topología de git.
 
+### Decisiones de producto — confirmadas explícitamente en sesión (01/07/2026)
+
+El Arquitecto confirmó en esta sesión, una por una, las 13 decisiones de
+producto del documento externo (ahora P-1 a P-15 — ver tabla completa en
+`ROADMAP_MONITOREO_POSQUIRURGICO.md`, sección FASE 5). Con esto queda
+satisfecho el requisito del protocolo de "aprobación explícita en sesión"
+para estas decisiones, y ya se documentaron como definitivas en el ROADMAP.
+
+**Corrección durante la confirmación:** el Arquitecto había incluido
+inicialmente una decisión sobre ampliar las respuestas predefinidas del
+bot fuera de horario (15-20 respuestas validadas por el médico). Al
+revisarla, indicó que fue un error de transcripción — **no aplica**. Se
+mantiene la versión original del documento (P-10): el bot conserva las
+respuestas predefinidas actuales sin ampliar, RAG diferido a Sprint 6. Sin
+este error se habría escrito contenido nuevo hacia `knowledge_base.md`/
+`bot.py` sin base real — vale la pena recordar en próximas sesiones
+confirmar dos veces cualquier decisión que toque contenido clínico antes
+de darla por definitiva.
+
+**Agregado nuevo respecto al documento original:** el Arquitecto confirmó
+explícitamente que HABEAS DATA (P-15) es parte del alcance de Sprint 5
+—no un "nice to have" diferido— con consentimiento informado mínimo
+requerido antes de que cualquier paciente real use el sistema.
+
 ### Pendiente inmediato
 
-- Confirmar con el Arquitecto, una por una, las decisiones P-1 a P-13 antes
-  de tocar código.
-- Resolver las 3 preguntas de arquitectura abiertas: duración del
-  seguimiento activo / mecanismo de desactivación de `Paciente.activo`,
-  ubicación del cron (Windows Task Scheduler vs. Linux VPS), proveedor SMTP
-  real.
-- Una vez confirmado, ejecutar Bloque 1 (cédula + desactivación automática)
-  como primer bloque de código de Sprint 5.
+- Resolver las 2 preguntas de arquitectura abiertas: ubicación del cron
+  (Windows Task Scheduler vs. Linux VPS), proveedor SMTP real.
+- Ejecutar Bloque 1 (cédula + desactivación automática a 10 días) como
+  primer bloque de código de Sprint 5 — ver checklist de tareas en
+  ROADMAP FASE 5.

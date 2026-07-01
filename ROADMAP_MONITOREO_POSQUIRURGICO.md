@@ -606,30 +606,75 @@ del alert_engine, jun 2026):**
 
 ---
 
-### ⏳ FASE 5 — Producción — PENDIENTE
-> Crear rama: `git checkout -b sprint-5-produccion`
+### ⏳ FASE 5 — Producción — EN CURSO
+> Rama: `sprint-5-produccion` (creada desde `Desarrollo` post-merge Sprint 4)
 
+**Decisiones de producto — confirmadas explícitamente por el Arquitecto en
+sesión el 01/07/2026 (no re-discutir, ejecutar):**
+
+| # | Decisión | Resolución |
+|---|----------|-----------|
+| P-1 | ¿Un médico o varios? | Un solo médico cliente. El equipo son admins; el médico llama si hay un problema. |
+| P-2 | Titularidad de cuentas | Cuentas del proyecto (Railway, Twilio, Gmail) a nombre del equipo; se transfieren al médico cuando se venda. |
+| P-3 | Mantenimiento en producción | El equipo mantiene con intervención mínima: si el cron falla → email automático → resolución en ~30 min. |
+| P-4 | Identificador del paciente | Cédula obligatoria y única, además del teléfono. |
+| P-5 | Desactivación de paciente | Automática a los 10 días postoperatorios, O manual por el médico — lo que ocurra primero. El scheduler no crea check-ins para pacientes inactivos. |
+| P-6 | Email de notificación | Solo alertas ALTA disparan email; MEDIA y BAJA solo se ven en el dashboard. |
+| P-7 | Check-ins por día | 2 check-ins/día fijos; el médico no los modifica desde el panel. |
+| P-8 | Historial del paciente | Configurable por el médico desde el Admin; default 7 días. |
+| P-9 | Visual del dashboard | Gráficas dentro del Admin (Chart.js), sin panel separado. |
+| P-10 | Bot fuera de horario | Mantener las respuestas predefinidas actuales (`MSG_SIN_CHECKIN`) sin ampliar. RAG diferido a Sprint 6. |
+| P-11 | Emojis en el bot | Eliminar todos los emojis de los mensajes del bot. |
+| P-12 | Landing page | Página de presentación personal del médico (estática, contenido lo define él) — Sprint 5. |
+| P-13 | RAG/MCP | Sprint 6, con corpus de `knowledge_base.md` validado por el médico — no antes. |
+| P-14 | OpenMed | No se integra ahora; referencia futura para anonimización PII (exportación, HABEAS DATA) en Sprint 6. |
+| P-15 | HABEAS DATA | Sprint 5 — consentimiento informado mínimo antes de que cualquier paciente real use el sistema. |
+
+**Notas de implementación de las decisiones anteriores:**
+- P-4/P-5 requieren migración en `models.py` (campo `cedula`, lógica de
+  desactivación) — ver bloque de tareas abajo.
+- P-9 requiere revisar primero la nota de seguridad de esta sesión: los
+  datos que alimentan las gráficas deben ir con `json.dumps()`, nunca
+  interpolados directo en un f-string dentro de `<script>`.
+- P-15 (HABEAS DATA) bloquea el uso con pacientes reales, no el desarrollo
+  del resto de Sprint 5. Requiere texto de consentimiento redactado o
+  validado por el médico — no inventar contenido clínico/legal.
+
+**Preguntas de arquitectura aún sin resolver (pausa antes de implementar):**
+- [ ] Ubicación del cron: ¿Windows Task Scheduler (servidor de Alejandro) o Linux VPS?
+- [ ] Proveedor SMTP real: ¿Gmail con contraseña de aplicación, SendGrid, u otro?
+
+**Tareas de código (orden sugerido, ninguna implementada todavía):**
+- [ ] Campo `cedula` en `Paciente` (obligatorio, único) + migración (P-4)
+- [ ] Management command `desactivar_pacientes_vencidos` — 10 días postop o manual (P-5)
+- [ ] Eliminar emojis de `bot.py` y actualizar tests (P-11)
+- [ ] Filtros en `PacienteAdmin` (activo, tipo_cirugia, alertas sin resolver)
+- [ ] Historial configurable por días (default 7) en vez de `_historial_7_dias` fijo (P-8)
+- [ ] Gráficas Chart.js en la ficha del paciente — temperatura, dolor, FC (P-9;
+  usar `json.dumps()` para los datos, no f-string directo)
 - [ ] Desplegar en Railway o Render con PostgreSQL en la nube
-- [ ] Configurar HTTPS y deshabilitar DEBUG
-- [ ] **Scheduler — monitoreo de infraestructura (viene de decisión Sprint 4):**
-  El scheduler usa management commands + cron del SO (Opción A — decisión
-  tomada en Sprint 4). En producción Linux:
-  - Agregar `MAILTO=email-del-desarrollador` al inicio del crontab para
-    recibir email automático cuando cualquier command falle.
-  - Verificar que los tres commands corren correctamente el primer día en
-    producción y que sus logs de resumen son legibles:
-    `crear_checkins_diarios`, `cerrar_checkins_vencidos`,
-    `enviar_recordatorios`.
-  - Evaluar migración a Celery beat si los fallos de cron son frecuentes
-    o se necesita retry automático. La lógica ya está encapsulada en los
-    management commands — la migración es decorar con `@shared_task`.
+- [ ] SMTP real: agregar variables `EMAIL_*` a `settings_production.py`
+  **existente** (no reemplazar el archivo — ya tiene DEBUG=False, HSTS,
+  cookies seguras y cache Redis del Sprint 3-Hardening)
+- [ ] `docs/cron_setup.md` con horarios UTC de los 3 management commands
+  + `MAILTO` para alertas de fallo por email
+- [ ] `docs/transferencia_cuentas.md` — protocolo de transferencia de
+  cuentas al médico al momento de la venta (P-2)
 - [ ] Configurar monitoreo externo básico (ping al servidor cada 5 min)
-  para detectar caídas totales independientemente del cron.
+  para detectar caídas totales independientemente del cron
 - [ ] Nginx: `proxy_set_header REMOTE_ADDR $remote_addr;` para que el
-  rate limit funcione correctamente con la IP real del cliente.
-- [ ] Integrar capa RAG para respuestas a preguntas frecuentes del postoperatorio
-- [ ] Revisión cumplimiento HABEAS DATA Colombia
+  rate limit funcione correctamente con la IP real del cliente
+- [ ] Landing page estática de presentación del médico (P-12)
+- [ ] Consentimiento informado mínimo (`consentimiento_informado`,
+  `fecha_consentimiento` en `Paciente` + guard en el bot) antes de
+  pacientes reales (P-15) — texto legal/clínico lo redacta o valida el
+  médico, no se inventa aquí
 - [ ] Entrega final al equipo médico
+
+**Diferido explícitamente a Sprint 6:**
+- [ ] Integrar capa RAG/MCP para respuestas del bot (P-13) — prerrequisito:
+  corpus de `knowledge_base.md` validado por el médico
+- [ ] OpenMed para anonimización PII de exportación (P-14)
 
 ---
 
