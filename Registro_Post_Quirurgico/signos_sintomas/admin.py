@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 
 from django.contrib import admin
@@ -37,21 +38,51 @@ def _selector_dias_historial(dias_actual):
     return f'<p style="margin:0 0 6px;">Ver: {" · ".join(enlaces)}</p>'
 
 
+def _turnos_por_registro(registros):
+    """
+    Mapa {registro.pk: 'M'/'T'} usando el CheckInProgramado vinculado —
+    el turno lo fija el evento programado, nunca la hora en que el
+    paciente respondió (decisión D2, Sprint 3.6: ROADMAP FASE 3.6).
+    Fallback por hora (< 12 = mañana) solo para registros legado sin
+    CheckInProgramado vinculado (datos previos a Sprint 4).
+    """
+    etiqueta_por_registro = dict(
+        CheckInProgramado.objects
+        .filter(registro__in=registros)
+        .values_list('registro_id', 'etiqueta')
+    )
+    turnos = {}
+    for r in registros:
+        etiqueta = etiqueta_por_registro.get(r.pk)
+        if etiqueta == CheckInProgramado.ETIQUETA_MANANA:
+            turnos[r.pk] = 'M'
+        elif etiqueta == CheckInProgramado.ETIQUETA_TARDE:
+            turnos[r.pk] = 'T'
+        else:
+            # USE_TZ=True: fecha_registro llega en UTC — convertir a hora
+            # local (Bogotá) antes de comparar, o el respaldo clasifica
+            # mal el turno de registros creados cerca de medianoche/mañana.
+            hora_local = timezone.localtime(r.fecha_registro).hour
+            turnos[r.pk] = 'M' if hora_local < 12 else 'T'
+    return turnos
+
+
 def _historial_paciente(paciente, dias=DIAS_HISTORIAL_DEFAULT):
     """Devuelve HTML con selector de rango + tabla de registros del paciente."""
     selector = _selector_dias_historial(dias)
     desde = timezone.localdate() - timedelta(days=dias)
-    registros = (
+    registros = list(
         RegistroDiario.objects
         .filter(paciente=paciente, fecha_registro__date__gte=desde)
         .order_by('-fecha_registro')
     )
-    if not registros.exists():
+    if not registros:
         return selector + f'<p style="color:#6b7280;">Sin registros en los últimos {dias} días.</p>'
 
+    turnos = _turnos_por_registro(registros)
     filas = []
     for r in registros:
-        fecha = r.fecha_registro.strftime('%d/%m %H:%M')
+        fecha = timezone.localtime(r.fecha_registro).strftime('%d/%m') + f' {turnos[r.pk]}'
         filas.append(
             f'<tr>'
             f'<td>{fecha}</td>'
@@ -77,6 +108,237 @@ def _historial_paciente(paciente, dias=DIAS_HISTORIAL_DEFAULT):
         '</table>'
     )
     return selector + tabla
+
+
+DIAS_GRAFICA_OPCIONES = [7, 14, 30]
+
+
+def _datos_grafica(paciente, dias):
+    """
+    Arma los datos (labels/temps/evas/fcs/alertas_idx) para graficar los
+    últimos `dias` días de un paciente. Todo lo que va a JSON pasa por
+    json.dumps() en el llamador — nunca se interpola directo en el HTML.
+    """
+    desde = timezone.localdate() - timedelta(days=dias)
+    registros = list(
+        RegistroDiario.objects
+        .filter(paciente=paciente, fecha_registro__date__gte=desde)
+        .order_by('fecha_registro')
+    )
+    if not registros:
+        return {'labels': [], 'temps': [], 'evas': [], 'fcs': [], 'alertas_idx': []}
+
+    turnos = _turnos_por_registro(registros)
+    # Una sola query batched — evita N+1 y no depende del related_name
+    # equivocado ("alerta_set") que traía el borrador original.
+    ids_con_alerta_alta = set(
+        Alerta.objects
+        .filter(registro_origen__in=registros, severidad='ALTA', resuelta=False)
+        .values_list('registro_origen_id', flat=True)
+    )
+
+    labels, temps, evas, fcs, alertas_idx = [], [], [], [], []
+    for i, r in enumerate(registros):
+        labels.append(timezone.localtime(r.fecha_registro).strftime('%d/%m') + f' {turnos[r.pk]}')
+        temps.append(float(r.temperatura))
+        evas.append(r.dolor_eva)
+        fcs.append(r.frecuencia_cardiaca)  # None se serializa como null — Chart.js abre un hueco, no cae a 0
+        if r.pk in ids_con_alerta_alta:
+            alertas_idx.append(i)
+
+    return {'labels': labels, 'temps': temps, 'evas': evas, 'fcs': fcs, 'alertas_idx': alertas_idx}
+
+
+_JS_GRAFICAS_TEMPLATE = """
+<div id="graficas-__PID__" style="margin-top:8px;">
+  <div style="margin-bottom:12px;font-size:0.85em;">
+    Ver:
+    <a href="#" onclick="cambiarPeriodo___PID__(7,this);return false;"
+       style="font-weight:600;color:#374151;">7 días</a> ·
+    <a href="#" onclick="cambiarPeriodo___PID__(14,this);return false;"
+       style="color:#6b7280;">14 días</a> ·
+    <a href="#" onclick="cambiarPeriodo___PID__(30,this);return false;"
+       style="color:#6b7280;">30 días</a>
+  </div>
+
+  <div style="margin-bottom:4px;font-size:0.8em;color:#6b7280;display:flex;justify-content:space-between;">
+    <span>Temperatura (°C)</span>
+    <span style="color:#fca5a5;">- - umbral fiebre: 37.9°C</span>
+  </div>
+  <canvas id="temp-__PID__" height="90" style="width:100%;margin-bottom:16px;"></canvas>
+
+  <div style="margin-bottom:4px;font-size:0.8em;color:#6b7280;">Dolor EVA (1-10)</div>
+  <canvas id="eva-__PID__" height="90" style="width:100%;margin-bottom:16px;"></canvas>
+
+  <div style="margin-bottom:4px;font-size:0.8em;color:#6b7280;display:flex;justify-content:space-between;">
+    <span>Frecuencia cardíaca (lpm)</span>
+    <span style="color:#6b7280;">- - 101 lpm  · - - 110 lpm</span>
+  </div>
+  <canvas id="fc-__PID__" height="90" style="width:100%;margin-bottom:8px;"></canvas>
+  <p style="font-size:0.75em;color:#9ca3af;margin:4px 0 0;">
+    Puntos rojos = alerta ALTA sin resolver ese registro. Huecos en la
+    línea = el paciente no midió ese dato ese día (no es un valor de 0).
+  </p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  var DATOS = __CTX__;
+  var pid = "__PID__";
+  var charts = {};
+
+  function puntoColor(idx, alertasIdx) {
+    return alertasIdx.indexOf(idx) !== -1 ? '#dc2626' : 'transparent';
+  }
+  function puntoRadio(idx, alertasIdx, valor) {
+    if (valor === null || valor === undefined) return 0;
+    return alertasIdx.indexOf(idx) !== -1 ? 5 : 3;
+  }
+
+  var optsBase = {
+    responsive: true,
+    animation: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: '#f3f4f6' }, ticks: { font: { size: 10 }, maxRotation: 45 } },
+      y: { grid: { color: '#f3f4f6' }, ticks: { font: { size: 10 } } }
+    }
+  };
+
+  function init() {
+    var d = DATOS['7'];
+
+    charts.temp = new Chart(document.getElementById('temp-' + pid), {
+      type: 'line',
+      data: {
+        labels: d.labels,
+        datasets: [
+          {
+            label: 'Temperatura', data: d.temps, borderColor: '#dc2626', borderWidth: 2,
+            pointBackgroundColor: d.temps.map(function(v, i) { return puntoColor(i, d.alertas_idx); }),
+            pointRadius: d.temps.map(function(v, i) { return puntoRadio(i, d.alertas_idx, v); }),
+            tension: 0.3, spanGaps: false
+          },
+          {
+            label: 'Umbral fiebre', data: d.labels.map(function() { return 37.9; }),
+            borderColor: '#fca5a5', borderWidth: 1, borderDash: [4, 4], pointRadius: 0, tension: 0
+          }
+        ]
+      },
+      options: Object.assign({}, optsBase, {
+        scales: Object.assign({}, optsBase.scales, {
+          y: Object.assign({}, optsBase.scales.y, { min: 35, max: 40, ticks: { stepSize: 0.5, font: { size: 10 } } })
+        })
+      })
+    });
+
+    charts.eva = new Chart(document.getElementById('eva-' + pid), {
+      type: 'line',
+      data: {
+        labels: d.labels,
+        datasets: [{
+          label: 'Dolor EVA', data: d.evas, borderColor: '#f59e0b', borderWidth: 2,
+          pointBackgroundColor: d.evas.map(function(v, i) { return puntoColor(i, d.alertas_idx); }),
+          pointRadius: d.evas.map(function(v, i) { return puntoRadio(i, d.alertas_idx, v); }),
+          tension: 0.3, spanGaps: false
+        }]
+      },
+      options: Object.assign({}, optsBase, {
+        scales: Object.assign({}, optsBase.scales, {
+          y: Object.assign({}, optsBase.scales.y, { min: 0, max: 10, ticks: { stepSize: 2, font: { size: 10 } } })
+        })
+      })
+    });
+
+    charts.fc = new Chart(document.getElementById('fc-' + pid), {
+      type: 'line',
+      data: {
+        labels: d.labels,
+        datasets: [
+          {
+            label: 'FC', data: d.fcs, borderColor: '#3b82f6', borderWidth: 2,
+            pointBackgroundColor: d.fcs.map(function(v, i) { return puntoColor(i, d.alertas_idx); }),
+            pointRadius: d.fcs.map(function(v, i) { return puntoRadio(i, d.alertas_idx, v); }),
+            tension: 0.3, spanGaps: false
+          },
+          {
+            label: 'Taquicardia leve', data: d.labels.map(function() { return 101; }),
+            borderColor: '#fcd34d', borderWidth: 1, borderDash: [3, 3], pointRadius: 0
+          },
+          {
+            label: 'Taquicardia', data: d.labels.map(function() { return 110; }),
+            borderColor: '#f87171', borderWidth: 1, borderDash: [3, 3], pointRadius: 0
+          }
+        ]
+      },
+      options: optsBase
+    });
+  }
+
+  window.cambiarPeriodo___PID__ = function(dias, link) {
+    document.querySelectorAll('#graficas-' + pid + ' a').forEach(function(a) {
+      a.style.fontWeight = '';
+      a.style.color = '#6b7280';
+    });
+    link.style.fontWeight = '600';
+    link.style.color = '#374151';
+
+    var d = DATOS[String(dias)];
+    if (!d) { return; }
+
+    ['temp', 'eva', 'fc'].forEach(function(tipo) {
+      var chart = charts[tipo];
+      if (!chart) { return; }
+      var dataMap = { temp: d.temps, eva: d.evas, fc: d.fcs };
+      chart.data.labels = d.labels;
+      chart.data.datasets[0].data = dataMap[tipo];
+      chart.data.datasets[0].pointBackgroundColor = dataMap[tipo].map(
+        function(v, i) { return puntoColor(i, d.alertas_idx); }
+      );
+      chart.data.datasets[0].pointRadius = dataMap[tipo].map(
+        function(v, i) { return puntoRadio(i, d.alertas_idx, v); }
+      );
+      for (var j = 1; j < chart.data.datasets.length; j++) {
+        var val = chart.data.datasets[j].data[0];
+        chart.data.datasets[j].data = d.labels.map(function() { return val; });
+      }
+      chart.update();
+    });
+  };
+
+  if (typeof Chart !== 'undefined') {
+    init();
+  } else {
+    document.currentScript.previousElementSibling.addEventListener('load', init);
+  }
+})();
+</script>
+"""
+
+
+def _grafica_signos_vitales(paciente):
+    """
+    Devuelve HTML con 3 gráficas Chart.js (temperatura, dolor EVA, FC) con
+    selector de período 7/14/30 días que cambia en el navegador sin
+    recargar la página (P-9, rediseño 01/07/2026).
+
+    Los 3 períodos se precalculan en Python y se serializan una sola vez
+    con json.dumps() en un objeto DATOS — nunca se interpola una lista
+    Python directo en el HTML/JS (regla de seguridad, BITACORA 01/07/2026).
+    """
+    tiene_datos = RegistroDiario.objects.filter(paciente=paciente).exists()
+    if not tiene_datos:
+        return '<p style="color:#6b7280;">Sin datos para graficar todavía.</p>'
+
+    datos = {str(dias): _datos_grafica(paciente, dias) for dias in DIAS_GRAFICA_OPCIONES}
+    ctx = json.dumps(datos)
+
+    return (
+        _JS_GRAFICAS_TEMPLATE
+        .replace('__CTX__', ctx)
+        .replace('__PID__', str(paciente.pk))
+    )
 
 
 class TieneAlertaActivaFilter(admin.SimpleListFilter):
@@ -107,13 +369,21 @@ class PacienteAdmin(admin.ModelAdmin):
                      'medico_responsable__first_name',
                      'medico_responsable__last_name',
                      'medico_responsable__username']
-    readonly_fields = ['historial_paciente']
+    readonly_fields = ['grafica_signos_vitales', 'historial_paciente']
 
     def get_readonly_fields(self, request, obj=None):
         # Captura ?dias= de la URL para que historial_paciente() lo use al
         # renderizar — los readonly_fields solo reciben `obj`, no `request`.
+        # La gráfica (grafica_signos_vitales) tiene su propio selector de
+        # período independiente, en el navegador — no usa este parámetro.
         self._dias_historial = _clamp_dias_historial(request.GET.get('dias'))
         return super().get_readonly_fields(request, obj)
+
+    @admin.display(description='Evolución signos vitales')
+    def grafica_signos_vitales(self, obj):
+        if obj.pk is None:
+            return '—'
+        return mark_safe(_grafica_signos_vitales(obj))
 
     @admin.display(description='Historial del paciente')
     def historial_paciente(self, obj):

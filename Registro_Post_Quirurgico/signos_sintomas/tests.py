@@ -2472,3 +2472,158 @@ class PacienteAdminFiltrosHistorialTests(TestCase):
     def test_historial_valor_invalido_usa_default(self):
         resp = self.client.get(self._url_change(self.paciente_con_alerta) + '?dias=abc')
         self.assertContains(resp, '<strong>7 días</strong>', html=False)
+
+
+class GraficaSignosVitalesTests(TestCase):
+    """
+    Sprint 5, Bloque 4 (rediseño 01/07/2026) — gráficas Chart.js con
+    selector de período 7/14/30 días independiente del historial en
+    tabla, turno M/T por CheckInProgramado real, y puntos de alerta.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.medico = User.objects.create_superuser(username='dr_bloque4', password='pass')
+        self.paciente = Paciente.objects.create(
+            nombre_completo="Paciente Grafica",
+            telefono_whatsapp="+573030000001",
+            fecha_cirugia=timezone.localdate() - timedelta(days=3),
+            medico_responsable=self.medico,
+        )
+        self.client.force_login(self.medico)
+
+    def _url_change(self):
+        return f'/admin/signos_sintomas/paciente/{self.paciente.pk}/change/'
+
+    def _extraer_datos(self, contenido):
+        import json
+        import re
+        match = re.search(r'var DATOS = (.+?);\s*var pid', contenido)
+        self.assertIsNotNone(match, "No se encontró el objeto DATOS embebido en el HTML")
+        return json.loads(match.group(1))
+
+    def test_sin_registros_no_carga_chartjs(self):
+        resp = self.client.get(self._url_change())
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Sin datos para graficar")
+        self.assertNotContains(resp, "cdn.jsdelivr.net/npm/chart.js")
+
+    def test_fc_nula_se_serializa_como_null_no_como_cero(self):
+        """Bug reportado en la revisión visual: FC no capturada debía viajar
+        como null (hueco en la línea), nunca como 0 (caída falsa a tierra)."""
+        RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('38.2'), dolor_eva=6,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=1,
+            frecuencia_cardiaca=None,
+        )
+        resp = self.client.get(self._url_change())
+        datos = self._extraer_datos(resp.content.decode())
+        self.assertEqual(datos['7']['fcs'], [None])
+        self.assertNotIn(0, datos['7']['fcs'])
+
+    def test_los_3_periodos_estan_precalculados_en_una_sola_carga(self):
+        RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('37.0'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+        resp = self.client.get(self._url_change())
+        datos = self._extraer_datos(resp.content.decode())
+        self.assertEqual(set(datos.keys()), {'7', '14', '30'})
+        for periodo in ('7', '14', '30'):
+            self.assertEqual(datos[periodo]['temps'], [37.0])
+
+    def test_turno_usa_etiqueta_del_checkin_no_la_hora_de_respuesta(self):
+        """Decisión D2 (Sprint 3.6): el turno lo fija el evento programado,
+        nunca la hora en que el paciente respondió."""
+        registro = RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('37.0'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+        # Paciente respondió a las 3pm (T) al check-in que el sistema programó
+        # como MAÑANA — el turno mostrado debe ser M, no T.
+        RegistroDiario.objects.filter(pk=registro.pk).update(
+            fecha_registro=timezone.now().replace(hour=15, minute=0, second=0, microsecond=0)
+        )
+        CheckInProgramado.objects.create(
+            paciente=self.paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now(),
+            estado=CheckInProgramado.ESTADO_COMPLETADO,
+            registro=registro,
+        )
+        resp = self.client.get(self._url_change())
+        datos = self._extraer_datos(resp.content.decode())
+        self.assertTrue(datos['7']['labels'][0].endswith(' M'))
+
+    def test_registro_legado_sin_checkin_usa_hora_local_como_respaldo(self):
+        """Sin CheckInProgramado vinculado (dato legado), se usa la hora en
+        zona horaria de Bogotá, no UTC — de lo contrario el respaldo
+        clasifica mal registros creados en la mañana bogotana."""
+        registro = RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('37.0'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+        # 8am Bogotá (UTC-5) = 13:00 UTC — con .hour crudo (UTC) esto daría
+        # "T" incorrectamente; con timezone.localtime() da "M" correcto.
+        ocho_am_bogota_en_utc = timezone.now().replace(hour=13, minute=0, second=0, microsecond=0)
+        RegistroDiario.objects.filter(pk=registro.pk).update(fecha_registro=ocho_am_bogota_en_utc)
+        resp = self.client.get(self._url_change())
+        datos = self._extraer_datos(resp.content.decode())
+        self.assertTrue(datos['7']['labels'][0].endswith(' M'))
+
+    def test_alerta_alta_sin_resolver_marca_el_indice(self):
+        registro = RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('38.5'), dolor_eva=8,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+        Alerta.objects.create(
+            paciente=self.paciente, registro_origen=registro,
+            tipo='SEPSIS', severidad='ALTA', mensaje='Fiebre alta', resuelta=False,
+        )
+        resp = self.client.get(self._url_change())
+        datos = self._extraer_datos(resp.content.decode())
+        self.assertEqual(datos['7']['alertas_idx'], [0])
+
+    def test_alerta_alta_resuelta_no_marca_el_indice(self):
+        registro = RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('38.5'), dolor_eva=8,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+        Alerta.objects.create(
+            paciente=self.paciente, registro_origen=registro,
+            tipo='SEPSIS', severidad='ALTA', mensaje='Fiebre alta', resuelta=True,
+        )
+        resp = self.client.get(self._url_change())
+        datos = self._extraer_datos(resp.content.decode())
+        self.assertEqual(datos['7']['alertas_idx'], [])
+
+    def test_carga_version_fija_de_chartjs(self):
+        RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('37.0'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+        resp = self.client.get(self._url_change())
+        self.assertContains(resp, "chart.js@4.4.0")
+
+    def test_selector_de_grafica_es_independiente_del_historial(self):
+        """El ?dias= de la URL controla el historial en tabla (Bloque 3B);
+        la gráfica siempre trae los 3 períodos precalculados, sin depender
+        de ese parámetro."""
+        RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('37.0'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+        resp = self.client.get(self._url_change() + '?dias=30')
+        self.assertContains(resp, '<strong>30 días</strong>', html=False)
+        datos = self._extraer_datos(resp.content.decode())
+        self.assertEqual(set(datos.keys()), {'7', '14', '30'})
