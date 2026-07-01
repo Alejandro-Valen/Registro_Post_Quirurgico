@@ -755,10 +755,22 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   **Mejora futura anotada, no implementada:** rediseñar el formato del
   correo — HTML con mejor estructura visual, y agregar datos de contacto
   del paciente (teléfono, posiblemente cédula) al cuerpo del mensaje.
-- [ ] `docs/cron_setup.md` con horarios UTC de los 3 management commands
-  + `MAILTO` para alertas de fallo por email
-- [ ] `docs/transferencia_cuentas.md` — protocolo de transferencia de
-  cuentas al médico al momento de la venta (P-2)
+- [x] **Bloque 6 (01/07/2026):** `docs/cron_setup.md` — creado. Cubre los
+  **4** management commands (los 3 originales + `desactivar_pacientes_vencidos`
+  del Bloque 1), horarios en UTC, `MAILTO` para fallos, y el orden
+  obligatorio `desactivar_pacientes_vencidos` **antes** de
+  `crear_checkins_diarios` (nunca al revés). **Bug de documentación
+  corregido de paso:** el docstring de `desactivar_pacientes_vencidos.py`
+  decía que debía correr *después* de `crear_checkins_diarios`, lo cual
+  contradice su propio propósito (evitar que un paciente reciba un
+  check-in el día que vence) y el orden que ya prueba
+  `test_scheduler_no_crea_checkins_tras_desactivacion`. Corregido el
+  comentario para que diga "antes", no "después".
+- [x] **Bloque 6 (01/07/2026):** `docs/transferencia_cuentas.md` —
+  creado. Protocolo de transferencia (P-1/P-2/P-13), tabla de cuentas del
+  proyecto, manual mínimo de operación para el médico, y nota de que
+  HABEAS DATA (Bloque 7) bloquea el uso con pacientes reales, no el resto
+  del despliegue técnico. **159 tests OK**, `manage.py check` limpio.
 - [ ] Configurar monitoreo externo básico (ping al servidor cada 5 min)
   para detectar caídas totales independientemente del cron
 - [ ] Nginx: `proxy_set_header REMOTE_ADDR $remote_addr;` para que el

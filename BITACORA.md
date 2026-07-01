@@ -2010,9 +2010,45 @@ rediseñar el formato del correo de alerta ALTA — mejor estructura visual
 trae nombre del paciente, tipo de alerta, severidad, fecha y el mensaje
 del `alert_engine`.
 
+### Bloque 6 — Documentación de despliegue: cron y transferencia (01/07/2026)
+
+**Qué se hizo:**
+- **`docs/cron_setup.md`:** documenta los **4** management commands que
+  necesitan cron en producción — los 3 originales del scheduler
+  (`crear_checkins_diarios`, `enviar_recordatorios`,
+  `cerrar_checkins_vencidos`) más `desactivar_pacientes_vencidos`
+  (Bloque 1, no contemplado en el plan original de Sprint 4). Horarios
+  convertidos a UTC (Bogotá es UTC-5 fijo, sin horario de verano),
+  `MAILTO` para que cualquier fallo llegue por email (mecanismo de P-3),
+  y una nota sobre el servicio nativo de Cron Jobs de Railway como
+  alternativa al crontab tradicional.
+- **Orden obligatorio documentado:** `desactivar_pacientes_vencidos`
+  **antes** de `crear_checkins_diarios` (5 minutos antes, no en el mismo
+  minuto, porque cron no garantiza el orden entre tareas programadas al
+  mismo tiempo).
+- **Bug de documentación encontrado y corregido al escribir esto:** el
+  docstring de `desactivar_pacientes_vencidos.py` (escrito en el Bloque
+  1) decía que el command corre *después* de `crear_checkins_diarios` —
+  pero esa misma línea explicaba el propósito de evitar que un paciente
+  reciba un check-in el día que vence, algo que **solo se cumple
+  corriendo antes**, no después. El test `test_scheduler_no_crea_checkins_tras_desactivacion`
+  ya prueba (y siempre probó) el orden correcto; solo el comentario
+  estaba mal. Corregido para decir "antes", con la explicación completa
+  del riesgo (checkin que queda PENDIENTE para siempre → alerta SILENCIO
+  espuria para un paciente ya inactivo).
+- **`docs/transferencia_cuentas.md`:** protocolo de transferencia de
+  cuentas al médico al momento de la venta (P-1/P-2/P-13), tabla de
+  cuentas del proyecto con su estado actual real (Railway/Render
+  pendiente de elegir, Twilio activo en sandbox, Gmail probado el mismo
+  día, Redis pendiente de contratar), manual mínimo de operación para el
+  médico, y recordatorio de que HABEAS DATA (Bloque 7) bloquea el uso con
+  pacientes reales, no el resto del despliegue técnico.
+- Suite: **159 tests OK** (sin tests nuevos — este bloque es solo
+  documentación y un comentario corregido, sin cambios de comportamiento).
+  `manage.py check` limpio.
+
 ### Pendiente para continuar Sprint 5
 
-- Bloque 6: `docs/cron_setup.md` y `docs/transferencia_cuentas.md`.
 - Bloque 7: consentimiento informado mínimo (P-15) — contenido lo redacta
   o valida el médico.
 - Mejora futura: rediseño del formato del correo de alerta ALTA + datos
