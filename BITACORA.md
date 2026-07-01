@@ -1842,9 +1842,23 @@ Con esto no quedan preguntas de arquitectura abiertas para Sprint 5.
 - Suite: **144 tests OK** (135 + 9). `manage.py check` limpio.
   `manage.py migrate` aplicado sin errores.
 
+### Bloque 2 — Eliminar emojis del bot (01/07/2026)
+
+**Qué se hizo:**
+- Se quitaron todos los emojis de los mensajes `MSG_*` en `bot.py`: los
+  marcadores numerados (`1️⃣`…`🔟`) pasaron a texto plano (`"1. "`…`"10. "`),
+  y el resto de emojis decorativos (🌿, ✅, 👋) se eliminaron sin
+  reemplazo, según la regla del documento (solo cambia presentación, no
+  contenido clínico ni lógica).
+- Quedó un `①` en un comentario interno de `models.py`
+  (`# ... decisión 0-①`) — no es un mensaje visible al paciente, se dejó
+  intacto por estar fuera de alcance del Bloque 2.
+- Los tests existentes verifican los mensajes con `assertIn` sobre
+  substrings, no con igualdad exacta de string — no requirieron cambios.
+- Suite: **144 tests OK** sin modificaciones a `tests.py` (P-11).
+
 ### Pendiente para continuar Sprint 5
 
-- Bloque 2: eliminar emojis de `bot.py` (P-11) y actualizar tests.
 - Bloque 3: filtros en `PacienteAdmin` (activo, tipo_cirugia, alertas sin
   resolver) + historial configurable por días (P-8).
 - Bloque 4: gráficas Chart.js en la ficha del paciente (P-9) — usar

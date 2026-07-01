@@ -660,7 +660,12 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   sobre `activo=True`). La desactivación manual desde el Admin sigue
   disponible sin cambios (P-5). 9 tests nuevos (`PacienteCedulaTests`,
   `DesactivarPacientesVencidosTests`). **144 tests OK.**
-- [ ] Eliminar emojis de `bot.py` y actualizar tests (P-11)
+- [x] **Bloque 2 (01/07/2026):** Emojis eliminados de todos los mensajes
+  del bot (`MSG_*` en `bot.py`). Las preguntas numeradas (`1️⃣`…`🔟`) pasan
+  a `"1. "`…`"10. "`; el resto de emojis decorativos (🌿✅👋) se quitan sin
+  reemplazo. Sin cambios de contenido clínico ni de la máquina de estados.
+  Tests existentes usan `assertIn` con substrings — no requirieron cambios,
+  **144 tests OK** (P-11).
 - [ ] Filtros en `PacienteAdmin` (activo, tipo_cirugia, alertas sin resolver)
 - [ ] Historial configurable por días (default 7) en vez de `_historial_7_dias` fijo (P-8)
 - [ ] Gráficas Chart.js en la ficha del paciente — temperatura, dolor, FC (P-9;
