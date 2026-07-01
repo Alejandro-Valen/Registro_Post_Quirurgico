@@ -1705,5 +1705,86 @@ Commits: Bloque 4 en `c7593cc`.
 ---
 
 ## Sprint 5 — Producción
-**Fecha:** pendiente
-**Estado:** EN COLA ⏳
+**Fecha:** 01/07/2026 (sesión de apertura)
+**Responsable:** León (Arquitecto IA) con Claude Code
+**Estado:** EN CURSO ⏳ — merge de Sprint 4 confirmado, auditoría de ROADMAP hecha, pendientes de decisión antes de escribir código.
+
+### Qué se hizo
+
+- **Merge `sprint-4-dashboard → Desarrollo`:** fast-forward limpio
+  (`f4a476b..353ec60`), sin conflictos, 135 tests OK post-merge. Push
+  confirmado a `origin/Desarrollo`.
+- **Rama `sprint-5-produccion`** creada desde `Desarrollo` y pusheada.
+- **Auditoría completa del ROADMAP** contra el historial real de git y el
+  filesystem: se encontraron y corrigieron 4 desincronizaciones (ver abajo).
+- **Recibido documento externo** "Instrucciones para Claude Code — Sprint 5"
+  (generado en una sesión de chat de Claude.ai, no en Claude Code), con 13
+  decisiones de producto propuestas (P-1 a P-13) y 7 bloques de
+  implementación. Se comparó contra el estado real del código — ver
+  hallazgos de seguridad/discrepancias abajo. **Ninguna de las 13 decisiones
+  ni los 7 bloques se implementó todavía** — quedan pendientes de
+  confirmación explícita del Arquitecto en esta sesión, según el protocolo
+  del proyecto (ningún cambio clínico/de producto se ejecuta sin
+  aprobación explícita en sesión con el agente de código).
+
+### Desincronizaciones encontradas y corregidas en el ROADMAP
+
+1. Encabezado del archivo y de FASE 4 seguían diciendo `sprint-4-dashboard`
+   / "EN CURSO" — corregido a `sprint-5-produccion` / "COMPLETADA".
+2. FASE 3: el checkbox de merge `sprint-3-whatsapp → Desarrollo` seguía sin
+   marcar pese a que esos commits ya estaban en `Desarrollo` desde antes de
+   `sprint-3-hardening` (confirmado con `git log Desarrollo --oneline`).
+3. FASE 3.6: los ítems "alerta de silencio" y "gating del alert_engine (2
+   políticas)" seguían sin marcar, pero ambos ya se resolvieron en Sprint 4
+   (Bloques 4 y 2B respectivamente) — marcados `[x]` con referencia cruzada.
+4. FASE 4, Bloque 5B: el checkbox decía "historial y **gráfica**
+   temperatura/dolor" marcado como hecho, pero `admin.py` solo implementa
+   una tabla de texto (`_historial_7_dias`) — no hay ningún `Chart.js` ni
+   `<canvas>` en el código. Se anotó la imprecisión sin desmarcar el bloque
+   (el resto de lo prometido sí está hecho).
+5. **Estructura del Proyecto Django** (árbol de carpetas) actualizada
+   contra el filesystem real: faltaban `management/commands/` completo,
+   `signals.py`, `settings_local.py`, `settings_production.py`, `docs/`,
+   `requirements-runtime.txt`, migraciones 0003-0013, entre otros.
+
+### Hallazgos de seguridad/riesgo en el documento externo recibido
+
+- **`settings_production.py` ya existe** (creado en Sprint 3-Hardening,
+  commits `6ad4f80` y hallazgos D1-D5) con `DEBUG=False`, `SECURE_SSL_REDIRECT`,
+  HSTS, cookies seguras y cache Redis obligatoria para multi-worker. El
+  documento externo pide "crear" ese archivo con una versión más simple que
+  **no incluye ninguna de esas directivas** — ejecutarlo tal cual
+  sobreescribiría y regresionaría hardening ya construido y probado. Si se
+  agrega SMTP real en Sprint 5, debe ser un **append** a las variables
+  `EMAIL_*` existentes, nunca un reemplazo del archivo.
+- **Ejemplo de código del Bloque 4 (gráficas Chart.js)** en el documento
+  externo interpola `fechas`, `temperaturas`, `dolores` y `fcs` directamente
+  en un f-string dentro de un `<script>`, pese a que el propio documento
+  dice "escaparse con `json.dumps()` — nunca f-string directo". El código
+  de ejemplo no sigue su propia regla. Si se implementa, los datos deben ir
+  con `json.dumps(...)`, no interpolación directa de listas Python en JS.
+- **13 decisiones de producto (P-1 a P-13)** propuestas en el documento
+  externo tocan reglas de negocio y datos de paciente (cédula obligatoria,
+  desactivación automática a 10 días, eliminación de emojis, email
+  solo-ALTA, etc.). Como fueron decididas en una sesión de chat aparte, no
+  en sesión con Claude Code, y el protocolo del proyecto exige aprobación
+  explícita en sesión antes de escribir código clínico/de producto, se
+  reportan pero **no se marcan como definitivas en ROADMAP/CLAUDE.md**
+  hasta que el Arquitecto las confirme aquí.
+- El paso "1A — merge `sprint-4-dashboard → Desarrollo --no-ff`" del
+  documento es redundante: ya se hizo (ver arriba), aunque por
+  fast-forward en vez de `--no-ff` (sin commit de merge dedicado). No se
+  reescribió el historial de git para agregar el merge commit — reescribir
+  historia ya pusheada es una operación destructiva que no se justifica
+  solo por preferencia estética de topología de git.
+
+### Pendiente inmediato
+
+- Confirmar con el Arquitecto, una por una, las decisiones P-1 a P-13 antes
+  de tocar código.
+- Resolver las 3 preguntas de arquitectura abiertas: duración del
+  seguimiento activo / mecanismo de desactivación de `Paciente.activo`,
+  ubicación del cron (Windows Task Scheduler vs. Linux VPS), proveedor SMTP
+  real.
+- Una vez confirmado, ejecutar Bloque 1 (cédula + desactivación automática)
+  como primer bloque de código de Sprint 5.

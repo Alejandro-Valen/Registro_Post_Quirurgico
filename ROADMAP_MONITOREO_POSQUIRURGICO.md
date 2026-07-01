@@ -3,7 +3,7 @@
 > **Para agentes IA:** Lee este archivo completo antes de sugerir cualquier acción.
 > Contiene el contexto clínico, el estado actual del proyecto, y los pasos pendientes.
 > El repositorio es: https://github.com/Alejandro-Valen/Registro_Post_Quirurgico
-> Rama principal: `Desarrollo` | Rama activa: `sprint-4-dashboard` (Sprint 4 completo, 135 tests OK — pendiente merge a Desarrollo)
+> Rama principal: `Desarrollo` | Rama activa: `sprint-5-produccion` (Sprint 4 mergeado a Desarrollo 01/07/2026, 135 tests OK)
 
 ---
 
@@ -118,38 +118,61 @@ una severidad ya alcanzada). Base: Delaney 2008, Lee 2022, Outersterp
 
 ## Estructura del Proyecto Django
 
+> Actualizada 01/07/2026 contra el árbol real del repositorio (post-merge Sprint 4).
+
 ```
-Registro_Post_Quirurgico/              ← raíz del repositorio
-├── CLAUDE.md                          ← contexto para agentes IA
-├── BITACORA.md                        ← historial del equipo
+Registro_Post_Quirurgico/                    ← raíz del repositorio
+├── CLAUDE.md                                ← contexto para agentes IA
+├── BITACORA.md                              ← historial del equipo
+├── ROADMAP_MONITOREO_POSQUIRURGICO.md       ← este archivo
+├── AUDITORIA_SPRINT3_CIERRE.md              ← detalle de hallazgos A/B/C/D del hardening
 ├── .gitignore
 ├── inicio_entornoR.bat
-└── Registro_Post_Quirurgico/          ← proyecto Django (manage.py aquí)
-    ├── .env                           ← secretos locales (NUNCA a GitHub)
-    ├── .env.example                   ← plantilla de variables
-    ├── requirements.txt
+├── requirements.txt                         ← pip freeze completo (reproducir entorno dev)
+├── requirements-runtime.txt                 ← dependencias directas de runtime (producción)
+├── docs/
+│   └── auditoria_literatura/                ← auditoría de evidencia ERAS (9 PDFs + transcripciones)
+│       ├── README.md
+│       ├── ANALISIS_INDIVIDUAL_9_PDFS_ERAS.md
+│       ├── ANALISIS_4_ARCHIVOS_RESTANTES.md
+│       ├── ANALISIS_TRANSCRIPCIONES_MEDICO.md
+│       └── SINTESIS_CRUZADA_UMBRALES.md
+└── Registro_Post_Quirurgico/                ← proyecto Django (manage.py aquí)
+    ├── .env                                 ← secretos locales (NUNCA a GitHub)
+    ├── .env.example                         ← plantilla de variables
     ├── manage.py
-    ├── Registro_Post_Quirurgico/      ← configuración Django
-    │   ├── settings.py                ← PostgreSQL + decouple + Bogotá
+    ├── Registro_Post_Quirurgico/            ← configuración Django
+    │   ├── settings.py                      ← base: PostgreSQL + decouple + Bogotá
+    │   ├── settings_local.py                ← dev: EMAIL_BACKEND=console (Sprint 4)
+    │   ├── settings_production.py           ← prod: DEBUG=False, HSTS, cookies seguras, cache Redis (Sprint 3-Hardening)
     │   ├── urls.py
+    │   ├── asgi.py
     │   └── wsgi.py
-    ├── home/                          ← app portal web
-    │   ├── views.py                   ← index y contacto
+    ├── home/                                ← app portal web
+    │   ├── models.py                        ← MensajeContacto
+    │   ├── views.py                         ← index y contacto (rate limit)
+    │   ├── admin.py
     │   ├── urls.py
+    │   ├── migrations/0001_initial.py
     │   └── templates/home/
     │       ├── index.html
     │       └── contacto.html
-    └── signos_sintomas/               ← app núcleo clínico
-        ├── models.py                  ← ✅ Paciente, RegistroDiario, Alerta, ConversacionWhatsApp
-        ├── admin.py                   ← ✅ panel del oncólogo configurado
-        ├── migrations/
-        │   ├── 0001_initial.py        ← ✅ tablas creadas en PostgreSQL
-        │   └── 0002_...cantidad...    ← ✅ cantidad_drenaje + ConversacionWhatsApp
-        ├── views.py                   ← ⏳ paso 3: webhook WhatsApp
-        ├── urls.py                    ← ⏳ paso 3: rutas
-        ├── alert_engine.py            ← ✅ creado y mergeado (Sprint 2)
-        ├── knowledge_base.md          ← ✅ placeholder (RAG diferido a FASE 5)
-        └── bot.py                     ← ✅ máquina de estados, flujo de 10 pasos
+    └── signos_sintomas/                     ← app núcleo clínico
+        ├── models.py                        ← Paciente, RegistroDiario, Alerta, ConversacionWhatsApp, CheckInProgramado
+        ├── admin.py                         ← panel del médico: scoping, badges severidad, historial, filtros
+        ├── alert_engine.py                  ← motor de reglas clínicas (8 reglas, deduplicación)
+        ├── bot.py                           ← máquina de estados WhatsApp (10 preguntas, 2×/día)
+        ├── signals.py                       ← email al médico por alerta ALTA (on_commit)
+        ├── views.py                         ← webhook Twilio (validación firma, idempotencia SID)
+        ├── urls.py
+        ├── knowledge_base.md                ← placeholder (RAG diferido a FASE 5/6)
+        ├── management/commands/
+        │   ├── crear_checkins_diarios.py
+        │   ├── enviar_recordatorios.py
+        │   ├── cerrar_checkins_vencidos.py
+        │   └── seed_demo.py                 ← datos demo (Camilo Rueda, demo_medico/demo1234)
+        ├── migrations/                      ← 0001 a 0013 (última: SILENCIO + registro_origen nullable)
+        └── tests.py                         ← 135 tests
 ```
 
 ---
@@ -258,8 +281,8 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 
 ---
 
-### ⏳ FASE 3 — Bot WhatsApp — FUNCIONAL END-TO-END (pendiente solo merge)
-> Rama: `sprint-3-whatsapp` (pusheada a origin)
+### ✅ FASE 3 — Bot WhatsApp — COMPLETADA (mergeada a Desarrollo)
+> Rama: `sprint-3-whatsapp` (mergeada a `Desarrollo` antes de `sprint-3-hardening`; confirmado por historial git)
 
 **Paso 1 — Modelos (commit `68950ef`):**
 - [x] Modelo ConversacionWhatsApp (persiste estado de la máquina de estados)
@@ -291,7 +314,7 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 - [x] Resolver 400 DisallowedHost → ALLOWED_HOSTS configurable por .env (.ngrok-free.dev)
 - [x] Resolver 403 firma → usar Auth Token PRIMARIO (no Test Credentials)
 - [x] Prueba end-to-end con WhatsApp real → RegistroDiario + Alerta verificados en BD
-- [ ] **Merge sprint-3-whatsapp → Desarrollo (con aprobación del Arquitecto)** ← único pendiente
+- [x] **Merge sprint-3-whatsapp → Desarrollo (con aprobación del Arquitecto)** — confirmado presente en `Desarrollo` (commits 68950ef, 109afc7, 832873d, de48db9), previo a la rama `sprint-3-hardening`
 
 > **Resuelto:** la validación de firma detrás de ngrok funciona; el 403 NO era por
 > la URL (build_absolute_uri() era correcta) sino por usar el Test Auth Token en
@@ -376,20 +399,17 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
   Por eso modelo + scheduler se construyen como UNA unidad en Sprint 4.
   → Handoff de implementación detallado en FASE 4.
 
-- [ ] **NUEVA alerta clínica: silencio del paciente.** Si un
-  CheckInProgramado pasa a NO_RESPONDIDO, generar alerta para que el
-  equipo médico contacte al paciente. DEPENDE del scheduler (solo una
-  tarea programada detecta la ausencia de respuesta) → SPRINT 4.
-  DECISIÓN ABIERTA (resolver en Sprint 4): severidad, y si dispara con
-  un silencio o con dos consecutivos.
+- [x] **NUEVA alerta clínica: silencio del paciente.** RESUELTO en Sprint 4
+  (Bloque 4, 26/06/2026, ver FASE 4 abajo): tipo `SILENCIO`, racha check a
+  check (1→BAJA, 2 consecutivos→MEDIA, 3+→ALTA), implementado en
+  `cerrar_checkins_vencidos`.
 
-- [ ] **Gating del alert_engine — 2 políticas (se deciden CON el código
-  del bot en Sprint 4, no antes):**
-  - DECISIÓN ABIERTA: alertas duplicadas con 2 check-ins/día — ¿una
-    alerta por condición por día, o una por cada check-in que la detecte?
-  - DECISIÓN ABIERTA: gating pre-operatorio (dia_postoperatorio=0) —
-    ¿filtra el bot antes de llamar al engine, o el engine salta la
-    evaluación?
+- [x] **Gating del alert_engine — 2 políticas.** RESUELTO en Sprint 4
+  (Bloque 2B, 26/06/2026, ver FASE 4 abajo):
+  - Deduplicación: Opción A+ — una alerta por tipo/día, escalamiento
+    intra-día permitido (`_deduplicar()`).
+  - Gating pre-operatorio: `VENTANAS_DOLOR[0]` ya cubre POD 0-2, sin
+    cambio de lógica adicional.
 
 **Camino de cierre del Sprint 3 (REVISADO — entregable del Paso 1 = la
 DECISIÓN de arquitectura documentada, no el código de frecuencia):**
@@ -472,8 +492,8 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 
 ---
 
-### ⏳ FASE 4 — Dashboard Oncólogo y Notificaciones — EN CURSO
-> Rama activa: `sprint-4-dashboard` (creada, sin código todavía — arranca aquí)
+### ✅ FASE 4 — Dashboard Oncólogo y Notificaciones — COMPLETADA (mergeada a Desarrollo 01/07/2026)
+> Rama: `sprint-4-dashboard` — 6 bloques, 135 tests OK, mergeada (fast-forward) a `Desarrollo`
 
 **Bloque 0 — Decisiones arquitectónicas (cerradas 26/06/2026):**
 - [x] **0-① Fecha autoritativa:** Opción B — parámetro opcional
@@ -504,7 +524,10 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 - [x] Personalizar Django Admin con colores según severidad de alertas
   (Bloque 5A — 26/06/2026: badge HTML inline, acción marcar_resuelta)
 - [x] Crear vista detalle_paciente con historial y gráfica temperatura/dolor
-  (Bloque 5B — 26/06/2026: historial_ultimos_7_dias como readonly_field en PacienteAdmin)
+  (Bloque 5B — 26/06/2026: historial_ultimos_7_dias como readonly_field en PacienteAdmin.
+  **Nota de precisión (01/07/2026):** lo implementado es una tabla/lista de texto,
+  NO una gráfica. La gráfica real queda pendiente — ver propuesta Chart.js en
+  discusión de Sprint 5, sección de seguridad más abajo antes de implementarla.)
 - [x] Implementar notificación al médico por email/SMS cuando hay alerta roja
   (Bloque 5C — 26/06/2026: signals.py post_save + on_commit; backend consola en dev)
 - [x] **Implementación 2×/día (arquitectura CERRADA en FASE 3.6 — leer D1–D5
@@ -699,16 +722,17 @@ DB_PORT=5432
 
 ---
 
-*Última actualización: Fase 3.6 — las 5 reglas del núcleo del
-alert_engine completas (drenaje, temperatura, gases, náuseas, dolor) y
-el Paso 2 de variables nuevas COMPLETO (4/4): tolerancia a líquidos
-(Regla 6, INTOLERANCIA_ORAL), hinchazón abdominal (Regla 7,
-ILEO_PARALITICO), frecuencia cardíaca (Regla 8, TAQUICARDIA) y
-frecuencia respiratoria (solo-dashboard, sin alerta) — 69 tests OK. El
-flujo del bot pasó a 10 preguntas. Pendiente: implementar 2×/día en
-bot.py (con los 2 gatings pendientes) y repaso final de alert_engine.py
-antes del merge.*
-*Siguiente paso: implementar frecuencia de check-ins (2×/día) en
-bot.py resolviendo los 2 pendientes de gating, luego repaso final de
-alert_engine.py completo, luego merge `sprint-3-whatsapp` →
-`Desarrollo` con aprobación del Arquitecto.*
+*Última actualización: 01/07/2026 — Sprint 4 (Dashboard médico y
+notificaciones) completo y mergeado a `Desarrollo` (fast-forward, 135
+tests OK). Checklist de FASE 3, FASE 3.6 y FASE 4 sincronizado contra
+el historial real de git (se marcaron tareas completadas que habían
+quedado sin `[x]`). Árbol de "Estructura del Proyecto Django"
+actualizado contra el filesystem real.*
+*Siguiente paso: Sprint 5 (producción) en rama `sprint-5-produccion`.
+Antes de ejecutar cualquier bloque de código de Sprint 5, resolver las
+preguntas de arquitectura abiertas (duración del seguimiento activo /
+desactivación automática de `Paciente.activo`, ubicación del cron,
+proveedor SMTP real) y confirmar explícitamente con el Arquitecto las
+decisiones de producto propuestas en la sesión externa del 01/07/2026
+antes de incorporarlas como definitivas a este roadmap — ver aviso de
+seguridad y discrepancias en BITACORA.md, sesión 01/07/2026.*

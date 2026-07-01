@@ -56,9 +56,16 @@ exista una decisión formal sobre afiliación.
 
 ```
 Registro_Post_Quirurgico/Registro_Post_Quirurgico/
-├── home/             → portal web, páginas informativas, formulario de contacto
-└── signos_sintomas/  → núcleo clínico: modelos, bot, alertas, webhook
+├── Registro_Post_Quirurgico/  → settings.py, settings_local.py (dev), settings_production.py (prod)
+├── home/                      → portal web, páginas informativas, formulario de contacto
+└── signos_sintomas/           → núcleo clínico
+    ├── models.py, admin.py, alert_engine.py, bot.py, signals.py, views.py
+    └── management/commands/   → crear_checkins_diarios, enviar_recordatorios,
+                                  cerrar_checkins_vencidos, seed_demo
 ```
+
+Árbol completo (archivo por archivo) en `ROADMAP_MONITOREO_POSQUIRURGICO.md`,
+sección "Estructura del Proyecto Django".
 
 **Importante:** La carpeta del proyecto se llama `Registro_Post_Quirurgico`
 (sin typo). Hubo una versión anterior llamada `Resgistro_Post_Quirurgico`
