@@ -1857,12 +1857,37 @@ Con esto no quedan preguntas de arquitectura abiertas para Sprint 5.
   substrings, no con igualdad exacta de string — no requirieron cambios.
 - Suite: **144 tests OK** sin modificaciones a `tests.py` (P-11).
 
+### Bloque 3 — Filtros de PacienteAdmin e historial configurable (01/07/2026)
+
+**Qué se hizo:**
+- **3A — Filtros:** se agregó `tipo_cirugia` a `list_filter` (ya existía
+  `activo` y `medico_responsable`) y un `SimpleListFilter` nuevo,
+  `TieneAlertaActivaFilter`, con dos opciones: "Con alertas sin resolver" /
+  "Sin alertas pendientes". **Corrección respecto al documento externo:**
+  el ejemplo usaba `alerta__resuelta` — el `related_name` real del FK
+  `Alerta.paciente` es `alertas` (plural), así que el filtro real usa
+  `alertas__resuelta`. Con el nombre equivocado el filtro habría
+  reventado con `FieldError` en producción.
+- **3B — Historial configurable:** `_historial_7_dias(paciente)` se
+  renombró a `_historial_paciente(paciente, dias=7)`. Se agregó un
+  selector de rango (7 / 14 / 30 días) como enlaces `?dias=N` insertados
+  en el propio HTML del campo de solo lectura — el médico cambia el
+  rango recargando la página de detalle del paciente, sin necesidad de
+  un template nuevo. Como los métodos de `readonly_fields` en Django
+  Admin solo reciben `obj` (no `request`), se usó el hook
+  `get_readonly_fields(request, obj)` — que sí recibe `request` — para
+  leer `?dias=` de la URL y guardarlo en `self._dias_historial` antes de
+  que se renderice el campo. Valor inválido o fuera de rango (< 1 o >
+  90) cae al default de 7.
+- **6 tests nuevos** (`PacienteAdminFiltrosHistorialTests`): filtro
+  `alerta_activa=si`/`no`/sin filtro, historial default 7 días, respeta
+  `?dias=30`, valor inválido usa el default.
+- Suite: **150 tests OK** (144 + 6). `manage.py check` limpio.
+
 ### Pendiente para continuar Sprint 5
 
-- Bloque 3: filtros en `PacienteAdmin` (activo, tipo_cirugia, alertas sin
-  resolver) + historial configurable por días (P-8).
 - Bloque 4: gráficas Chart.js en la ficha del paciente (P-9) — usar
-  `json.dumps()` para los datos.
+  `json.dumps()` para los datos, no interpolación directa en f-string.
 - Bloque 5: agregar variables `EMAIL_*` a `settings_production.py`
   existente (Gmail + contraseña de aplicación) — no reemplazar el archivo.
 - Bloque 6: `docs/cron_setup.md` y `docs/transferencia_cuentas.md`.

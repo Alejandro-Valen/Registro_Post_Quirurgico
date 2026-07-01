@@ -666,8 +666,19 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   reemplazo. Sin cambios de contenido clínico ni de la máquina de estados.
   Tests existentes usan `assertIn` con substrings — no requirieron cambios,
   **144 tests OK** (P-11).
-- [ ] Filtros en `PacienteAdmin` (activo, tipo_cirugia, alertas sin resolver)
-- [ ] Historial configurable por días (default 7) en vez de `_historial_7_dias` fijo (P-8)
+- [x] **Bloque 3A (01/07/2026):** Filtros en `PacienteAdmin` — `activo`,
+  `tipo_cirugia`, `medico_responsable` (ya existía) y `TieneAlertaActivaFilter`
+  (`SimpleListFilter` nuevo: "Con alertas sin resolver" / "Sin alertas
+  pendientes", vía `alertas__resuelta` — corregido el `related_name` real
+  del modelo, que es `alertas`, no `alerta` como en el borrador original).
+- [x] **Bloque 3B (01/07/2026):** Historial configurable por días (P-8).
+  `_historial_7_dias` renombrada a `_historial_paciente(paciente, dias=7)`.
+  Selector de rango (7/14/30 días) como enlaces `?dias=N` en el propio
+  HTML del campo — el médico cambia el rango recargando la misma página
+  de detalle. `PacienteAdmin.get_readonly_fields()` captura `?dias=` de la
+  URL (clamp 1-90) porque los `readonly_fields` solo reciben `obj`, no
+  `request`. 6 tests nuevos (filtro de alertas + selector de historial).
+  **150 tests OK.**
 - [ ] Gráficas Chart.js en la ficha del paciente — temperatura, dolor, FC (P-9;
   usar `json.dumps()` para los datos, no f-string directo)
 - [ ] Desplegar en Railway o Render con PostgreSQL en la nube
