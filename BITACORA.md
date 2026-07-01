@@ -1962,10 +1962,58 @@ pendiente decidir si conviene una segunda cuenta demo no-superusuario
 para poder probar la experiencia real de un médico sin tener que armar la
 cuenta a mano cada vez.
 
+### Bloque 5 — SMTP real, probado con alerta ALTA real (01/07/2026)
+
+**Qué se hizo:**
+- Se agregaron las variables de email (`EMAIL_BACKEND`, `EMAIL_HOST`,
+  `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`,
+  `DEFAULT_FROM_EMAIL`) al final de `settings_production.py` — **append**,
+  no reemplazo del archivo (ya traía DEBUG=False, HSTS, cookies seguras y
+  cache Redis desde Sprint 3-Hardening). `EMAIL_HOST_USER` y
+  `EMAIL_HOST_PASSWORD` sin default en `config()`, para que falle fuerte
+  si faltan en el `.env` de producción en vez de arrancar sin poder
+  notificar alertas.
+- Plantilla agregada a `.env.example` (sin secretos reales), con nota de
+  usar una cuenta de Gmail dedicada al proyecto y contraseña de
+  aplicación (no la contraseña normal de la cuenta).
+- **Protocolo de seguridad seguido durante toda la prueba:** el Arquitecto
+  agregó los valores reales directamente en su `.env` local — Claude Code
+  nunca leyó ni imprimió la contraseña. Para diagnosticar problemas se
+  usó solo longitud de string y presencia de espacios/comillas (nunca el
+  valor en sí).
+- **Troubleshooting real durante la prueba** (vale la pena dejarlo
+  registrado): el primer intento falló con `535 5.7.8 BadCredentials` de
+  Gmail. Diagnóstico sin exponer el secreto: la contraseña de aplicación
+  tenía 18 caracteres con espacios — Google la muestra agrupada en
+  bloques de 4 para lectura humana (`abcd efgh ijkl mnop`), pero el
+  `.env` necesita el bloque de 16 caracteres sin espacios. Segundo
+  intento con espacios quitados dio 15 caracteres (se perdió uno al
+  editar) — también falló la validación previa. Al volver a generar/copiar
+  la contraseña completa desde Google (16 caracteres, sin espacios), el
+  envío fue exitoso.
+- **Prueba real end-to-end:** se creó un paciente y un médico de prueba
+  temporales (`dr_prueba_smtp`, email `seguimientolionalejo@gmail.com`),
+  se disparó una `Alerta` real de severidad ALTA corriendo con
+  `DJANGO_SETTINGS_MODULE=...settings_production`, y el correo llegó
+  correctamente a la bandeja — confirmado por el Arquitecto. Los datos de
+  prueba (paciente, registros, alertas, usuario) se eliminaron después de
+  confirmar.
+- Suite: **159 tests OK** (sin tests nuevos — el envío SMTP real no se
+  puede probar con `manage.py test`, que usa `EMAIL_BACKEND=locmem`; la
+  lógica del signal ya tiene cobertura desde Sprint 4,
+  `AlertaEmailNotificacionTests`). `manage.py check` limpio.
+
+**Mejora futura anotada, no implementada (pedida por el Arquitecto):**
+rediseñar el formato del correo de alerta ALTA — mejor estructura visual
+(HTML en vez de texto plano) y agregar datos de contacto del paciente
+(teléfono, posiblemente cédula) al cuerpo del mensaje. Hoy el correo solo
+trae nombre del paciente, tipo de alerta, severidad, fecha y el mensaje
+del `alert_engine`.
+
 ### Pendiente para continuar Sprint 5
 
-- Bloque 5: agregar variables `EMAIL_*` a `settings_production.py`
-  existente (Gmail + contraseña de aplicación) — no reemplazar el archivo.
 - Bloque 6: `docs/cron_setup.md` y `docs/transferencia_cuentas.md`.
 - Bloque 7: consentimiento informado mínimo (P-15) — contenido lo redacta
   o valida el médico.
+- Mejora futura: rediseño del formato del correo de alerta ALTA + datos
+  de contacto del paciente (ver nota del Bloque 5 arriba).

@@ -736,9 +736,25 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
     decidir si vale la pena una cuenta demo no-superusuario para probar
     la experiencia real del médico.
 - [ ] Desplegar en Railway o Render con PostgreSQL en la nube
-- [ ] SMTP real: agregar variables `EMAIL_*` a `settings_production.py`
-  **existente** (no reemplazar el archivo — ya tiene DEBUG=False, HSTS,
-  cookies seguras y cache Redis del Sprint 3-Hardening)
+- [x] **Bloque 5 (01/07/2026):** SMTP real. Variables `EMAIL_*` agregadas
+  al `settings_production.py` **existente** (append, no reemplazo —
+  conserva DEBUG=False, HSTS, cookies seguras y cache Redis del Sprint
+  3-Hardening). `EMAIL_HOST_USER`/`EMAIL_HOST_PASSWORD` sin default en
+  `config()` → falla fuerte (fail-clear) si faltan en el `.env` de
+  producción, en vez de arrancar sin poder enviar correo.
+  `DEFAULT_FROM_EMAIL` con default = `EMAIL_HOST_USER`. Plantilla agregada
+  a `.env.example` (sin secretos reales).
+  **Prueba real end-to-end:** alerta ALTA real disparada con
+  `DJANGO_SETTINGS_MODULE=...settings_production` → correo recibido en
+  `seguimientolionalejo@gmail.com`. Confirmado por el Arquitecto.
+  Datos de prueba (paciente, registro, alertas, usuario de prueba)
+  eliminados después de confirmar. **159 tests OK** (sin tests nuevos —
+  el envío real de SMTP no se puede probar con `manage.py test`, que
+  usa el backend de consola; la lógica del signal ya tenía cobertura
+  desde Sprint 4, `AlertaEmailNotificacionTests`).
+  **Mejora futura anotada, no implementada:** rediseñar el formato del
+  correo — HTML con mejor estructura visual, y agregar datos de contacto
+  del paciente (teléfono, posiblemente cédula) al cuerpo del mensaje.
 - [ ] `docs/cron_setup.md` con horarios UTC de los 3 management commands
   + `MAILTO` para alertas de fallo por email
 - [ ] `docs/transferencia_cuentas.md` — protocolo de transferencia de
