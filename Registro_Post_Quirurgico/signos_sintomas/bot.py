@@ -42,39 +42,39 @@ from .models import CheckInProgramado, ConversacionWhatsApp, Paciente, RegistroD
 # alertas; la confirmación final es siempre neutra.
 # ---------------------------------------------------------------------------
 MSG_NO_REGISTRADO = (
-    "Hola 🌿 Tu número aún no está registrado en nuestro programa de seguimiento. "
+    "Hola. Tu número aún no está registrado en nuestro programa de seguimiento. "
     "Por favor comunícate con tu médico para activarlo. Estamos para acompañarte."
 )
 MSG_YA_REGISTRADO = (
-    "¡Tus datos de hoy ya están registrados! ✅ "
-    "Si tienes alguna duda sobre tu recuperación, puedes escribirme aquí 🌿"
+    "¡Tus datos de hoy ya están registrados! "
+    "Si tienes alguna duda sobre tu recuperación, puedes escribirme aquí."
 )
 MSG_SIN_CHECKIN = (
     "Por ahora no tienes un reporte pendiente. "
-    "Te escribiré cuando sea la hora 🌿 "
+    "Te escribiré cuando sea la hora. "
     "Si tienes alguna duda sobre tu recuperación, puedes preguntarme aquí."
 )
 MSG_CONFIRMACION = (
-    "¡Listo! ✅ Hemos registrado tu reporte de hoy. Gracias por cuidarte 🌿 "
+    "¡Listo! Hemos registrado tu reporte de hoy. Gracias por cuidarte. "
     "Tu equipo médico está pendiente de tu seguimiento. ¡Que tengas un buen día!"
 )
 MSG_ABANDONO_REINICIO = (
-    "Hola 👋 Parece que ayer no pudimos terminar tu reporte. "
+    "Hola, parece que ayer no pudimos terminar tu reporte. "
     "Esos datos quedaron sin registrar.\n\n"
     "¡Empecemos el reporte de hoy!\n\n"
-    "1️⃣ ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5"
+    "1. ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5"
 )
 
 MSG_PREGUNTA_TEMPERATURA = (
-    "¡Hola! 🌿 Vamos con tu reporte de hoy.\n\n"
-    "1️⃣ ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5"
+    "¡Hola! Vamos con tu reporte de hoy.\n\n"
+    "1. ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5"
 )
 MSG_REINTENTO_TEMPERATURA = (
     "No logré entender la temperatura. Envíame solo el número en °C, por ejemplo: 37.5"
 )
 
 MSG_PREGUNTA_DOLOR = (
-    "2️⃣ Del 1 al 10, ¿cuánto dolor sientes hoy?\n"
+    "2. Del 1 al 10, ¿cuánto dolor sientes hoy?\n"
     "(1 es casi nada, 10 es insoportable)"
 )
 MSG_REINTENTO_DOLOR = (
@@ -82,7 +82,7 @@ MSG_REINTENTO_DOLOR = (
 )
 
 MSG_PREGUNTA_TIENE_DRENAJE = (
-    "3️⃣ ¿Tienes drenaje activo en este momento? Responde *sí* o *no*."
+    "3. ¿Tienes drenaje activo en este momento? Responde *sí* o *no*."
 )
 MSG_REINTENTO_TIENE_DRENAJE = (
     "No entendí tu respuesta. "
@@ -91,7 +91,7 @@ MSG_REINTENTO_TIENE_DRENAJE = (
 )
 
 MSG_PREGUNTA_ASPECTO = (
-    "4️⃣ ¿Cómo se ve el líquido del drenaje hoy? Responde con el número:\n"
+    "4. ¿Cómo se ve el líquido del drenaje hoy? Responde con el número:\n"
     "1. Amarillo claro o rosado\n"
     "2. Rojo con sangre\n"
     "3. Amarillo turbio\n"
@@ -103,7 +103,7 @@ MSG_REINTENTO_ASPECTO = (
 )
 
 MSG_PREGUNTA_CANTIDAD = (
-    "5️⃣ ¿Cuánto líquido salió por el drenaje hoy?\n"
+    "5. ¿Cuánto líquido salió por el drenaje hoy?\n"
     "Responde: poco, normal o mucho.\n"
     "Si puedes medirlo, agrega los ml (ej: 'poco, 30ml')"
 )
@@ -113,7 +113,7 @@ MSG_REINTENTO_CANTIDAD = (
 )
 
 MSG_PREGUNTA_GASES_NAUSEAS = (
-    "6️⃣ Ya casi terminamos 🌿\n"
+    "6. Ya casi terminamos.\n"
     "¿Has podido pasar gases o ir al baño hoy? (sí/no)\n"
     "Y ¿cuántas veces has tenido náuseas o vómito hoy? (si ninguna, 0)\n"
     "Puedes responder así: 'sí, 0'"
@@ -124,7 +124,7 @@ MSG_REINTENTO_GASES_NAUSEAS = (
 )
 
 MSG_PREGUNTA_HINCHAZON = (
-    "7️⃣ ¿Cómo siente la hinchazón o distensión de su abdomen hoy? 🌿\n"
+    "7. ¿Cómo siente la hinchazón o distensión de su abdomen hoy?\n"
     "Responda: *nada*, *algo* o *mucho*."
 )
 MSG_REINTENTO_HINCHAZON = (
@@ -133,7 +133,7 @@ MSG_REINTENTO_HINCHAZON = (
 )
 
 MSG_PREGUNTA_FRECUENCIA_CARDIACA = (
-    "8️⃣ ¿Cuál es su frecuencia cardíaca (pulso) en este momento? 🌿\n"
+    "8. ¿Cuál es su frecuencia cardíaca (pulso) en este momento?\n"
     "Escriba el número de latidos por minuto, por ejemplo: 78.\n"
     "Si no puede medirla ahora, responda con alguna de estas palabras:\n"
     "*saltar · omitir · no sé · no tengo · sin dato*"
@@ -144,7 +144,7 @@ MSG_REINTENTO_FRECUENCIA_CARDIACA = (
 )
 
 MSG_PREGUNTA_FRECUENCIA_RESPIRATORIA = (
-    "9️⃣ ¿Cuál es su frecuencia respiratoria? 🌿\n"
+    "9. ¿Cuál es su frecuencia respiratoria?\n"
     "Escriba el número de respiraciones por minuto, por ejemplo: 16.\n"
     "Si no puede medirla ahora, responda con alguna de estas palabras:\n"
     "*saltar · omitir · no sé · no tengo · sin dato*"
@@ -155,7 +155,7 @@ MSG_REINTENTO_FRECUENCIA_RESPIRATORIA = (
 )
 
 MSG_PREGUNTA_TOLERANCIA_LIQUIDOS = (
-    "🔟 Última pregunta 🌿\n"
+    "10. Última pregunta.\n"
     "¿Ha podido tomar líquidos (agua, caldo, jugo) sin vomitar? "
     "Responda *sí* o *no*."
 )
