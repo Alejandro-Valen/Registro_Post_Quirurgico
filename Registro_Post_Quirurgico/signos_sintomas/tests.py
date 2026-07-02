@@ -1092,6 +1092,7 @@ class BotWhatsAppTests(TestCase):
             nombre_completo="Paciente Bot",
             telefono_whatsapp=self.TELEFONO,
             fecha_cirugia=timezone.localdate() - timedelta(days=5),
+            consentimiento_informado=True,
         )
         # Bloque 3: el bot requiere CheckInProgramado PENDIENTE para iniciar el flujo.
         CheckInProgramado.objects.create(
@@ -1294,6 +1295,7 @@ class BotWhatsAppTests(TestCase):
             nombre_completo="Paciente Sin CheckIn",
             telefono_whatsapp=self.TELEFONO,
             fecha_cirugia=timezone.localdate() - timedelta(days=5),
+            consentimiento_informado=True,
         )
         # Sin CheckInProgramado → el bot responde MSG_SIN_CHECKIN y no crea RegistroDiario
         respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
@@ -1320,6 +1322,100 @@ class BotWhatsAppTests(TestCase):
         self.assertIsNotNone(checkin.fecha_respuesta)
 
 
+class ConsentimientoInformadoTests(TestCase):
+    """Bloque 7 — consentimiento informado HABEAS DATA (P-15, 01/07/2026)."""
+
+    TELEFONO = "+573006661111"
+    TELEFONO_TWILIO = "whatsapp:+573006661111"
+
+    def _crear_paciente(self, consentimiento_informado):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Consentimiento",
+            telefono_whatsapp=self.TELEFONO,
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),
+            consentimiento_informado=consentimiento_informado,
+        )
+        CheckInProgramado.objects.create(
+            paciente=paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now(),
+        )
+        return paciente
+
+    def test_sin_consentimiento_bot_responde_mensaje_neutro_y_no_inicia_flujo(self):
+        self._crear_paciente(consentimiento_informado=False)
+        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
+        self.assertEqual(respuesta, bot.MSG_SIN_CONSENTIMIENTO)
+        self.assertFalse(ConversacionWhatsApp.objects.exists())
+
+    def test_con_consentimiento_flujo_normal_continua(self):
+        self._crear_paciente(consentimiento_informado=True)
+        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
+        self.assertEqual(respuesta, bot.MSG_PREGUNTA_TEMPERATURA)
+
+    def test_consentimiento_informado_false_por_default(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Default",
+            telefono_whatsapp="+573006661112",
+            fecha_cirugia=timezone.localdate(),
+        )
+        self.assertFalse(paciente.consentimiento_informado)
+        self.assertIsNone(paciente.fecha_consentimiento)
+
+
+class ConsentimientoInformadoAdminTests(TestCase):
+    """Bloque 7 — auto-registro/limpieza de fecha_consentimiento vía Admin."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.medico = User.objects.create_superuser(username='dr_consentimiento', password='pass')
+        self.client.force_login(self.medico)
+        self.paciente = Paciente.objects.create(
+            nombre_completo="Paciente Admin Consentimiento",
+            cedula="700111222",
+            telefono_whatsapp="+573006661113",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable=self.medico,
+        )
+
+    def _url_change(self):
+        return f'/admin/signos_sintomas/paciente/{self.paciente.pk}/change/'
+
+    def _post_change(self, **overrides):
+        data = {
+            'nombre_completo': self.paciente.nombre_completo,
+            'cedula': self.paciente.cedula,
+            'telefono_whatsapp': self.paciente.telefono_whatsapp,
+            'fecha_cirugia': self.paciente.fecha_cirugia.isoformat(),
+            'medico_responsable': self.medico.pk,
+        }
+        data.update(overrides)
+        return self.client.post(self._url_change(), data, follow=True)
+
+    def test_marcar_consentimiento_registra_fecha_automaticamente(self):
+        self.assertIsNone(self.paciente.fecha_consentimiento)
+        self._post_change(consentimiento_informado='on')
+        self.paciente.refresh_from_db()
+        self.assertTrue(self.paciente.consentimiento_informado)
+        self.assertIsNotNone(self.paciente.fecha_consentimiento)
+
+    def test_desmarcar_consentimiento_limpia_fecha(self):
+        self._post_change(consentimiento_informado='on')
+        self.paciente.refresh_from_db()
+        self.assertIsNotNone(self.paciente.fecha_consentimiento)
+
+        self._post_change()  # sin 'consentimiento_informado' -> checkbox desmarcado
+        self.paciente.refresh_from_db()
+        self.assertFalse(self.paciente.consentimiento_informado)
+        self.assertIsNone(self.paciente.fecha_consentimiento)
+
+    def test_fecha_consentimiento_es_readonly_en_el_form(self):
+        resp = self.client.get(self._url_change())
+        self.assertNotContains(resp, 'name="fecha_consentimiento"')
+
+
 class ParseEnteroRangoDecimalTests(TestCase):
     """C4 — _parse_entero_rango rechaza decimales con punto y coma."""
 
@@ -1338,6 +1434,7 @@ class ParseEnteroRangoDecimalTests(TestCase):
             nombre_completo="Paciente Decimal FC",
             telefono_whatsapp="+573007778881",
             fecha_cirugia=timezone.localdate() - timedelta(days=3),
+            consentimiento_informado=True,
         )
         from signos_sintomas import bot as b
         conv = ConversacionWhatsApp.objects.create(
@@ -1361,6 +1458,7 @@ class BotAbandonoConversacionTests(TestCase):
             nombre_completo="Paciente Abandono",
             telefono_whatsapp=self.TELEFONO,
             fecha_cirugia=timezone.localdate() - timedelta(days=5),
+            consentimiento_informado=True,
         )
         CheckInProgramado.objects.create(
             paciente=paciente,
@@ -1432,6 +1530,7 @@ class WebhookWhatsAppTests(TestCase):
             nombre_completo="Paciente Webhook",
             telefono_whatsapp="+573001112233",
             fecha_cirugia=timezone.localdate() - timedelta(days=3),
+            consentimiento_informado=True,
         )
         # Bloque 3: el bot requiere CheckInProgramado PENDIENTE para iniciar el flujo
         CheckInProgramado.objects.create(
@@ -1500,6 +1599,7 @@ class WebhookWhatsAppTests(TestCase):
             nombre_completo="Paciente Idempotencia",
             telefono_whatsapp="+573002223344",
             fecha_cirugia=timezone.localdate() - timedelta(days=2),
+            consentimiento_informado=True,
         )
         payload = {
             'From': 'whatsapp:+573002223344',

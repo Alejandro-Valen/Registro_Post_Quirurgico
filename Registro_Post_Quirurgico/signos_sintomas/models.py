@@ -58,6 +58,21 @@ class Paciente(models.Model):
         default=True,
         help_text="Desactivar cuando el paciente termina el seguimiento"
     )
+    consentimiento_informado = models.BooleanField(
+        default=False,
+        verbose_name="Consentimiento informado",
+        help_text=(
+            "El paciente autorizó el tratamiento de sus datos de salud (Ley 1581/2012). "
+            "Marcar solo después de obtener la firma física del formato de consentimiento. "
+            "Desmarcar si el paciente revoca su autorización."
+        ),
+    )
+    fecha_consentimiento = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha de consentimiento",
+        help_text="Se registra automáticamente al marcar el consentimiento informado.",
+    )
     fecha_registro = models.DateTimeField(auto_now_add=True)
 
     class Meta:

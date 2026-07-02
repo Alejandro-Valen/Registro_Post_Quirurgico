@@ -370,7 +370,7 @@ class PacienteAdmin(admin.ModelAdmin):
                      'medico_responsable__first_name',
                      'medico_responsable__last_name',
                      'medico_responsable__username']
-    readonly_fields = ['grafica_signos_vitales', 'historial_paciente']
+    readonly_fields = ['fecha_consentimiento', 'grafica_signos_vitales', 'historial_paciente']
 
     def get_readonly_fields(self, request, obj=None):
         # Captura ?dias= de la URL para que historial_paciente() lo use al
@@ -382,7 +382,9 @@ class PacienteAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         """A-1: advierte al médico si registra un paciente con ingreso tardío
-        — el comando desactivar_pacientes_vencidos lo desactivaría pronto."""
+        — el comando desactivar_pacientes_vencidos lo desactivaría pronto.
+        Bloque 7 (HABEAS DATA): registra/limpia fecha_consentimiento en
+        sincronía con el checkbox de consentimiento_informado."""
         if not change:
             dias_post = (timezone.localdate() - obj.fecha_cirugia).days
             if dias_post >= DIAS_SEGUIMIENTO - 2:
@@ -393,6 +395,10 @@ class PacienteAdmin(admin.ModelAdmin):
                     f"{DIAS_SEGUIMIENTO} días. Considere si el seguimiento remoto es "
                     f"apropiado para este caso."
                 )
+        if obj.consentimiento_informado and not obj.fecha_consentimiento:
+            obj.fecha_consentimiento = timezone.now()
+        elif not obj.consentimiento_informado and obj.fecha_consentimiento:
+            obj.fecha_consentimiento = None
         super().save_model(request, obj, form, change)
 
     @admin.display(description='Evolución signos vitales')

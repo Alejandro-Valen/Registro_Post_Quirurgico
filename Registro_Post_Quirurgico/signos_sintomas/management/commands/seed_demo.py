@@ -124,6 +124,7 @@ class Command(BaseCommand):
             tipo_cirugia='colectomia_electiva',
             medico_responsable=medico,
             activo=True,
+            consentimiento_informado=True,
         )
         self.stdout.write(f'  Paciente demo creado: {paciente.nombre_completo}')
 

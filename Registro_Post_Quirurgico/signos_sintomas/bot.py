@@ -45,6 +45,11 @@ MSG_NO_REGISTRADO = (
     "Hola. Tu número aún no está registrado en nuestro programa de seguimiento. "
     "Por favor comunícate con tu médico para activarlo. Estamos para acompañarte."
 )
+MSG_SIN_CONSENTIMIENTO = (
+    "Tu médico aún no ha confirmado tu registro en el sistema. "
+    "Por favor contáctalo para completar el proceso de ingreso. "
+    "Una vez confirmado, podrás comenzar tu seguimiento."
+)
 MSG_YA_REGISTRADO = (
     "¡Tus datos de hoy ya están registrados! "
     "Si tienes alguna duda sobre tu recuperación, puedes escribirme aquí."
@@ -195,6 +200,13 @@ def procesar_mensaje(telefono, texto):
     ).first()
     if paciente is None:
         return MSG_NO_REGISTRADO
+
+    # Guard de consentimiento informado (HABEAS DATA — P-15, 01/07/2026).
+    # El médico debe haber marcado consentimiento_informado=True antes de que
+    # el paciente pueda usar el bot. Mensaje neutro: no menciona "consentimiento"
+    # ni "datos" para no confundir al paciente — el médico tiene el contexto.
+    if not paciente.consentimiento_informado:
+        return MSG_SIN_CONSENTIMIENTO
 
     # A4: bloqueo transaccional — dos mensajes simultáneos del mismo paciente
     # (doble tap) esperan en cola en vez de leer/escribir el mismo estado.
