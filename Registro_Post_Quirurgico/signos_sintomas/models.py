@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import CheckConstraint, Q
 
@@ -17,12 +18,15 @@ class Paciente(models.Model):
         max_length=20,
         unique=True,
         null=True,
-        blank=False,
+        blank=True,
         verbose_name="Cédula",
         help_text=(
             "Número de documento de identidad — identificador principal del "
             "paciente (P-4, decisión 01/07/2026). Obligatorio para pacientes "
-            "nuevos; null solo permitido en registros previos a esta versión."
+            "nuevos (exigido por clean(), A-2); null solo permitido en "
+            "registros previos a esta versión. blank=True a nivel de campo "
+            "porque full_clean() no debe fallar para pacientes existentes "
+            "sin cédula — la exigencia para pacientes nuevos vive en clean()."
         ),
     )
     telefono_whatsapp = models.CharField(
@@ -69,6 +73,16 @@ class Paciente(models.Model):
                 name='paciente_tipo_cirugia_valido',
             ),
         ]
+
+    def clean(self):
+        """A-2: exige cédula en pacientes nuevos. Los pacientes migrados
+        (pk existente, cedula=None) quedan como están — no se les exige
+        retroactivamente."""
+        super().clean()
+        if self.pk is None and not self.cedula:
+            raise ValidationError({
+                'cedula': 'La cédula es obligatoria para pacientes nuevos.'
+            })
 
     def __str__(self):
         if self.medico_responsable is None:

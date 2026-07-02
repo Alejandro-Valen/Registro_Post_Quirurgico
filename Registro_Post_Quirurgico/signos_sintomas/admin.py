@@ -1,12 +1,13 @@
 import json
 from datetime import timedelta
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.utils.html import format_html, mark_safe
 
 from .models import Alerta, CheckInProgramado, Paciente, RegistroDiario
+from .management.commands.desactivar_pacientes_vencidos import DIAS_SEGUIMIENTO
 
 
 def _solo_propios(request):
@@ -378,6 +379,21 @@ class PacienteAdmin(admin.ModelAdmin):
         # período independiente, en el navegador — no usa este parámetro.
         self._dias_historial = _clamp_dias_historial(request.GET.get('dias'))
         return super().get_readonly_fields(request, obj)
+
+    def save_model(self, request, obj, form, change):
+        """A-1: advierte al médico si registra un paciente con ingreso tardío
+        — el comando desactivar_pacientes_vencidos lo desactivaría pronto."""
+        if not change:
+            dias_post = (timezone.localdate() - obj.fecha_cirugia).days
+            if dias_post >= DIAS_SEGUIMIENTO - 2:
+                messages.warning(
+                    request,
+                    f"Advertencia: este paciente tiene {dias_post} días postoperatorios. "
+                    f"El sistema lo desactivará automáticamente en cuanto alcance "
+                    f"{DIAS_SEGUIMIENTO} días. Considere si el seguimiento remoto es "
+                    f"apropiado para este caso."
+                )
+        super().save_model(request, obj, form, change)
 
     @admin.display(description='Evolución signos vitales')
     def grafica_signos_vitales(self, obj):

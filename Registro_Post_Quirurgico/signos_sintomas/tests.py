@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -1820,6 +1820,7 @@ class AlertaEmailNotificacionTests(TestCase):
         )
         self.paciente = Paciente.objects.create(
             nombre_completo="Paciente Email",
+            cedula="800111222",
             telefono_whatsapp="+573019990002",
             fecha_cirugia=timezone.localdate(),
             medico_responsable=self.medico,
@@ -1844,6 +1845,52 @@ class AlertaEmailNotificacionTests(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn('ALERTA ALTA', mail.outbox[0].subject)
         self.assertIn('dr@test.com', mail.outbox[0].to)
+
+    def test_alerta_alta_email_incluye_telefono_cedula_y_hora_local(self):
+        """A-4: el cuerpo del email trae teléfono, cédula y hora en zona Bogotá."""
+        from django.core import mail
+        with self.captureOnCommitCallbacks(execute=True):
+            alerta = Alerta.objects.create(
+                paciente=self.paciente,
+                registro_origen=self.registro,
+                tipo='SEPSIS',
+                severidad='ALTA',
+                mensaje='Fiebre alta de prueba.',
+            )
+        cuerpo = mail.outbox[0].body
+        self.assertIn(self.paciente.telefono_whatsapp, cuerpo)
+        self.assertIn(self.paciente.cedula, cuerpo)
+        self.assertIn(
+            timezone.localtime(alerta.fecha_alerta).strftime('%d/%m/%Y %H:%M'),
+            cuerpo,
+        )
+        self.assertIn('─', cuerpo)
+
+    def test_alerta_alta_email_sin_cedula_muestra_no_registrada(self):
+        """Paciente legado sin cédula: el email no debe fallar ni mostrar 'None'."""
+        from django.core import mail
+        paciente_sin_cedula = Paciente.objects.create(
+            nombre_completo="Sin Cedula",
+            telefono_whatsapp="+573019990004",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable=self.medico,
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente_sin_cedula,
+            temperatura=Decimal('37.0'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+        with self.captureOnCommitCallbacks(execute=True):
+            Alerta.objects.create(
+                paciente=paciente_sin_cedula,
+                registro_origen=registro,
+                tipo='SEPSIS',
+                severidad='ALTA',
+                mensaje='Fiebre alta de prueba.',
+            )
+        cuerpo = mail.outbox[0].body
+        self.assertIn('No registrada', cuerpo)
+        self.assertNotIn('Cédula:   None', cuerpo)
 
     def test_alerta_media_no_envia_email(self):
         """Solo las alertas ALTA envían email — MEDIA y BAJA no."""
@@ -2343,17 +2390,76 @@ class PacienteCedulaTests(TestCase):
         )
         self.assertEqual(Paciente.objects.count(), 2)
 
+    # -----------------------------------------------------------------
+    # A-2: full_clean() exige cédula en pacientes nuevos
+    # -----------------------------------------------------------------
+
+    def test_full_clean_sin_cedula_en_paciente_nuevo_lanza_error(self):
+        paciente = Paciente(
+            nombre_completo="Paciente Nuevo Sin Cedula",
+            telefono_whatsapp="+573001112227",
+            fecha_cirugia=timezone.localdate(),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            paciente.full_clean()
+        self.assertIn('cedula', ctx.exception.message_dict)
+
+    def test_full_clean_con_cedula_en_paciente_nuevo_no_lanza_error(self):
+        paciente = Paciente(
+            nombre_completo="Paciente Nuevo Con Cedula",
+            cedula="999888777",
+            telefono_whatsapp="+573001112228",
+            fecha_cirugia=timezone.localdate(),
+        )
+        paciente.full_clean()  # no debe lanzar
+
+    def test_full_clean_paciente_existente_sin_cedula_no_lanza_error(self):
+        """Pacientes migrados (ya tienen pk) no se les exige cédula retroactivamente."""
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Legado Existente",
+            telefono_whatsapp="+573001112229",
+            fecha_cirugia=timezone.localdate(),
+        )
+        paciente.full_clean()  # no debe lanzar — ya tiene pk
+
+
+class SeedDemoTests(TestCase):
+    """A-3 — guard de entorno y usuario demo sin superuser."""
+
+    def test_seed_demo_con_debug_false_no_crea_nada(self):
+        from django.core.management import call_command
+        with override_settings(DEBUG=False):
+            call_command('seed_demo', verbosity=0)
+        self.assertFalse(Paciente.objects.filter(telefono_whatsapp='+573001234567').exists())
+        self.assertFalse(get_user_model().objects.filter(username='demo_medico').exists())
+
+    def test_seed_demo_con_debug_true_crea_usuario_staff_no_superuser(self):
+        from django.core.management import call_command
+        with override_settings(DEBUG=True):
+            call_command('seed_demo', verbosity=0)
+        medico = get_user_model().objects.get(username='demo_medico')
+        self.assertTrue(medico.is_staff)
+        self.assertFalse(medico.is_superuser)
+
 
 class DesactivarPacientesVencidosTests(TestCase):
     """Sprint 5, Bloque 1B — desactivación automática a 10 días postop (P-5)."""
 
     def _paciente(self, dias_cirugia, tel, activo=True):
-        return Paciente.objects.create(
+        """Por defecto simula que el paciente se registró el día de su cirugía
+        (fecha_registro = fecha_cirugia), para no disparar el guard de
+        ingreso tardío (A-1, DIAS_GRACIA_INGRESO) en tests que no lo prueban."""
+        paciente = Paciente.objects.create(
             nombre_completo="Paciente Vencimiento",
             telefono_whatsapp=tel,
             fecha_cirugia=timezone.localdate() - timedelta(days=dias_cirugia),
             activo=activo,
         )
+        Paciente.objects.filter(pk=paciente.pk).update(
+            fecha_registro=timezone.now() - timedelta(days=dias_cirugia)
+        )
+        paciente.refresh_from_db()
+        return paciente
 
     def test_paciente_con_10_dias_se_desactiva(self):
         from django.core.management import call_command
@@ -2399,6 +2505,73 @@ class DesactivarPacientesVencidosTests(TestCase):
         call_command('desactivar_pacientes_vencidos', verbosity=0)
         call_command('crear_checkins_diarios', verbosity=0)
         self.assertEqual(CheckInProgramado.objects.count(), 0)
+
+    # -----------------------------------------------------------------
+    # A-1: guard de ingreso tardío (DIAS_GRACIA_INGRESO)
+    # -----------------------------------------------------------------
+
+    def _paciente_con_fecha_registro(self, dias_cirugia, dias_en_sistema, tel):
+        paciente = self._paciente(dias_cirugia=dias_cirugia, tel=tel)
+        fecha_registro = timezone.now() - timedelta(days=dias_en_sistema)
+        Paciente.objects.filter(pk=paciente.pk).update(fecha_registro=fecha_registro)
+        paciente.refresh_from_db()
+        return paciente
+
+    def test_pod12_registrado_hoy_no_se_desactiva(self):
+        from django.core.management import call_command
+        paciente = self._paciente_con_fecha_registro(
+            dias_cirugia=12, dias_en_sistema=0, tel="+573002220007"
+        )
+        call_command('desactivar_pacientes_vencidos', verbosity=0)
+        paciente.refresh_from_db()
+        self.assertTrue(paciente.activo)
+
+    def test_pod12_registrado_hace_3_dias_se_desactiva(self):
+        from django.core.management import call_command
+        paciente = self._paciente_con_fecha_registro(
+            dias_cirugia=12, dias_en_sistema=3, tel="+573002220008"
+        )
+        call_command('desactivar_pacientes_vencidos', verbosity=0)
+        paciente.refresh_from_db()
+        self.assertFalse(paciente.activo)
+
+    def test_pod8_no_se_desactiva_sin_importar_dias_en_sistema(self):
+        from django.core.management import call_command
+        paciente = self._paciente_con_fecha_registro(
+            dias_cirugia=8, dias_en_sistema=5, tel="+573002220009"
+        )
+        call_command('desactivar_pacientes_vencidos', verbosity=0)
+        paciente.refresh_from_db()
+        self.assertTrue(paciente.activo)
+
+
+class PacienteAdminIngresoTardioAdvertenciaTests(TestCase):
+    """A-1 — advertencia en el Admin al crear un paciente con POD ya avanzado."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.medico = User.objects.create_superuser(username='dr_a1', password='pass')
+        self.client.force_login(self.medico)
+
+    def _post_nuevo_paciente(self, dias_cirugia, tel, cedula):
+        return self.client.post(
+            '/admin/signos_sintomas/paciente/add/',
+            {
+                'nombre_completo': 'Paciente Ingreso Tardío',
+                'cedula': cedula,
+                'telefono_whatsapp': tel,
+                'fecha_cirugia': (timezone.localdate() - timedelta(days=dias_cirugia)).isoformat(),
+            },
+            follow=True,
+        )
+
+    def test_advierte_si_pod_es_mayor_o_igual_a_8(self):
+        resp = self._post_nuevo_paciente(dias_cirugia=9, tel="+573002230001", cedula="900000001")
+        self.assertContains(resp, "días postoperatorios")
+
+    def test_no_advierte_si_pod_es_menor_a_8(self):
+        resp = self._post_nuevo_paciente(dias_cirugia=3, tel="+573002230002", cedula="900000002")
+        self.assertNotContains(resp, "días postoperatorios")
 
 
 class PacienteAdminFiltrosHistorialTests(TestCase):

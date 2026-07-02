@@ -17,6 +17,7 @@ from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils import timezone
 
 from .models import Alerta
 
@@ -40,20 +41,32 @@ def notificar_alerta_alta(sender, instance, created, **kwargs):
         return
 
     def _enviar():
+        paciente = instance.paciente
+        cedula_str = paciente.cedula or 'No registrada'
+
         asunto = (
-            f"[ALERTA ALTA] {instance.get_tipo_display()} — "
-            f"{instance.paciente.nombre_completo}"
+            f"⚠️ ALERTA ALTA — {instance.get_tipo_display()} | "
+            f"{paciente.nombre_completo}"
         )
         cuerpo = (
-            f"Estimado/a {medico.get_full_name() or medico.username},\n\n"
-            f"Se ha generado una alerta de severidad ALTA para su paciente:\n\n"
-            f"  Paciente: {instance.paciente.nombre_completo}\n"
-            f"  Tipo: {instance.get_tipo_display()}\n"
+            f"⚠️  ALERTA CLÍNICA — ACCIÓN REQUERIDA\n"
+            f"{'─' * 45}\n\n"
+            f"PACIENTE\n"
+            f"  Nombre:   {paciente.nombre_completo}\n"
+            f"  Cédula:   {cedula_str}\n"
+            f"  Teléfono: {paciente.telefono_whatsapp}\n\n"
+            f"ALERTA\n"
+            f"  Tipo:      {instance.get_tipo_display()}\n"
             f"  Severidad: {instance.get_severidad_display()}\n"
-            f"  Fecha: {instance.fecha_alerta.strftime('%Y-%m-%d %H:%M')}\n\n"
-            f"Detalle: {instance.mensaje}\n\n"
-            f"Por favor revise el dashboard y contacte al paciente si es necesario.\n\n"
-            f"— Sistema de Monitoreo Posquirúrgico"
+            f"  Fecha:     "
+            f"{timezone.localtime(instance.fecha_alerta).strftime('%d/%m/%Y %H:%M')} "
+            f"(hora Bogotá)\n\n"
+            f"DETALLE\n"
+            f"  {instance.mensaje}\n\n"
+            f"{'─' * 45}\n"
+            f"Por favor contacte al paciente o derive a urgencias si es necesario.\n\n"
+            f"— Sistema de Monitoreo Posquirúrgico\n"
+            f"  (Este es un mensaje automático — no responder a este correo)\n"
         )
         try:
             send_mail(

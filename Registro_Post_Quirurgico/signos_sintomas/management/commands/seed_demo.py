@@ -2,12 +2,15 @@
 Management command: seed_demo
 
 Crea datos de demostración para mostrar el dashboard al equipo médico:
-- 1 superuser demo (si no existe)
+- 1 usuario demo is_staff (sin is_superuser — representa a un médico real)
 - 1 paciente ficticio (Camilo Rueda, tel +573001234567)
 - 10 días de RegistroDiario con variedad clínica (fiebre, drenaje, etc.)
 - Las alertas se generan automáticamente por el alert_engine
 
 Idempotente: si el paciente demo ya existe, omite la creación.
+
+Solo puede ejecutarse con DEBUG=True (A-3): crea una cuenta con contraseña
+conocida, por lo que en producción el comando aborta sin hacer nada.
 
 Uso:
     python manage.py seed_demo
@@ -18,6 +21,7 @@ import logging
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -70,6 +74,16 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if not settings.DEBUG:
+            self.stderr.write(
+                self.style.ERROR(
+                    'seed_demo NO puede ejecutarse en producción (DEBUG=False). '
+                    'Este comando crea datos ficticios y una cuenta demo con '
+                    'contraseña conocida. Abortando.'
+                )
+            )
+            return
+
         User = get_user_model()
 
         if options['borrar']:
@@ -83,16 +97,20 @@ class Command(BaseCommand):
             ))
             return
 
-        # Superuser demo
+        # Usuario demo — is_staff sin is_superuser, para representar la
+        # experiencia real de un médico (ve solo sus propios pacientes; sin
+        # acceso a Usuarios ni AXES). A-3, hallazgo de auditoría 02/07/2026.
         if not User.objects.filter(username=USERNAME_DEMO).exists():
-            medico = User.objects.create_superuser(
+            medico = User.objects.create_user(
                 username=USERNAME_DEMO,
                 password='demo1234',
                 email='demo@medico.com',
                 first_name='Demo',
                 last_name='Médico',
+                is_staff=True,
+                is_superuser=False,
             )
-            self.stdout.write(f'  Superuser creado: {USERNAME_DEMO} / demo1234')
+            self.stdout.write(f'  Usuario demo creado: {USERNAME_DEMO} / demo1234')
         else:
             medico = User.objects.get(username=USERNAME_DEMO)
 

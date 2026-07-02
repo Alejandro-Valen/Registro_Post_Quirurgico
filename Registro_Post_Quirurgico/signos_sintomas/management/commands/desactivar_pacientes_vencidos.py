@@ -12,6 +12,12 @@ test_scheduler_no_crea_checkins_tras_desactivacion en tests.py).
 
 Idempotente: solo actúa sobre pacientes con activo=True, así que correrlo
 dos veces el mismo día no tiene efecto la segunda vez.
+
+Guard de ingreso tardío (A-1, hallazgo de auditoría 02/07/2026): un paciente
+cuya cirugía fue hace más de DIAS_SEGUIMIENTO días pero que se registró en
+el sistema apenas hoy o ayer no debe desactivarse antes de recibir al menos
+un check-in — se le da un margen de DIAS_GRACIA_INGRESO días desde su
+fecha_registro antes de que este comando pueda desactivarlo.
 """
 
 import logging
@@ -24,6 +30,7 @@ from signos_sintomas.models import Paciente
 logger = logging.getLogger(__name__)
 
 DIAS_SEGUIMIENTO = 10  # decisión de producto P-5, 01/07/2026
+DIAS_GRACIA_INGRESO = 2  # días mínimos en el sistema antes de poder ser desactivado (A-1)
 
 
 class Command(BaseCommand):
@@ -43,7 +50,8 @@ class Command(BaseCommand):
         desactivados = []
         for paciente in Paciente.objects.filter(activo=True):
             dias_post = (hoy - paciente.fecha_cirugia).days
-            if dias_post >= DIAS_SEGUIMIENTO:
+            dias_en_sistema = (hoy - timezone.localdate(paciente.fecha_registro)).days
+            if dias_post >= DIAS_SEGUIMIENTO and dias_en_sistema >= DIAS_GRACIA_INGRESO:
                 desactivados.append((paciente, dias_post))
                 if not dry_run:
                     paciente.activo = False
