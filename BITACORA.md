@@ -2139,3 +2139,101 @@ tree limpio, sin cambios pendientes de commit).
 4. Hallazgo pendiente de decidir (no bloqueante): `demo_medico` es
    superusuario y no representa la experiencia real de un médico —
    evaluar si conviene una segunda cuenta demo no-superusuario.
+
+---
+
+## Cierre de sesión — 02/07/2026 (Sprint 5 — correcciones pre-Bloque 7 + Bloque 7 HABEAS DATA)
+
+**Responsable:** León (Arquitecto IA) con Claude Code
+**Estado:** Sprint 5 con Parte A (correcciones pre-Bloque 7) y Bloque 7
+(HABEAS DATA) completos. **177 tests OK.** Rama activa: `sprint-5-produccion`,
+sincronizada con `origin`.
+
+**Resumen de la sesión (orden cronológico):**
+1. Recibido un documento externo de instrucciones ("Pre-Bloque 7 + Bloque 7")
+   con 5 correcciones de auditoría (A-1 a A-4, más el commit A-5) y la
+   implementación del Bloque 7. Antes de tocar código se verificó el estado
+   real del repo contra lo que el documento afirmaba (rama, 159 tests,
+   `manage.py check` limpio) — coincidía. También se confirmó que
+   `FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` (la plantilla de consentimiento
+   que el documento decía ya aprobada) existía y su contenido coincidía con
+   lo descrito.
+2. Se encontró y eliminó (con confirmación del Arquitecto)
+   `CONTEXTO_TRANSFERENCIA_DECISIONES_ARQUITECTURA.md`, un archivo suelto sin
+   trackear, de la era Sprint 3 (17/06/2026), ya completamente obsoleto.
+3. **A-1 (ingreso tardío):** el Arquitecto eligió implementar **ambas
+   opciones** — guard `DIAS_GRACIA_INGRESO=2` en
+   `desactivar_pacientes_vencidos` (no desactiva a un paciente hasta que
+   lleve al menos 2 días registrado en el sistema) + advertencia en
+   `PacienteAdmin.save_model` cuando se crea un paciente con POD ≥ 8.
+4. **A-2 (validación de cédula):** agregado `Paciente.clean()` que exige
+   cédula solo para pacientes nuevos (`pk is None`). **Bug real detectado
+   en el diseño original del documento:** proponía dejar `cedula` con
+   `blank=False` a nivel de campo, pero eso hace que `full_clean()` falle
+   para *cualquier* paciente sin cédula — incluidos los migrados/legado —
+   no solo los nuevos como se pretendía. Corregido cambiando el campo a
+   `blank=True` y dejando toda la exigencia de "obligatorio para nuevos"
+   en el `clean()` personalizado (migración `0015`).
+5. **A-3 (seed_demo):** agregado guard que aborta el comando si
+   `DEBUG=False`; la cuenta demo pasó de `create_superuser` a
+   `create_user(is_staff=True, is_superuser=False)` — de paso resuelve el
+   hallazgo pendiente de la sesión anterior (`demo_medico` no representaba
+   la experiencia real de un médico).
+6. **A-4 (email de alerta ALTA):** el cuerpo ahora incluye teléfono y
+   cédula del paciente y la hora en zona Bogotá (`timezone.localtime`,
+   nunca el datetime crudo en UTC) — resuelve la mejora anotada como
+   pendiente en el Bloque 5. Asunto también mejorado.
+7. Suite tras Parte A: **171 tests OK** (159 + 12 nuevos). Commit `fix:` y
+   push.
+8. **Bloque 7 (HABEAS DATA):** el Arquitecto confirmó en esta misma sesión
+   que el texto de `FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` ya está
+   generado y aprobado como plantilla — se copió tal cual a `docs/` sin
+   reescribirlo. Implementados los campos `Paciente.consentimiento_informado`
+   (default `False`) y `fecha_consentimiento` (migración `0016`),
+   auto-registro/limpieza de la fecha en `PacienteAdmin.save_model`, y un
+   guard al inicio de `bot.procesar_mensaje` que devuelve un mensaje neutro
+   (sin mencionar "consentimiento" ni "datos") si el paciente no ha sido
+   confirmado por su médico.
+9. El guard de consentimiento rompió 22 tests existentes del bot/webhook
+   (todos asumían pacientes ya "operativos" sin marcar el campo, que ahora
+   nace en `False`). Corregido agregando `consentimiento_informado=True`
+   a los fixtures de paciente en `BotWhatsAppTests`, `BotAbandonoConversacionTests`,
+   `ParseEnteroRangoDecimalTests` y `WebhookWhatsAppTests` — son tests de
+   la máquina de estados y del webhook, no del consentimiento en sí, así
+   que la corrección es consistente con lo que cada test pretende probar.
+10. Suite final: **177 tests OK** (171 + 6 nuevos de Bloque 7).
+    `manage.py check` limpio en todo momento. Commit `feat:` y push.
+
+**Decisiones clave tomadas:**
+- A-1: ambas opciones (guard en el comando + advertencia en Admin) — no
+  son mutuamente excluyentes.
+- Texto del consentimiento informado: confirmado como ya aprobado por el
+  Arquitecto en esta sesión (no se redactó contenido nuevo).
+- `CONTEXTO_TRANSFERENCIA_DECISIONES_ARQUITECTURA.md` (obsoleto, Sprint 3):
+  eliminado con confirmación explícita.
+
+**Problemas encontrados y resueltos (no omitir ninguno):**
+- Documento de instrucciones con un error real de diseño en A-2: `cedula
+  blank=False` rompía `full_clean()` para pacientes legado sin cédula,
+  contradiciendo el propio objetivo de "obligatorio solo para nuevos".
+  Detectado al escribir el test de paciente existente sin cédula, antes de
+  que llegara a producción. Corregido con `blank=True` + `clean()`.
+- El guard de consentimiento informado (Bloque 7) tenía blast radius
+  amplio: 22 tests de sesiones anteriores fallaron porque asumían
+  pacientes sin necesidad de consentimiento explícito. Se corrigieron los
+  fixtures (no la lógica del guard, que es la esperada) tras confirmar que
+  ninguno de esos tests trataba sobre consentimiento — todos probaban
+  comportamiento de la máquina de estados o del webhook.
+
+**Qué queda pendiente para la próxima sesión — paso exacto:**
+1. Resto de Sprint 5 sin empezar: desplegar en Railway/Render, Twilio
+   saliente real en `enviar_recordatorios`, monitoreo externo básico,
+   ajuste de Nginx `REMOTE_ADDR`.
+2. Antes del primer paciente real: verificar en el Admin, con un caso de
+   prueba, el flujo completo de consentimiento (marcar → bot responde
+   normal; desmarcar → bot vuelve a bloquear) en un entorno lo más
+   parecido a producción posible (no solo en tests).
+3. `FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` sigue teniendo campos entre
+   corchetes (`[Nombre del médico]`, `[correo]`, etc.) pendientes de
+   completar con los datos reales del médico/institución antes de
+   imprimirse para el primer paciente real.

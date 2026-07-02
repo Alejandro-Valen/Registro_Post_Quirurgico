@@ -727,13 +727,11 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
     (fuera de las herramientas disponibles en esta sesión) — sí se
     verificó con el test client de Django que el HTML/JSON generado es
     válido y con los valores esperados.
-  - **Hallazgo colateral (no bloqueante, anotado para decidir después):**
-    `demo_medico` (creado por `seed_demo`) es superusuario — ve *todo*
-    `/admin/` (Usuarios, Grupos, pacientes de cualquiera), a diferencia
-    de una cuenta de médico real (staff, no-superuser), que solo ve
-    Alertas/Pacientes/Registros Diarios/Check-ins Programados y solo sus
-    propios pacientes (verificado creando una cuenta de prueba). Pendiente
-    decidir si vale la pena una cuenta demo no-superusuario para probar
+  - **Hallazgo colateral — resuelto en A-3 (02/07/2026):** `demo_medico`
+    (creado por `seed_demo`) era superusuario — veía *todo* `/admin/`
+    (Usuarios, Grupos, pacientes de cualquiera), a diferencia de una
+    cuenta de médico real (staff, no-superuser). `seed_demo` ahora crea
+    `demo_medico` con `is_staff=True, is_superuser=False`, representando
     la experiencia real del médico.
 - [ ] Desplegar en Railway o Render con PostgreSQL en la nube
 - [x] **Bloque 5 (01/07/2026):** SMTP real. Variables `EMAIL_*` agregadas
@@ -752,9 +750,9 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   el envío real de SMTP no se puede probar con `manage.py test`, que
   usa el backend de consola; la lógica del signal ya tenía cobertura
   desde Sprint 4, `AlertaEmailNotificacionTests`).
-  **Mejora futura anotada, no implementada:** rediseñar el formato del
-  correo — HTML con mejor estructura visual, y agregar datos de contacto
-  del paciente (teléfono, posiblemente cédula) al cuerpo del mensaje.
+  **Mejora implementada en A-4 (02/07/2026):** el cuerpo ahora incluye
+  teléfono y cédula del paciente y la hora en zona Bogotá
+  (`timezone.localtime`, no el datetime crudo en UTC).
 - [x] **Bloque 6 (01/07/2026):** `docs/cron_setup.md` — creado. Cubre los
   **4** management commands (los 3 originales + `desactivar_pacientes_vencidos`
   del Bloque 1), horarios en UTC, `MAILTO` para fallos, y el orden
@@ -771,15 +769,47 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   proyecto, manual mínimo de operación para el médico, y nota de que
   HABEAS DATA (Bloque 7) bloquea el uso con pacientes reales, no el resto
   del despliegue técnico. **159 tests OK**, `manage.py check` limpio.
+- [x] **Correcciones pre-Bloque 7, A-1 a A-4 (02/07/2026):**
+  - **A-1:** guard `DIAS_GRACIA_INGRESO=2` en `desactivar_pacientes_vencidos`
+    (no desactiva hasta que el paciente lleve ≥2 días registrado en el
+    sistema) + advertencia (no bloqueante) en `PacienteAdmin.save_model`
+    al crear un paciente con `dia_postoperatorio >= 8`. Decisión del
+    Arquitecto: implementar ambas opciones, no son excluyentes.
+  - **A-2:** `Paciente.clean()` exige cédula solo para pacientes nuevos
+    (`pk is None`). **Bug real corregido durante la implementación:** el
+    diseño original dejaba `cedula` con `blank=False` a nivel de campo,
+    lo que rompía `full_clean()` para *cualquier* paciente sin cédula,
+    incluidos los migrados — no solo los nuevos. Corregido con
+    `blank=True` a nivel de campo (migración `0015`) + la exigencia real
+    viviendo en `clean()`.
+  - **A-3:** `seed_demo` aborta si `DEBUG=False` (evita crear una cuenta
+    con contraseña conocida en producción por error). Su usuario demo
+    pasó de `create_superuser` a `create_user(is_staff=True,
+    is_superuser=False)` — resuelve también el hallazgo pendiente del
+    Bloque 4 sobre que `demo_medico` no representaba la experiencia real.
+  - **A-4:** email de alerta ALTA mejorado (ver nota en Bloque 5 arriba).
+  - **12 tests nuevos. 171 tests OK** tras esta corrección. `manage.py check`
+    limpio.
+- [x] **Bloque 7 — HABEAS DATA (02/07/2026):** `consentimiento_informado`
+  (default `False`) y `fecha_consentimiento` en `Paciente` (migración
+  `0016`), auto-registrada/limpiada en `PacienteAdmin.save_model` en
+  sincronía con el checkbox; `fecha_consentimiento` es readonly en el
+  Admin. Guard en `bot.procesar_mensaje`: paciente sin consentimiento
+  recibe mensaje neutro y no entra a la máquina de estados. Texto de
+  `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` confirmado como ya
+  aprobado por el Arquitecto en sesión — copiado sin modificar (P-15).
+  **6 tests nuevos.** El guard rompió 22 tests preexistentes del bot/webhook
+  (fixtures de paciente que no marcaban el consentimiento) — corregidos
+  agregando `consentimiento_informado=True` en los fixtures afectados, sin
+  tocar la lógica del guard. **177 tests OK**, `manage.py check` limpio.
+  **Pendiente antes de pacientes reales:** completar los campos entre
+  corchetes del formato (datos del médico/institución) antes de
+  imprimirlo.
 - [ ] Configurar monitoreo externo básico (ping al servidor cada 5 min)
   para detectar caídas totales independientemente del cron
 - [ ] Nginx: `proxy_set_header REMOTE_ADDR $remote_addr;` para que el
   rate limit funcione correctamente con la IP real del cliente
 - [ ] Landing page estática de presentación del médico (P-12)
-- [ ] Consentimiento informado mínimo (`consentimiento_informado`,
-  `fecha_consentimiento` en `Paciente` + guard en el bot) antes de
-  pacientes reales (P-15) — texto legal/clínico lo redacta o valida el
-  médico, no se inventa aquí
 - [ ] Entrega final al equipo médico
 
 **Diferido explícitamente a Sprint 6:**

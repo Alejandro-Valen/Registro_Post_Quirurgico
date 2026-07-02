@@ -161,9 +161,15 @@ una severidad ya alcanzada). Base: Delaney 2008, Lee 2022, Outersterp
 
 ## Modelos de Base de Datos
 
-### Paciente (Sprint 1, ampliado en fase de generalización)
+### Paciente (Sprint 1, ampliado en fase de generalización, Sprint 5)
 ```python
 nombre_completo       CharField(200)
+cedula                CharField(20) unique=True null=True blank=True
+                      # identificador principal (P-4). Obligatorio para pacientes
+                      # nuevos vía Paciente.clean() (A-2); null solo permitido en
+                      # registros previos a esta versión. blank=True a nivel de
+                      # campo a propósito — la exigencia vive en clean(), no en el
+                      # campo, para no romper full_clean() de pacientes legado.
 telefono_whatsapp     CharField(20) unique  # identificador para el bot
 fecha_cirugia         DateField
 tipo_cirugia          CharField choices=[sugarbaker_hipec,colectomia_electiva,otra] null=True blank=True
@@ -171,6 +177,12 @@ medico_responsable    ForeignKey(User, SET_NULL, null=True)
                       # related_name='pacientes' — médico accede a sus pacientes con
                       # medico.pacientes.all()
 activo                BooleanField default=True
+consentimiento_informado  BooleanField default=False
+                      # HABEAS DATA (Bloque 7, P-15). El bot no inicia el flujo con
+                      # el paciente hasta que el médico marque este campo en el Admin.
+fecha_consentimiento  DateTimeField null=True blank=True
+                      # auto-registrada/limpiada en PacienteAdmin.save_model — el
+                      # médico no la edita directamente (readonly en el Admin).
 fecha_registro        DateTimeField auto_now_add=True
 ```
 
@@ -178,6 +190,14 @@ fecha_registro        DateTimeField auto_now_add=True
 puramente descriptivo — no alimenta el `alert_engine` ni cambia el flujo
 del bot. Existe para estadística e investigación futura; el sistema trata
 a todos los pacientes igual sin importar su valor.
+
+**Guard de ingreso tardío (A-1, Sprint 5):** `desactivar_pacientes_vencidos`
+solo desactiva un paciente si además de tener `dia_postoperatorio >=
+DIAS_SEGUIMIENTO` (10) lleva al menos `DIAS_GRACIA_INGRESO` (2) días
+registrado en el sistema (`fecha_registro`) — evita desactivar a un
+paciente de ingreso tardío antes de que reciba un solo check-in.
+`PacienteAdmin.save_model` además advierte al médico (sin bloquear) si crea
+un paciente con `dia_postoperatorio >= 8`.
 
 ### RegistroDiario (Sprint 1, ampliado en Sprint 3)
 ```python
@@ -259,6 +279,8 @@ bot completo sin mockear peticiones web — actualmente **69 tests unitarios OK*
 
 **Máquina de estados (10 preguntas):**
 ```
+[Guard de consentimiento informado — Bloque 7]
+  Si paciente.consentimiento_informado es False: mensaje neutro, no entra a INICIO.
 INICIO
   → ESPERANDO_TEMPERATURA       "¿Cuál es tu temperatura? ej: 37.5"
   → ESPERANDO_DOLOR             "Del 1 al 10, ¿cuánto dolor sientes?"
@@ -280,6 +302,12 @@ INICIO
 2. **Identificación por `telefono_whatsapp` + `activo=True`.** Si el número no
    está registrado, el bot responde amablemente sin crear nada — nunca crea
    pacientes desde el chat.
+2b. **Consentimiento informado obligatorio (Bloque 7, P-15).** Si
+    `paciente.consentimiento_informado` es `False`, el bot devuelve un
+    mensaje neutro (`MSG_SIN_CONSENTIMIENTO`, sin mencionar "consentimiento"
+    ni "datos") y no entra a la máquina de estados. El médico marca el
+    campo en el Admin tras obtener la firma física de
+    `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md`.
 3. **Un registro por día.** Si ya completó hoy, responde "Ya registramos tus
    datos de hoy" y se reinicia automáticamente al día siguiente.
 4. **Lenguaje:** español coloquial, tuteo, tono cálido — nunca jerga médica en
@@ -346,16 +374,17 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-6/7 completos, rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7/7 completos (correcciones pre-Bloque 7 + HABEAS DATA), rama `sprint-5-produccion` |
 
-**Punto actual (01/07/2026):** Sprint 5 con Bloques 1 a 6 completos, 159
-tests OK. Rama activa: `sprint-5-produccion`. Falta solo el **Bloque 7**
-(HABEAS DATA / consentimiento informado) — bloqueado a propósito hasta
-que el Arquitecto decida explícitamente el contenido, no se implementa
-sin esa aprobación.
-**Próximo paso: retomar con el Bloque 7, o priorizar la mejora del
-formato del correo de alerta ALTA (ver nota más abajo) si el Arquitecto
-lo prefiere primero.**
+**Punto actual (02/07/2026):** Sprint 5 con los 7 Bloques completos —
+incluye correcciones de auditoría pre-Bloque 7 (A-1 a A-4) y el Bloque 7
+(HABEAS DATA / consentimiento informado). **177 tests OK.** Rama activa:
+`sprint-5-produccion`.
+**Próximo paso: desplegar en Railway/Render (Sprint 5 sin empezar) —
+ver "Diferido explícitamente" abajo. Antes del primer paciente real,
+falta completar los campos entre corchetes de
+`docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` con los datos reales del
+médico/institución.**
 
 Decisiones de producto P-1 a P-15 confirmadas en sesión (01/07/2026) —
 ver tabla completa en `ROADMAP_MONITOREO_POSQUIRURGICO.md`, FASE 5.
@@ -374,12 +403,22 @@ Resumen de lo resuelto en `sprint-5-produccion` (Bloques 1-6):
   puntos rojos para alertas ALTA sin resolver. 9 tests.
 - Bloque 5: SMTP real (`EMAIL_*` en `settings_production.py` existente)
   — probado end-to-end con una alerta ALTA real, correo recibido y
-  confirmado. **Mejora futura anotada, no implementada:** rediseñar el
-  formato del correo (HTML, mejor estructura) + agregar datos de
-  contacto del paciente al cuerpo.
+  confirmado. Formato del correo mejorado en A-4 (02/07/2026): incluye
+  teléfono y cédula del paciente y hora en zona Bogotá.
 - Bloque 6: `docs/cron_setup.md` (4 commands, orden obligatorio:
   `desactivar_pacientes_vencidos` **antes** de `crear_checkins_diarios`)
   y `docs/transferencia_cuentas.md`.
+- Correcciones pre-Bloque 7 (A-1 a A-4, 02/07/2026): guard
+  `DIAS_GRACIA_INGRESO` + advertencia en Admin para ingreso tardío;
+  `Paciente.clean()` exige cédula solo en pacientes nuevos (`cedula` es
+  `blank=True` a nivel de campo a propósito); `seed_demo` aborta si
+  `DEBUG=False` y su usuario demo ya no es superusuario; email de alerta
+  ALTA con teléfono, cédula y hora en zona Bogotá. 12 tests.
+- Bloque 7 (HABEAS DATA, 02/07/2026): `Paciente.consentimiento_informado`
+  + `fecha_consentimiento` (auto-registrada en `PacienteAdmin.save_model`)
+  + guard en `bot.py` que bloquea el flujo si el paciente no ha sido
+  confirmado por su médico. Plantilla `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md`
+  ya aprobada por el Arquitecto, copiada sin modificar. 6 tests.
 
 Ambas preguntas de arquitectura que quedaban abiertas ya se resolvieron:
 cron en **Linux** (Railway/Render, no Windows Task Scheduler) y SMTP con
@@ -398,13 +437,11 @@ de contacto (`home/views.py`) y del webhook (`views.py`) dependen de que esto es
 correcto en producción. Se resuelve al desplegar, no en el código Django.
 
 **Diferido explícitamente:**
-- **Bloque 7 (HABEAS DATA):** consentimiento informado mínimo antes de
-  pacientes reales. Requiere aprobación explícita del Arquitecto y
-  contenido redactado o validado por el médico — nunca inventado.
 - Desplegar en Railway o Render con PostgreSQL en la nube.
 - Integración Twilio saliente real en `enviar_recordatorios` (stub hoy).
-- Rediseño del formato del correo de alerta ALTA + datos de contacto del
-  paciente (anotado en Bloque 5, no implementado).
+- Completar los campos entre corchetes de
+  `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` (datos reales del médico/
+  institución) antes de imprimirlo para el primer paciente real.
 - Vista separada historial paciente (URL y template propios).
 - RAG/MCP en el bot — Sprint 6, con corpus de `knowledge_base.md`
   validado por el médico (decisión P-13); pendiente de que se decidan
