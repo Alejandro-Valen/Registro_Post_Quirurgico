@@ -581,13 +581,20 @@ del alert_engine, jun 2026):**
   resuelta" del Admin exige elegir el motivo en un formulario intermedio
   antes de resolver ("Otro" pide detalle); scoping por médico en cada paso.
   Útil para ajustar umbrales del alert_engine con datos reales. 6 tests.
-- [ ] Duración del seguimiento del bot por paciente: ¿cuándo se
-  desactiva automáticamente `Paciente.activo`? Hoy nada lo cambia solo
-  — definir si es un número fijo de días postoperatorios, o si el
-  médico lo cierra manualmente desde el dashboard.
-- [ ] Interfaz del médico para gestionar alertas: cómo marcar
-  `resuelta`, cómo distinguir falsos positivos de casos reales, y cómo
-  se visualiza la escalera de severidad BAJA/MEDIA/ALTA en pantalla.
+- [x] **Duración del seguimiento del bot por paciente — RESUELTO (Sprint 5
+  Bloque 1 + A-1, P-5).** `Paciente.activo` se desactiva automáticamente a
+  los `DIAS_SEGUIMIENTO = 10` días postoperatorios vía el command
+  `desactivar_pacientes_vencidos` (con guard `DIAS_GRACIA_INGRESO = 2` para
+  ingresos tardíos), o manualmente por el médico desde el Admin. Corre por
+  cron antes de `crear_checkins_diarios`.
+- [x] **Interfaz del médico para gestionar alertas — RESUELTO (Sprint 4
+  Bloque 5A + Sprint 5 Bloque A).** Marcar `resuelta`: acción "Marcar como
+  resuelta" del Admin con formulario intermedio de motivo obligatorio.
+  Distinguir falso positivo vs. caso real: opciones `FP_MEDICION` /
+  `FP_RANGO` del `motivo_resolucion`. Visualización de la escalera
+  BAJA/MEDIA/ALTA: badge de color por severidad (`severidad_badge`) en la
+  lista de alertas + puntos rojos de alerta ALTA en las gráficas Chart.js
+  (Bloque 4).
 
 **Mejoras futuras (decisiones diferidas explícitamente, no bloqueantes):**
 - [ ] **Vista de historial del paciente — versión completa (Sprint 5+):**
