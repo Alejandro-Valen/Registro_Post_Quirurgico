@@ -25,6 +25,7 @@ Máquina de estados (10 preguntas):
       -> COMPLETADO
 """
 
+import logging
 import re
 import unicodedata
 
@@ -35,6 +36,8 @@ from django.utils import timezone
 
 from .alert_engine import evaluar_registro
 from .models import CheckInProgramado, ConversacionWhatsApp, Paciente, RegistroDiario
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +65,28 @@ MSG_SIN_CHECKIN = (
 MSG_CONFIRMACION = (
     "¡Listo! Hemos registrado tu reporte de hoy. Gracias por cuidarte. "
     "Tu equipo médico está pendiente de tu seguimiento. ¡Que tengas un buen día!"
+)
+# Mensajes de cierre con recomendación según severidad de alertas
+# (decisión clínica 02/07/2026 — tono tranquilizador, sin diagnóstico).
+# Nunca mencionan el tipo de alerta ni valores específicos (regla del bot:
+# el paciente jamás ve la clasificación clínica). BAJA no lleva mensaje
+# adicional; usa MSG_CONFIRMACION.
+MSG_CIERRE_ALERTA_MEDIA = (
+    "Hemos registrado tu reporte de hoy.\n\n"
+    "Hemos notado algunos valores que vale la pena revisar. "
+    "Te recomendamos contactar a tu medico en las proximas "
+    "horas para contarle como te has sentido. No es urgente, "
+    "pero es importante que este al tanto.\n\n"
+    "Te escribiremos en tu proximo turno."
+)
+MSG_CIERRE_ALERTA_ALTA = (
+    "Hemos registrado tu reporte de hoy.\n\n"
+    "Algunos de tus valores de hoy necesitan atencion pronto. "
+    "Te recomendamos comunicarte con tu medico o dirigirte "
+    "al servicio de urgencias mas cercano. Esto es por "
+    "precaucion — ve con calma y cuentale al medico como "
+    "te has sentido estos dias.\n\n"
+    "Te escribiremos en tu proximo turno."
 )
 MSG_ABANDONO_REINICIO = (
     "Hola, parece que ayer no pudimos terminar tu reporte. "
@@ -392,18 +417,35 @@ def _procesar_respuesta_flujo(conv, paciente, texto, hoy):
             conv.temp_tolero_liquidos = False
         else:
             return MSG_REINTENTO_TOLERANCIA_LIQUIDOS
-        _crear_registro(conv, paciente, hoy)
+        _registro, alertas_nuevas = _crear_registro(conv, paciente, hoy)
         _finalizar(conv, hoy)
-        return MSG_CONFIRMACION
+        return _mensaje_cierre(alertas_nuevas)
 
     # Estado inesperado: reiniciar de forma segura.
     _reiniciar(conv)
     return MSG_PREGUNTA_TEMPERATURA
 
 
+def _mensaje_cierre(alertas_nuevas):
+    """Elige el mensaje de cierre según la severidad máxima de las alertas
+    generadas por este check-in (Bloque B). BAJA y sin alertas → cierre neutro.
+    ALTA tiene prioridad sobre MEDIA."""
+    severidades = {a.severidad for a in alertas_nuevas}
+    if 'ALTA' in severidades:
+        return MSG_CIERRE_ALERTA_ALTA
+    if 'MEDIA' in severidades:
+        return MSG_CIERRE_ALERTA_MEDIA
+    return MSG_CONFIRMACION
+
+
 def _crear_registro(conv, paciente, hoy):
     """Crea el RegistroDiario definitivo, lo vincula al CheckInProgramado
-    PENDIENTE de hoy (Bloque 3) y programa la evaluación de alertas.
+    PENDIENTE de hoy (Bloque 3) y evalúa las alertas de forma síncrona.
+
+    Devuelve `(registro, alertas_nuevas)`. La evaluación es síncrona (Bloque B,
+    02/07/2026) — no diferida a on_commit — porque el bot necesita conocer la
+    severidad máxima de las alertas para elegir el mensaje de cierre correcto
+    ANTES de responderle al paciente.
 
     El vínculo OneToOne (checkin.registro) y el cambio de estado del check-in
     ocurren dentro del mismo bloque atomic que la creación del registro, así no
@@ -412,6 +454,12 @@ def _crear_registro(conv, paciente, hoy):
     fecha_referencia=checkin.fecha_dia corrige el cruce de medianoche: si el
     paciente responde un check-in de ayer después de las 00:00, el engine agrupa
     los datos por el día correcto (decisión 0-①).
+
+    Robustez (savepoint defensivo): la evaluación corre dentro de su propio
+    savepoint. Si el motor de alertas fallara (bug futuro), se descarta solo la
+    evaluación — el RegistroDiario y el check-in COMPLETADO SIEMPRE quedan
+    guardados, y el paciente recibe el mensaje de cierre neutro. Nunca se pierde
+    el reporte del paciente por un fallo del engine.
     """
     registro = RegistroDiario.objects.create(
         paciente=paciente,
@@ -445,10 +493,23 @@ def _crear_registro(conv, paciente, hoy):
     else:
         fecha_referencia = hoy
 
-    transaction.on_commit(
-        lambda: evaluar_registro(registro, fecha_referencia=fecha_referencia)
-    )
-    return registro
+    alertas_nuevas = []
+    try:
+        with transaction.atomic():  # savepoint: aísla un posible fallo del engine
+            alertas_nuevas = evaluar_registro(
+                registro, fecha_referencia=fecha_referencia
+            )
+    except Exception:
+        # El reporte del paciente ya está guardado (fuera de este savepoint).
+        # No se pierde nada; el paciente recibe el cierre neutro.
+        logger.exception(
+            "Fallo al evaluar alertas del registro pk=%s (paciente pk=%s); "
+            "el registro queda guardado, cierre neutro.",
+            registro.pk, paciente.pk,
+        )
+        alertas_nuevas = []
+
+    return registro, alertas_nuevas
 
 
 # ---------------------------------------------------------------------------

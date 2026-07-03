@@ -1157,17 +1157,18 @@ class BotWhatsAppTests(TestCase):
         self.assertIsNone(conv.temp_temperatura)  # parciales limpiados
 
     def test_alerta_no_se_muestra_al_paciente(self):
-        # B3: evaluar_registro corre vía on_commit (post-commit en producción).
-        # captureOnCommitCallbacks(execute=True) lo ejecuta síncronamente en tests.
+        # Bloque B: evaluar_registro ahora corre de forma síncrona dentro de
+        # _crear_registro, así que la alerta ya existe al armar la respuesta.
         self._crear_paciente()
-        with self.captureOnCommitCallbacks(execute=True):
-            respuesta = self._completar_flujo(temperatura="38.5")  # dispara SEPSIS
+        respuesta = self._completar_flujo(temperatura="38.5")  # dispara SEPSIS (ALTA)
         # La alerta se crea para el oncólogo...
         self.assertEqual(Alerta.objects.filter(tipo="SEPSIS").count(), 1)
-        # ...pero el paciente solo ve la confirmación neutra.
-        self.assertEqual(respuesta, bot.MSG_CONFIRMACION)
+        # ...y el paciente recibe el cierre de severidad ALTA, pero SIN ver el
+        # tipo de alerta ni los valores que la dispararon.
+        self.assertEqual(respuesta, bot.MSG_CIERRE_ALERTA_ALTA)
         self.assertNotIn("sepsis", respuesta.lower())
         self.assertNotIn("alerta", respuesta.lower())
+        self.assertNotIn("38.5", respuesta)
 
     def test_temperatura_invalida_reintenta(self):
         self._crear_paciente()
@@ -1320,6 +1321,90 @@ class BotWhatsAppTests(TestCase):
         self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_COMPLETADO)
         self.assertEqual(checkin.registro, registro)
         self.assertIsNotNone(checkin.fecha_respuesta)
+
+
+class BotMensajeCierreAlertaTests(TestCase):
+    """Bloque B — mensaje de cierre del bot según severidad de las alertas
+    generadas por el check-in. El paciente nunca ve el tipo de alerta ni los
+    valores; solo una recomendación de acción tranquilizadora."""
+
+    TELEFONO = "+573001114455"
+    TELEFONO_TWILIO = "whatsapp:+573001114455"
+
+    def _crear_paciente(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Cierre",
+            telefono_whatsapp=self.TELEFONO,
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),
+            consentimiento_informado=True,
+        )
+        CheckInProgramado.objects.create(
+            paciente=paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now(),
+        )
+        return paciente
+
+    def _completar_flujo(self, temperatura="37.0", aspecto="1", gases_nauseas="sí, 0"):
+        """Recorre las 10 preguntas con drenaje presente. Devuelve la respuesta final."""
+        env = lambda t: bot.procesar_mensaje(self.TELEFONO_TWILIO, t)
+        env("hola")            # -> temperatura
+        env(temperatura)       # -> dolor
+        env("3")               # -> tiene_drenaje
+        env("sí")              # -> aspecto
+        env(aspecto)           # -> cantidad
+        env("normal")          # -> gases/nauseas
+        env(gases_nauseas)     # -> hinchazón
+        env("nada")            # -> frecuencia cardíaca
+        env("78")              # -> frecuencia respiratoria
+        env("16")              # -> tolerancia líquidos
+        return env("sí")
+
+    # --- Unidad: selección de mensaje según severidad máxima ---
+
+    def test_mensaje_cierre_sin_alertas_es_confirmacion(self):
+        self.assertEqual(bot._mensaje_cierre([]), bot.MSG_CONFIRMACION)
+
+    def test_mensaje_cierre_solo_baja_es_confirmacion(self):
+        from types import SimpleNamespace
+        alertas = [SimpleNamespace(severidad='BAJA')]
+        self.assertEqual(bot._mensaje_cierre(alertas), bot.MSG_CONFIRMACION)
+
+    def test_mensaje_cierre_media_y_alta_prioriza_alta(self):
+        from types import SimpleNamespace
+        alertas = [SimpleNamespace(severidad='MEDIA'), SimpleNamespace(severidad='ALTA')]
+        self.assertEqual(bot._mensaje_cierre(alertas), bot.MSG_CIERRE_ALERTA_ALTA)
+
+    # --- Integración: a través del flujo real + motor de alertas ---
+
+    def test_flujo_drenaje_seroso_baja_devuelve_confirmacion(self):
+        self._crear_paciente()
+        respuesta = self._completar_flujo(aspecto="1")  # seroso -> FUGA BAJA
+        self.assertEqual(respuesta, bot.MSG_CONFIRMACION)
+
+    def test_flujo_drenaje_turbio_media_devuelve_cierre_media(self):
+        self._crear_paciente()
+        respuesta = self._completar_flujo(aspecto="3")  # turbio -> FUGA MEDIA
+        self.assertEqual(respuesta, bot.MSG_CIERRE_ALERTA_MEDIA)
+
+    def test_flujo_temperatura_alta_devuelve_cierre_alta(self):
+        self._crear_paciente()
+        respuesta = self._completar_flujo(temperatura="38.5")  # SEPSIS ALTA
+        self.assertEqual(respuesta, bot.MSG_CIERRE_ALERTA_ALTA)
+
+    def test_flujo_media_y_alta_devuelve_cierre_alta(self):
+        self._crear_paciente()
+        # temperatura 38.5 (SEPSIS ALTA) + drenaje turbio (FUGA MEDIA) -> ALTA
+        respuesta = self._completar_flujo(temperatura="38.5", aspecto="3")
+        self.assertEqual(respuesta, bot.MSG_CIERRE_ALERTA_ALTA)
+
+    def test_mensajes_cierre_no_revelan_clasificacion_clinica(self):
+        for msg in (bot.MSG_CIERRE_ALERTA_MEDIA, bot.MSG_CIERRE_ALERTA_ALTA):
+            low = msg.lower()
+            for prohibida in ('sepsis', 'fuga', 'taquicardia', 'alerta', 'riesgo', 'ileo'):
+                self.assertNotIn(prohibida, low)
 
 
 class ConsentimientoInformadoTests(TestCase):
