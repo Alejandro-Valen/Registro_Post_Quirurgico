@@ -2237,3 +2237,91 @@ sincronizada con `origin`.
    corchetes (`[Nombre del médico]`, `[correo]`, etc.) pendientes de
    completar con los datos reales del médico/institución antes de
    imprimirse para el primer paciente real.
+
+---
+
+## Sesión 02/07/2026 (tarde) — Post-Bloque 7: Bloques A, B, C
+
+**Responsable:** León (Arquitecto IA) con Claude Code
+**Estado:** Bloques A y B implementados; C verificado como no-op. **191 tests
+OK.** Rama activa: `sprint-5-produccion`, todo pusheado.
+
+**Qué se hizo:**
+- **Bloque A — Motivo de resolución en Alerta.** Se agregaron dos campos a
+  `Alerta`: `motivo_resolucion` (7 opciones fijas + "Otro") y
+  `motivo_resolucion_detalle` (texto libre, requerido solo si el motivo es
+  "Otro"). Migración `0017`. La acción del Admin "Marcar como resuelta" dejó
+  de resolver de un clic: ahora muestra un **formulario intermedio**
+  (`TemplateResponse` + template `admin/signos_sintomas/alerta/motivo_resolucion.html`)
+  donde el médico elige obligatoriamente el motivo antes de confirmar. El
+  campo de detalle se muestra/oculta con JS según el motivo. El scoping por
+  médico (un no-superuser solo resuelve alertas de sus propios pacientes) se
+  aplica en cada paso, re-filtrando por permisos sin confiar en los pk que
+  llegan del cliente. Los campos de resolución quedan readonly en el detalle.
+  6 tests nuevos + actualización del test existente `test_accion_marcar_resuelta`
+  al flujo de dos pasos.
+- **Bloque B — Tono de cierre del bot según severidad.** Cuando un check-in
+  genera alertas MEDIA o ALTA, el bot cierra con una recomendación de acción
+  al paciente: MEDIA → "contacta a tu médico en las próximas horas"; ALTA →
+  "comunícate con tu médico o ve a urgencias". Tono tranquilizador; **nunca**
+  menciona el tipo de alerta ni los valores. BAJA y sin alertas mantienen el
+  cierre neutro (`MSG_CONFIRMACION`). 8 tests nuevos.
+- **Bloque C — Limpieza de Sugarbaker en index.html: NO-OP.** Ver decisiones.
+
+**Decisiones tomadas:**
+- **Bloque B, ubicación de la evaluación de alertas (decisión de León:
+  savepoint defensivo).** Para poder elegir el mensaje de cierre según la
+  severidad, el bot necesita conocer las alertas ANTES de responder. Hoy
+  `evaluar_registro` corría diferido en `transaction.on_commit` — es decir,
+  DESPUÉS de que el bot ya respondió (la premisa del documento de
+  instrucciones era correcta, verificada contra el código). Se movió a
+  ejecución **síncrona** dentro de `_crear_registro`, que ahora devuelve
+  `(registro, alertas_nuevas)`. La evaluación va dentro de un **savepoint**
+  (`with transaction.atomic()` anidado) con `try/except`: si el motor de
+  alertas fallara (bug futuro), se descarta solo la evaluación —el
+  RegistroDiario y el check-in COMPLETADO SIEMPRE quedan guardados y el
+  paciente recibe el cierre neutro—. Esto es más robusto que el diseño
+  anterior (donde un fallo del engine en on_commit podía 500 tras guardar el
+  registro, o dejar alertas sin crear) y que la versión simple del documento
+  (que perdería el registro del paciente en un rollback). Django descarta los
+  callbacks `on_commit` registrados dentro de un savepoint que se revierte,
+  así que un fallo de evaluación tampoco dispara emails espurios.
+- **Bloque C es un no-op verificado, no se inventaron cambios.** El documento
+  pedía limpiar restos de "Sugarbaker"/"HIPEC" de `home/templates/home/index.html`.
+  Auditoría (`grep -i` sobre todo el repo): NO hay ninguna mención en
+  `index.html` ni en ninguna plantilla de `home`. Las únicas apariciones son
+  la opción legítima `sugarbaker_hipec` del campo `tipo_cirugia` en
+  `models.py` (que el propio documento dice NO tocar) y tres migraciones
+  (inmutables). No había nada que limpiar; se documenta como verificado y no
+  se tocó código. Se consultó a León antes de saltarlo.
+
+**Problemas / observaciones:**
+- El cambio de Bloque B rompió a propósito el test `test_alerta_no_se_muestra_al_paciente`,
+  que afirmaba que un check-in con fiebre alta (SEPSIS ALTA) devolvía
+  `MSG_CONFIRMACION`. Bajo Bloque B ese caso ahora devuelve
+  `MSG_CIERRE_ALERTA_ALTA`. Se actualizó el test preservando su intención
+  real (el paciente no ve el tipo de alerta ni los valores): ahora verifica
+  que la respuesta es el cierre ALTA y que NO contiene "sepsis", "alerta" ni
+  el valor "38.5".
+- La premisa técnica del documento (que `evaluar_registro` corría en
+  on_commit) resultó CORRECTA esta vez —se verificó en `bot.py` antes de
+  actuar— a diferencia de sesiones anteriores donde las premisas externas
+  tenían errores. Se deja anotado que la auditoría previa sigue siendo
+  obligatoria aunque a veces confirme que el documento estaba bien.
+
+**Tests al cerrar:** 191 OK (177 → +6 Bloque A → 183 → +8 Bloque B → 191).
+`manage.py check` limpio.
+
+**Commits:** `a04a7d4` (feat Bloque A), `b7d86c3` (feat Bloque B), + este
+`docs`. Bloque C sin commit de código (no-op).
+
+**Qué queda pendiente — paso exacto:**
+1. **Prueba manual real por WhatsApp (canal Twilio):** completar un check-in
+   con datos que disparen una alerta MEDIA y otra ALTA, y confirmar que
+   llegan `MSG_CIERRE_ALERTA_MEDIA` / `MSG_CIERRE_ALERTA_ALTA` al teléfono.
+   Los tests cubren la lógica, no el canal.
+2. Escalamiento automático MEDIA→ALTA: **diferido a Sprint 6** (decisión del
+   documento, no implementado en esta sesión).
+3. Resto de Sprint 5: desplegar en Railway/Render, Twilio saliente real en
+   `enviar_recordatorios`, monitoreo externo, Nginx `REMOTE_ADDR`, y
+   completar los campos entre corchetes del formato de consentimiento.

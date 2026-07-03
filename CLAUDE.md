@@ -224,17 +224,28 @@ captura el bot (escala cualitativa, accesible para cualquier paciente).
 el paciente lo menciona espontáneamente (ej. "poco, 30ml"). El alert_engine usa
 `aspecto_drenaje`, no `cantidad_drenaje` ni `volumen_drenaje_ml`, para las alertas.
 
-### Alerta (Sprint 1)
+### Alerta (Sprint 1, ampliado en Sprint 4 y Bloque A)
 ```python
 paciente              ForeignKey(Paciente, PROTECT)
-registro_origen       ForeignKey(RegistroDiario, PROTECT)
-tipo                  CharField choices=[SEPSIS,FUGA_ANASTOMOTICA,ILEO_PARALITICO,DOLOR_AGUDO,INTOLERANCIA_ORAL,TAQUICARDIA]
+registro_origen       ForeignKey(RegistroDiario, PROTECT, null=True, blank=True)
+                      # null solo para alertas SILENCIO (check-in sin respuesta)
+tipo                  CharField choices=[SEPSIS,FUGA_ANASTOMOTICA,ILEO_PARALITICO,DOLOR_AGUDO,INTOLERANCIA_ORAL,TAQUICARDIA,SILENCIO]
 severidad             CharField choices=[ALTA,MEDIA,BAJA]
 mensaje               TextField
 resuelta              BooleanField default=False
 fecha_alerta          DateTimeField auto_now_add=True
 fecha_resolucion      DateTimeField null=True blank=True
+motivo_resolucion     CharField choices=[CONTACTO,URGENCIAS,MEDICACION,FP_MEDICION,FP_RANGO,ESPONTANEO,OTRO] null=True blank=True
+                      # Bloque A — obligatorio al resolver (vía formulario intermedio del Admin)
+motivo_resolucion_detalle CharField(500) null=True blank=True  # requerido solo si motivo=OTRO
 ```
+
+**Motivo de resolución (Bloque A, 02/07/2026):** el médico debe elegir un
+motivo al marcar una alerta como resuelta — la acción "Marcar como resuelta"
+del Admin muestra un formulario intermedio (default "Atendido — contacté al
+paciente"; "Otro" exige detalle libre). Sirve para ajustar umbrales clínicos
+con datos reales en el futuro. El scoping por médico se aplica en cada paso
+(un médico no-superuser solo resuelve alertas de sus propios pacientes).
 
 ### ConversacionWhatsApp (Sprint 3, ampliado en Sprint 3.5)
 ```python
@@ -292,13 +303,23 @@ INICIO
   → ESPERANDO_FRECUENCIA_CARDIACA "¿cuál es tu frecuencia cardíaca? (lpm)"
   → ESPERANDO_FRECUENCIA_RESPIRATORIA "¿cuál es tu frecuencia respiratoria? (rpm)"
   → ESPERANDO_TOLERANCIA_LIQUIDOS "¿Ha podido tomar líquidos sin vomitar? sí/no"
-  → COMPLETADO                  crea RegistroDiario, llama evaluar_registro(), confirmación neutra
+  → COMPLETADO                  crea RegistroDiario, evalúa alertas (síncrono),
+                                cierra con mensaje según severidad (neutro / MEDIA / ALTA)
 ```
 
 **Reglas de diseño no negociables:**
-1. **El paciente nunca ve alertas.** Solo recibe confirmación neutra
-   ("¡Listo! Hemos registrado tu reporte de hoy 🌿"). Las alertas son
-   exclusivamente para el oncólogo en el admin.
+1. **El paciente nunca ve el tipo de alerta ni los valores que la
+   dispararon.** El detalle clínico (SEPSIS, FUGA, taquicardia, umbrales,
+   etc.) es exclusivo del oncólogo en el admin. Desde el Bloque B
+   (02/07/2026) el mensaje de cierre SÍ varía según la severidad máxima de
+   las alertas del check-in, pero solo como recomendación de acción
+   tranquilizadora: BAJA/sin alertas → `MSG_CONFIRMACION` (neutro); MEDIA
+   → `MSG_CIERRE_ALERTA_MEDIA` ("contacta a tu médico en las próximas
+   horas"); ALTA → `MSG_CIERRE_ALERTA_ALTA` ("comunícate con tu médico o
+   ve a urgencias"). Ninguno menciona el tipo de alerta ni valores.
+   Implementación: `evaluar_registro` corre de forma síncrona dentro de
+   `_crear_registro` (en un savepoint defensivo) para conocer la severidad
+   antes de responder; ver `_mensaje_cierre`.
 2. **Identificación por `telefono_whatsapp` + `activo=True`.** Si el número no
    está registrado, el bot responde amablemente sin crear nada — nunca crea
    pacientes desde el chat.
@@ -374,17 +395,18 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7/7 completos (correcciones pre-Bloque 7 + HABEAS DATA), rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7/7 + mejoras post-Bloque 7 (A: motivo de resolución, B: tono del bot), rama `sprint-5-produccion` |
 
-**Punto actual (02/07/2026):** Sprint 5 con los 7 Bloques completos —
-incluye correcciones de auditoría pre-Bloque 7 (A-1 a A-4) y el Bloque 7
-(HABEAS DATA / consentimiento informado). **177 tests OK.** Rama activa:
-`sprint-5-produccion`.
+**Punto actual (02/07/2026):** Sprint 5 con los 7 Bloques completos más
+dos mejoras post-Bloque 7: **Bloque A** (motivo de resolución obligatorio
+en `Alerta`) y **Bloque B** (mensaje de cierre del bot según severidad).
+**191 tests OK.** Rama activa: `sprint-5-produccion`.
 **Próximo paso: desplegar en Railway/Render (Sprint 5 sin empezar) —
 ver "Diferido explícitamente" abajo. Antes del primer paciente real,
 falta completar los campos entre corchetes de
 `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` con los datos reales del
-médico/institución.**
+médico/institución, y hacer la prueba manual real por WhatsApp del
+mensaje de cierre MEDIA/ALTA (canal Twilio, no cubierto por tests).**
 
 Decisiones de producto P-1 a P-15 confirmadas en sesión (01/07/2026) —
 ver tabla completa en `ROADMAP_MONITOREO_POSQUIRURGICO.md`, FASE 5.
@@ -419,6 +441,20 @@ Resumen de lo resuelto en `sprint-5-produccion` (Bloques 1-6):
   + guard en `bot.py` que bloquea el flujo si el paciente no ha sido
   confirmado por su médico. Plantilla `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md`
   ya aprobada por el Arquitecto, copiada sin modificar. 6 tests.
+- Bloque A (post-Bloque 7, 02/07/2026): `Alerta.motivo_resolucion` +
+  `motivo_resolucion_detalle` (migración 0017). La acción "Marcar como
+  resuelta" del Admin muestra un formulario intermedio que exige elegir un
+  motivo ("Otro" pide detalle); scoping por médico en cada paso. 6 tests.
+- Bloque B (post-Bloque 7, 02/07/2026): mensaje de cierre del bot según
+  severidad de las alertas del check-in (neutro / MEDIA / ALTA), sin
+  revelar el tipo de alerta ni valores. `evaluar_registro` pasó a correr
+  síncrono dentro de `_crear_registro` (savepoint defensivo: un fallo del
+  engine nunca pierde el reporte del paciente). 8 tests.
+- Bloque C (post-Bloque 7, 02/07/2026): **no-op verificado.** Se buscó
+  limpiar restos de "Sugarbaker"/"HIPEC" en `index.html`; la auditoría
+  confirmó que NO existen en `home` ni en ninguna plantilla — el único uso
+  legítimo es la opción `sugarbaker_hipec` de `tipo_cirugia` en `models.py`
+  (no se toca) y las migraciones (inmutables). Nada que limpiar.
 
 Ambas preguntas de arquitectura que quedaban abiertas ya se resolvieron:
 cron en **Linux** (Railway/Render, no Windows Task Scheduler) y SMTP con

@@ -574,10 +574,13 @@ del alert_engine, jun 2026):**
   mucho tiempo sin marcarse `resuelta`, ¿debería escalar sola a ALTA?
   Depende de los campos `resuelta`/`fecha_resolucion` que ya existen en
   el modelo `Alerta` pero no se usan activamente todavía.
-- [ ] Campo de "motivo de resolución" en `Alerta` para diferenciar caso
-  real vs. falso positivo — útil si se quiere ajustar umbrales del
-  alert_engine con datos reales en el futuro, no indispensable para el
-  primer dashboard.
+  **(02/07/2026: diferido explícitamente a Sprint 6.)**
+- [x] **Campo de "motivo de resolución" en `Alerta` (Bloque A, 02/07/2026).**
+  Implementado: `motivo_resolucion` (7 opciones + "Otro") +
+  `motivo_resolucion_detalle` (migración 0017). La acción "Marcar como
+  resuelta" del Admin exige elegir el motivo en un formulario intermedio
+  antes de resolver ("Otro" pide detalle); scoping por médico en cada paso.
+  Útil para ajustar umbrales del alert_engine con datos reales. 6 tests.
 - [ ] Duración del seguimiento del bot por paciente: ¿cuándo se
   desactiva automáticamente `Paciente.activo`? Hoy nada lo cambia solo
   — definir si es un número fijo de días postoperatorios, o si el
@@ -805,6 +808,23 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   **Pendiente antes de pacientes reales:** completar los campos entre
   corchetes del formato (datos del médico/institución) antes de
   imprimirlo.
+- [x] **Bloque A — Motivo de resolución en Alerta (02/07/2026):** ver
+  detalle en "Decisiones de diseño pendientes" arriba (checkbox marcado).
+  `motivo_resolucion` + `motivo_resolucion_detalle` (migración 0017),
+  formulario intermedio obligatorio en el Admin. **183 tests OK.**
+- [x] **Bloque B — Tono de cierre del bot según severidad (02/07/2026):**
+  el check-in con alerta MEDIA/ALTA cierra con recomendación de acción al
+  paciente (MEDIA: contactar médico; ALTA: urgencias), sin revelar tipo de
+  alerta ni valores. `evaluar_registro` pasó de `on_commit` a síncrono
+  dentro de `_crear_registro` (savepoint defensivo — un fallo del engine
+  nunca pierde el reporte del paciente). **191 tests OK.** **Pendiente:**
+  prueba manual real por WhatsApp de los mensajes MEDIA/ALTA (canal Twilio,
+  fuera de `manage.py test`).
+- [x] **Bloque C — Limpieza de Sugarbaker en index.html (02/07/2026):
+  no-op verificado.** No existe ninguna mención de "Sugarbaker"/"HIPEC" en
+  `index.html` ni en `home`; el único uso es la opción legítima
+  `sugarbaker_hipec` de `tipo_cirugia` (no se toca) y migraciones
+  (inmutables). Nada que limpiar; sin cambios de código.
 - [ ] Configurar monitoreo externo básico (ping al servidor cada 5 min)
   para detectar caídas totales independientemente del cron
 - [ ] Nginx: `proxy_set_header REMOTE_ADDR $remote_addr;` para que el
