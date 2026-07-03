@@ -1,13 +1,44 @@
 import json
 from datetime import timedelta
 
+from django import forms as django_forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
+from django.template.response import TemplateResponse
 from django.utils import timezone
 from django.utils.html import format_html, mark_safe
 
 from .models import Alerta, CheckInProgramado, Paciente, RegistroDiario
 from .management.commands.desactivar_pacientes_vencidos import DIAS_SEGUIMIENTO
+
+
+class MotivoResolucionForm(django_forms.Form):
+    """Formulario intermedio de la acción 'Marcar como resuelta' (Bloque A).
+    Captura el motivo obligatorio y, solo para 'Otro', un detalle libre.
+
+    Los pk seleccionados NO viajan en el form: se leen de request.POST
+    ('_selected_action', el mismo nombre que usa el admin) y se re-filtran
+    por permisos en la acción, para no confiar en input del cliente."""
+    motivo_resolucion = django_forms.ChoiceField(
+        choices=Alerta.MOTIVOS_RESOLUCION,
+        initial=Alerta.MOTIVO_CONTACTO,
+        label='Motivo de resolución',
+    )
+    motivo_resolucion_detalle = django_forms.CharField(
+        max_length=500,
+        required=False,
+        label='Detalle (solo si seleccionó "Otro")',
+        widget=django_forms.Textarea(attrs={'rows': 2}),
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get('motivo_resolucion') == Alerta.MOTIVO_OTRO \
+                and not cleaned.get('motivo_resolucion_detalle'):
+            raise django_forms.ValidationError(
+                'Debes especificar el detalle cuando el motivo es "Otro".'
+            )
+        return cleaned
 
 
 def _solo_propios(request):
@@ -491,6 +522,8 @@ class AlertaAdmin(admin.ModelAdmin):
     list_filter = ['tipo', 'severidad', 'resuelta']
     search_fields = ['paciente__nombre_completo']
     actions = ['marcar_resuelta']
+    readonly_fields = ['fecha_alerta', 'fecha_resolucion', 'registro_origen',
+                       'motivo_resolucion', 'motivo_resolucion_detalle']
 
     @admin.display(description='Severidad', ordering='severidad')
     def severidad_badge(self, obj):
@@ -514,10 +547,42 @@ class AlertaAdmin(admin.ModelAdmin):
 
     @admin.action(description='Marcar como resuelta')
     def marcar_resuelta(self, request, queryset):
-        from django.utils import timezone as tz
+        """Bloque A: muestra un formulario intermedio para capturar el motivo
+        de resolución (obligatorio) antes de marcar las alertas como resueltas.
+
+        Scoping: un médico no-superuser solo puede resolver alertas de sus
+        propios pacientes — se re-filtra por permisos en cada paso, nunca se
+        confía en los pk que llegan del cliente.
+        """
+        if _solo_propios(request):
+            queryset = queryset.filter(paciente__medico_responsable=request.user)
+
+        contexto = {
+            **self.admin_site.each_context(request),
+            'alertas': queryset,
+            'title': 'Selecciona el motivo de resolución',
+            'accion': 'marcar_resuelta',
+        }
+        plantilla = 'admin/signos_sintomas/alerta/motivo_resolucion.html'
+
+        # Paso 1: primera vez que se dispara la acción → mostrar formulario.
+        if 'aplicar' not in request.POST:
+            contexto['form'] = MotivoResolucionForm()
+            return TemplateResponse(request, plantilla, contexto)
+
+        # Paso 2: formulario enviado → validar y aplicar.
+        form = MotivoResolucionForm(request.POST)
+        if not form.is_valid():
+            contexto['form'] = form
+            return TemplateResponse(request, plantilla, contexto)
+
+        motivo = form.cleaned_data['motivo_resolucion']
+        detalle = form.cleaned_data['motivo_resolucion_detalle']
         actualizadas = queryset.filter(resuelta=False).update(
             resuelta=True,
-            fecha_resolucion=tz.now(),
+            fecha_resolucion=timezone.now(),
+            motivo_resolucion=motivo,
+            motivo_resolucion_detalle=detalle or None,
         )
         self.message_user(
             request,

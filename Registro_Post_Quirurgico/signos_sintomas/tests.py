@@ -1896,18 +1896,131 @@ class AlertaAdminAccionesTests(TestCase):
         self.assertContains(resp, 'border-radius')
 
     def test_accion_marcar_resuelta(self):
-        """La acción marcar_resuelta actualiza la alerta y registra fecha_resolucion."""
+        """Bloque A: marcar_resuelta con el paso 'aplicar' + motivo actualiza
+        la alerta, registra fecha_resolucion y guarda el motivo."""
         self.client.force_login(self.superuser)
         self.client.post(
             '/admin/signos_sintomas/alerta/',
             {
                 'action': 'marcar_resuelta',
+                'aplicar': '1',
                 '_selected_action': [str(self.alerta.pk)],
+                'motivo_resolucion': Alerta.MOTIVO_CONTACTO,
+                'motivo_resolucion_detalle': '',
             },
         )
         self.alerta.refresh_from_db()
         self.assertTrue(self.alerta.resuelta)
         self.assertIsNotNone(self.alerta.fecha_resolucion)
+        self.assertEqual(self.alerta.motivo_resolucion, Alerta.MOTIVO_CONTACTO)
+
+
+class AlertaMotivoResolucionTests(TestCase):
+    """Bloque A — motivo de resolución obligatorio con formulario intermedio."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.superuser = User.objects.create_superuser(username='super_motivo', password='pass')
+        self.medico = User.objects.create_user(
+            username='dr_motivo', password='pass', is_staff=True,
+        )
+        self.otro_medico = User.objects.create_user(
+            username='dr_otro', password='pass', is_staff=True,
+        )
+        self._dar_permisos(self.medico)
+        self._dar_permisos(self.otro_medico)
+        self.paciente = Paciente.objects.create(
+            nombre_completo="Paciente Motivo",
+            telefono_whatsapp="+573018880001",
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable=self.medico,
+        )
+        self.registro = RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('37.0'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+        self.alerta = Alerta.objects.create(
+            paciente=self.paciente,
+            registro_origen=self.registro,
+            tipo='SEPSIS', severidad='ALTA', mensaje='Fiebre test',
+        )
+
+    def _dar_permisos(self, user):
+        from django.contrib.auth.models import Permission
+        perms = Permission.objects.filter(
+            content_type__app_label='signos_sintomas',
+            content_type__model='alerta',
+        )
+        user.user_permissions.add(*perms)
+
+    def _post_accion(self, extra):
+        data = {
+            'action': 'marcar_resuelta',
+            '_selected_action': [str(self.alerta.pk)],
+        }
+        data.update(extra)
+        return self.client.post('/admin/signos_sintomas/alerta/', data)
+
+    def test_motivo_resolucion_null_por_default(self):
+        """Una alerta recién creada no tiene motivo de resolución."""
+        self.assertIsNone(self.alerta.motivo_resolucion)
+
+    def test_accion_sin_aplicar_muestra_formulario_intermedio(self):
+        self.client.force_login(self.superuser)
+        resp = self._post_accion({})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'motivo de resolución')
+        self.alerta.refresh_from_db()
+        self.assertFalse(self.alerta.resuelta)
+
+    def test_aplicar_con_motivo_valido_resuelve_y_guarda_motivo(self):
+        self.client.force_login(self.superuser)
+        self._post_accion({
+            'aplicar': '1',
+            'motivo_resolucion': Alerta.MOTIVO_URGENCIAS,
+            'motivo_resolucion_detalle': '',
+        })
+        self.alerta.refresh_from_db()
+        self.assertTrue(self.alerta.resuelta)
+        self.assertEqual(self.alerta.motivo_resolucion, Alerta.MOTIVO_URGENCIAS)
+
+    def test_motivo_otro_sin_detalle_no_resuelve(self):
+        self.client.force_login(self.superuser)
+        resp = self._post_accion({
+            'aplicar': '1',
+            'motivo_resolucion': Alerta.MOTIVO_OTRO,
+            'motivo_resolucion_detalle': '',
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'detalle cuando el motivo es')
+        self.alerta.refresh_from_db()
+        self.assertFalse(self.alerta.resuelta)
+
+    def test_motivo_otro_con_detalle_resuelve_y_guarda_detalle(self):
+        self.client.force_login(self.superuser)
+        self._post_accion({
+            'aplicar': '1',
+            'motivo_resolucion': Alerta.MOTIVO_OTRO,
+            'motivo_resolucion_detalle': 'Resuelto en control presencial.',
+        })
+        self.alerta.refresh_from_db()
+        self.assertTrue(self.alerta.resuelta)
+        self.assertEqual(self.alerta.motivo_resolucion, Alerta.MOTIVO_OTRO)
+        self.assertEqual(
+            self.alerta.motivo_resolucion_detalle, 'Resuelto en control presencial.'
+        )
+
+    def test_medico_no_resuelve_alertas_de_pacientes_ajenos(self):
+        """El otro médico no es responsable de este paciente → no la resuelve."""
+        self.client.force_login(self.otro_medico)
+        self._post_accion({
+            'aplicar': '1',
+            'motivo_resolucion': Alerta.MOTIVO_CONTACTO,
+            'motivo_resolucion_detalle': '',
+        })
+        self.alerta.refresh_from_db()
+        self.assertFalse(self.alerta.resuelta)
 
 
 class AlertaEmailNotificacionTests(TestCase):

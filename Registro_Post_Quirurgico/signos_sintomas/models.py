@@ -309,6 +309,46 @@ class Alerta(models.Model):
         help_text="Cuándo fue atendida por el médico"
     )
 
+    # Motivo de resolución (Bloque A, 02/07/2026) — el médico lo selecciona
+    # obligatoriamente al marcar la alerta como resuelta. Útil para ajustar
+    # umbrales clínicos con datos reales en el futuro.
+    MOTIVO_CONTACTO    = 'CONTACTO'
+    MOTIVO_URGENCIAS   = 'URGENCIAS'
+    MOTIVO_MEDICACION  = 'MEDICACION'
+    MOTIVO_FP_MEDICION = 'FP_MEDICION'
+    MOTIVO_FP_RANGO    = 'FP_RANGO'
+    MOTIVO_ESPONTANEO  = 'ESPONTANEO'
+    MOTIVO_OTRO        = 'OTRO'
+
+    MOTIVOS_RESOLUCION = [
+        (MOTIVO_CONTACTO,    'Atendido — contacté al paciente'),
+        (MOTIVO_URGENCIAS,   'Atendido — derivado a urgencias'),
+        (MOTIVO_MEDICACION,  'Atendido — ajuste de medicación'),
+        (MOTIVO_FP_MEDICION, 'Falso positivo — error de medición del paciente'),
+        (MOTIVO_FP_RANGO,    'Falso positivo — dato fuera de rango esperado'),
+        (MOTIVO_ESPONTANEO,  'Resuelto espontáneamente — sin intervención'),
+        (MOTIVO_OTRO,        'Otro'),
+    ]
+
+    motivo_resolucion = models.CharField(
+        max_length=20,
+        choices=MOTIVOS_RESOLUCION,
+        null=True,
+        blank=True,
+        verbose_name='Motivo de resolución',
+        help_text=(
+            'Por qué se marcó esta alerta como resuelta. '
+            'Útil para ajustar umbrales clínicos con datos reales en el futuro.'
+        ),
+    )
+    motivo_resolucion_detalle = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        verbose_name='Detalle del motivo',
+        help_text='Solo requerido cuando el motivo es "Otro".',
+    )
+
     class Meta:
         verbose_name = "Alerta"
         verbose_name_plural = "Alertas"
