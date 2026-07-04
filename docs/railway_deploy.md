@@ -1,0 +1,110 @@
+# Despliegue en Railway — referencia
+
+> Este documento es el **guion de referencia** para el despliegue en Railway.
+> Los pasos clic-por-clic se hacen en sesión guiada con Claude Code; aquí quedan
+> fijas las decisiones, las variables de entorno exactas y el orden correcto,
+> para no depender de la memoria de nadie.
+>
+> Estado: repo **preparado para deploy** (04/07/2026). Falta ejecutar los pasos
+> de Railway (parte de infraestructura).
+
+---
+
+## 1. Cómo está preparado el repo (parte código, ya hecha)
+
+- **`nixpacks.toml`** (raíz del repo) controla el build y el arranque:
+  - Instala desde **`requirements-runtime.txt`** (limpio), NO desde
+    `requirements.txt` (que es el `pip freeze` completo de desarrollo e incluye
+    paquetes solo-Windows —`pywin32`, `winrt-*`— que romperían el build en Linux).
+  - Build: `collectstatic` (archivos estáticos del Admin).
+  - Arranque: `migrate` + `gunicorn`, con `--chdir Registro_Post_Quirurgico`
+    porque `manage.py` vive un nivel debajo de la raíz del repo.
+- **`.python-version`** = `3.13` (fija la versión de Python del build).
+- **WhiteNoise** sirve los estáticos del Admin en producción (Railway no tiene
+  Nginx delante). Configurado en `settings_production.py`.
+- **`gunicorn` + `whitenoise`** añadidos a `requirements-runtime.txt`.
+
+**No hay que cambiar nada de esto en Railway** — es automático al conectar el repo.
+
+---
+
+## 2. Servicios a provisionar en Railway
+
+1. **Servicio web** (el repo, vía GitHub).
+2. **PostgreSQL** (plugin de Railway).
+3. **Redis** (plugin de Railway) — obligatorio: el cache compartido lo usan la
+   idempotencia del webhook y el rate limiting (si falta, fallan en silencio).
+
+---
+
+## 3. Variables de entorno (configurar ANTES del primer deploy)
+
+> Railway hace disponibles estas variables tanto en el build como en el arranque.
+> El `collectstatic` del build necesita que ya existan (importa
+> `settings_production`). Por eso: **primero variables, luego deploy.**
+
+| Variable | Valor / de dónde sale |
+|----------|----------------------|
+| `DJANGO_SETTINGS_MODULE` | `Registro_Post_Quirurgico.settings_production` |
+| `SECRET_KEY` | Clave nueva y larga, **distinta** a la de desarrollo. Generar con `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` |
+| `ALLOWED_HOSTS` | El dominio de Railway, ej. `mi-app.up.railway.app` (sin `https://`). **Ojo:** la variable se llama `ALLOWED_HOSTS`, no `DJANGO_ALLOWED_HOSTS`. |
+| `CSRF_TRUSTED_ORIGINS` | El mismo dominio **con** esquema: `https://mi-app.up.railway.app` |
+| `DB_NAME` | Referencia al Postgres de Railway: `${{Postgres.PGDATABASE}}` |
+| `DB_USER` | `${{Postgres.PGUSER}}` |
+| `DB_PASSWORD` | `${{Postgres.PGPASSWORD}}` |
+| `DB_HOST` | `${{Postgres.PGHOST}}` |
+| `DB_PORT` | `${{Postgres.PGPORT}}` |
+| `REDIS_URL` | Referencia al Redis de Railway: `${{Redis.REDIS_URL}}` |
+| `EMAIL_HOST_USER` | Cuenta Gmail del proyecto (Bloque 5) |
+| `EMAIL_HOST_PASSWORD` | **Contraseña de aplicación** de esa cuenta (16 caracteres, NUNCA la normal) |
+| `ADMIN_URL` | *(recomendado)* slug no trivial con `/` final, ej. `gestion-clinica-x7k2/`. Cambia la URL del Admin para reducir ataques. Si se omite, queda `admin/`. |
+| `TWILIO_AUTH_TOKEN` | Auth Token **primario** de Twilio (no el de Test) |
+| `TWILIO_VALIDATE_SIGNATURE` | `True` (o omitir — el default ya es `True`) |
+| `DEFAULT_FROM_EMAIL` | *(opcional)* si se omite, usa `EMAIL_HOST_USER` |
+
+> **Nota sobre `DB_*` con `${{Postgres.*}}`:** Railway permite "referenciar"
+> variables de otro servicio. Al escribir `${{Postgres.PGHOST}}` en el servicio
+> web, Railway sustituye el valor real del Postgres. Así no se copian secretos
+> a mano. (Si la UI de Railway cambió los nombres `PGHOST/PGDATABASE/...`, usar
+> los que muestre el panel del Postgres.)
+
+---
+
+## 4. Orden de ejecución (resumen)
+
+1. Crear proyecto en Railway y provisionar **PostgreSQL** y **Redis**.
+2. Añadir el **servicio web** desde el repo de GitHub (rama a decidir: se puede
+   desplegar `sprint-5-produccion` o mergear antes a `Desarrollo`).
+3. Cargar **todas** las variables de la tabla de arriba.
+4. Disparar el primer **deploy**. El build corre `collectstatic`; el arranque
+   corre `migrate` + `gunicorn`.
+5. Crear el **superusuario** (una vez): desde la consola/Shell del servicio en
+   Railway, `python Registro_Post_Quirurgico/manage.py createsuperuser`.
+6. Configurar los **cron jobs** (ver `docs/cron_setup.md`): 4 comandos, con
+   `desactivar_pacientes_vencidos` **antes** de `crear_checkins_diarios`. En
+   Railway se hacen como servicios "Cron" separados que corren el mismo repo con
+   el comando correspondiente.
+7. Actualizar el **webhook de Twilio** para que apunte a
+   `https://<dominio-railway>/<ruta-del-webhook>` (recordar: Auth Token primario).
+
+---
+
+## 5. Gotchas conocidos
+
+- **Primer deploy sin variables → falla.** `collectstatic` en el build importa
+  `settings_production`, que exige `SECRET_KEY`, `DB_*` y `EMAIL_*`. Cargar las
+  variables **antes** de desplegar.
+- **Estáticos del Admin sin estilo** → revisar que `collectstatic` corrió en el
+  build y que WhiteNoise está en el middleware (ya configurado). Si el build
+  falla en `collectstatic` por una referencia estática inexistente, degradar en
+  `settings_production.py` a `whitenoise.storage.CompressedStaticFilesStorage`
+  (sin manifest).
+- **`ALLOWED_HOSTS` mal escrito** → Django responde `400 Bad Request` a todo.
+  El valor es el host sin esquema; la variable se llama `ALLOWED_HOSTS`.
+- **Rate limit / IP real** → pendiente de Sprint 3-Hardening: el proxy debe
+  pasar la IP real (`REMOTE_ADDR`). En Railway se resuelve con la cabecera de
+  proxy correcta; `settings.py` ya tiene `USE_X_FORWARDED_HOST` y
+  `SECURE_PROXY_SSL_HEADER`.
+- **Antes del primer paciente real:** completar los `[corchetes]` de
+  `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` y hacer la prueba manual del bot
+  por WhatsApp (tono MEDIA/ALTA y flujo de consentimiento).
