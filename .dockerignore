@@ -1,0 +1,14 @@
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+staticfiles/
+.env
+.entorno_registro/
+entorno_registro/
+inicio_entornoR.bat
+# Documentación y freeze de desarrollo: no se necesitan en la imagen.
+docs/
+*.md
+requirements.txt
