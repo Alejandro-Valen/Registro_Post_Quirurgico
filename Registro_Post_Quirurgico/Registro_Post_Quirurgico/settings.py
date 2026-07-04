@@ -93,6 +93,10 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+# Destino de collectstatic. En producción WhiteNoise sirve desde aquí
+# (ver settings_production.py). En desarrollo runserver sirve los estáticos
+# de las apps directamente, así que STATIC_ROOT solo se usa al hacer deploy.
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

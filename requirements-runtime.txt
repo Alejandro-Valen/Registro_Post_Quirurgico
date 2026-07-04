@@ -1,8 +1,12 @@
-# Dependencias directas de runtime — instalar en producción.
-# Para reproducir el entorno exacto de desarrollo usar requirements.txt (pip freeze completo).
+# Dependencias directas de runtime — instalar en producción (Railway usa este
+# archivo vía nixpacks.toml, NO requirements.txt, que es el pip freeze completo
+# de desarrollo con paquetes solo-Windows que romperían el build en Linux).
 Django==6.0.6
 psycopg2-binary>=2.9
 python-decouple>=3.8
 twilio>=9.10
 django-axes==7.0.1
 redis>=5
+# Servidor WSGI de producción y servidor de estáticos (despliegue, 04/07/2026)
+gunicorn>=23.0
+whitenoise>=6.7

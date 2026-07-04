@@ -5,9 +5,13 @@ Uso:
     DJANGO_SETTINGS_MODULE=Registro_Post_Quirurgico.settings_production
 
 Variables de entorno OBLIGATORIAS en producción (además de las del .env base):
-    DJANGO_ALLOWED_HOSTS   — dominio real, ej: "midominio.com"
-    CSRF_TRUSTED_ORIGINS   — origen HTTPS, ej: "https://midominio.com"
+    ALLOWED_HOSTS          — dominio(s) real(es), separados por coma. Lo lee
+                             settings.py base con config('ALLOWED_HOSTS'); NO es
+                             'DJANGO_ALLOWED_HOSTS'. Ej: "midominio.up.railway.app"
+    CSRF_TRUSTED_ORIGINS   — origen HTTPS, ej: "https://midominio.up.railway.app"
     SECRET_KEY             — clave larga y aleatoria (no reutilizar la de desarrollo)
+    DB_NAME/DB_USER/DB_PASSWORD/DB_HOST/DB_PORT — credenciales de PostgreSQL
+    REDIS_URL              — cache compartido (ver CACHES abajo)
     EMAIL_HOST_USER        — cuenta de Gmail del proyecto (Sprint 5, Bloque 5)
     EMAIL_HOST_PASSWORD    — contraseña de aplicación de esa cuenta (NUNCA la normal)
 
@@ -19,6 +23,28 @@ from decouple import config, Csv
 
 # A6: DEBUG=False siempre en producción. Stacktrace nunca llega al cliente.
 DEBUG = False
+
+# --- Archivos estáticos con WhiteNoise (despliegue, 04/07/2026) ---
+# Railway no tiene un Nginx delante que sirva /static/, así que WhiteNoise
+# sirve los estáticos del Admin desde el propio proceso Django. El middleware
+# va INMEDIATAMENTE después de SecurityMiddleware (índice 0 de la lista base).
+# collectstatic corre en el build (ver nixpacks.toml) hacia STATIC_ROOT.
+MIDDLEWARE = [
+    MIDDLEWARE[0],  # django.middleware.security.SecurityMiddleware
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    *MIDDLEWARE[1:],
+]
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        # Comprime y versiona (hash) los estáticos. Si collectstatic fallara
+        # por una referencia estática inexistente, degradar a
+        # 'whitenoise.storage.CompressedStaticFilesStorage' (sin manifest).
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # B1: cabeceras de seguridad HTTPS
 SESSION_COOKIE_SECURE   = True

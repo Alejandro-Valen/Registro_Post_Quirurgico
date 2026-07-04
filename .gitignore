@@ -3,3 +3,5 @@ __pycache__/
 .entorno_registro
 db.sqlite3
 .env
+# Generado por collectstatic — no se versiona (se regenera en cada build).
+staticfiles/

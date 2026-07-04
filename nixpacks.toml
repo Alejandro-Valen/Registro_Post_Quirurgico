@@ -1,0 +1,26 @@
+# Railway / Nixpacks — build y arranque en producción.
+#
+# Notas de estructura (importantes):
+# - manage.py NO está en la raíz del repo, sino en Registro_Post_Quirurgico/.
+#   Por eso todos los comandos usan la ruta "Registro_Post_Quirurgico/manage.py"
+#   y gunicorn usa "--chdir Registro_Post_Quirurgico".
+# - Se instala desde requirements-runtime.txt (limpio), NO desde requirements.txt
+#   (pip freeze de desarrollo con paquetes solo-Windows —pywin32, winrt-*— que
+#   romperían el build en Linux).
+# - collectstatic corre en el build; migrate y gunicorn en el arranque.
+#
+# Variables de entorno que deben estar configuradas en Railway ANTES del primer
+# deploy (detalle en docs/railway_deploy.md):
+#   DJANGO_SETTINGS_MODULE=Registro_Post_Quirurgico.settings_production
+#   SECRET_KEY, ALLOWED_HOSTS, CSRF_TRUSTED_ORIGINS,
+#   DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT,
+#   REDIS_URL, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD
+
+[phases.install]
+cmds = ["pip install -r requirements-runtime.txt"]
+
+[phases.build]
+cmds = ["python Registro_Post_Quirurgico/manage.py collectstatic --noinput"]
+
+[start]
+cmd = "python Registro_Post_Quirurgico/manage.py migrate --noinput && gunicorn Registro_Post_Quirurgico.wsgi:application --chdir Registro_Post_Quirurgico --bind 0.0.0.0:$PORT"
