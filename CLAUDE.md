@@ -397,16 +397,28 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
 | Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7/7 + mejoras post-Bloque 7 (A: motivo de resolución, B: tono del bot), rama `sprint-5-produccion` |
 
-**Punto actual (02/07/2026):** Sprint 5 con los 7 Bloques completos más
-dos mejoras post-Bloque 7: **Bloque A** (motivo de resolución obligatorio
-en `Alerta`) y **Bloque B** (mensaje de cierre del bot según severidad).
-**191 tests OK.** Rama activa: `sprint-5-produccion`.
-**Próximo paso: desplegar en Railway/Render (Sprint 5 sin empezar) —
-ver "Diferido explícitamente" abajo. Antes del primer paciente real,
-falta completar los campos entre corchetes de
-`docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` con los datos reales del
-médico/institución, y hacer la prueba manual real por WhatsApp del
-mensaje de cierre MEDIA/ALTA (canal Twilio, no cubierto por tests).**
+**Punto actual (04/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B
+completos (**191 tests OK**), y **despliegue en Railway EN CURSO**. El repo
+ya está preparado para deploy (Dockerfile, `requirements-runtime.txt` con
+gunicorn/whitenoise, WhiteNoise para estáticos, `nixpacks.toml` como
+fallback). En Railway ya están el proyecto, PostgreSQL, Redis y el servicio
+web (rama `sprint-5-produccion`) con dominio generado.
+**Próximo paso exacto (siguiente bloque Railway):** (1) Builder → Dockerfile;
+(2) cargar variables de entorno (ver `docs/railway_deploy.md`; usar
+`ALLOWED_HOSTS=${{RAILWAY_PUBLIC_DOMAIN}}` y `DB_*` con `${{Postgres.*}}`);
+(3) redesplegar y verificar; (4) `createsuperuser`; (5) cron jobs
+(`docs/cron_setup.md`); (6) webhook de Twilio → URL de Railway.
+Antes del primer paciente real: completar los `[corchetes]` de
+`docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` y la prueba manual del bot por
+WhatsApp (tono MEDIA/ALTA + consentimiento).
+
+**Nota de despliegue (04/07/2026):** el build usa **Dockerfile**
+(`python:3.13-slim`), NO Nixpacks. Se llegó ahí tras dos fallos: Railpack
+ignoraba `nixpacks.toml` ("No start command detected"), y al forzar Nixpacks
+falló con `pip: command not found` (peculiaridad de Nix). El Dockerfile es
+determinista. `requirements.txt` (raíz) es el pip freeze de desarrollo
+Windows y NO debe usarse para deploy — el deploy instala
+`requirements-runtime.txt`.
 
 Decisiones de producto P-1 a P-15 confirmadas en sesión (01/07/2026) —
 ver tabla completa en `ROADMAP_MONITOREO_POSQUIRURGICO.md`, FASE 5.

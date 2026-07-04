@@ -2325,3 +2325,102 @@ OK.** Rama activa: `sprint-5-produccion`, todo pusheado.
 3. Resto de Sprint 5: desplegar en Railway/Render, Twilio saliente real en
    `enviar_recordatorios`, monitoreo externo, Nginx `REMOTE_ADDR`, y
    completar los campos entre corchetes del formato de consentimiento.
+
+---
+
+## Sesión 03–04/07/2026 — Revisión de ROADMAP + preparación y despliegue en Railway (EN CURSO)
+
+**Responsable:** León (Arquitecto IA) con Claude Code; Alejandro ejecutando las
+acciones de infraestructura en Railway.
+**Estado:** Repo **preparado para deploy** y despliegue en Railway **en curso**
+(pendiente de terminar). **191 tests OK**, `manage.py check` limpio.
+
+### 1. Revisión de checkboxes del ROADMAP
+
+Se auditaron los 12 checkboxes `[ ]` del ROADMAP contra el código real. **Dos
+estaban cumplidos pero sin marcar**, ahora marcados (commit `1329171`):
+- **Duración del seguimiento / desactivación automática de `Paciente.activo`**
+  → resuelto en Sprint 5 Bloque 1 + A-1 (`desactivar_pacientes_vencidos`).
+- **Interfaz del médico para gestionar alertas** → resuelto entre Sprint 4
+  Bloque 5A (badge de severidad, marcar resuelta) y Sprint 5 Bloque A (motivo
+  con opciones de falso positivo).
+- **P-12 (landing del médico)** se dejó sin marcar: existe `index.html` como
+  landing general, pero no una presentación específica del médico — decisión
+  pendiente del Arquitecto.
+
+### 2. Preparación del repo para Railway (parte código)
+
+Commits `9fd25cf` (config) y `8a573f0` (docs). Cambios:
+- **`nixpacks.toml`** (raíz) — instala desde `requirements-runtime.txt`,
+  `collectstatic` en build, `migrate`+`gunicorn --chdir` en start.
+- **`.python-version` = 3.13**.
+- **`requirements-runtime.txt`** — agregados `gunicorn` y `whitenoise`.
+- **`STATIC_ROOT`** en `settings.py`; **WhiteNoise** (middleware + STORAGES
+  manifest comprimido) en `settings_production.py`.
+- **Bug de doc corregido:** el docstring de `settings_production.py` decía que
+  la variable era `DJANGO_ALLOWED_HOSTS`, pero el código real lee
+  `ALLOWED_HOSTS`. Habría hecho perder tiempo en la sesión en vivo.
+- **`staticfiles/`** a `.gitignore`.
+- **`docs/railway_deploy.md`** — guía de referencia con las variables de
+  entorno exactas y el orden de pasos.
+- Verificado: `collectstatic` recoge 130 estáticos sin errores; 191 tests OK.
+  WhiteNoise no se probó local (no instalado en el entorno global de León).
+
+### 3. Despliegue en vivo en Railway — problemas encontrados y resueltos
+
+**Contexto de estructura (clave):** `manage.py` NO está en la raíz del repo
+sino en la subcarpeta `Registro_Post_Quirurgico/`, y los `requirements` están
+en la raíz. Además `requirements.txt` es el `pip freeze` completo de la máquina
+Windows de León (incluye `pywin32`, `winrt-*`) → rompería el build en Linux; por
+eso el deploy usa `requirements-runtime.txt`.
+
+Secuencia de problemas (todos reales, todos resueltos):
+1. **Otro chat de Claude (con screenshots) recomendó un fix peligroso:** crear
+   Procfile y "agregar gunicorn y dj-database-url a `requirements.txt`". Se
+   auditó y se **rechazó**: ese chat no sabía que `requirements.txt` es el freeze
+   con paquetes solo-Windows; instalar ese archivo rompería el build. Además no
+   usamos `dj-database-url` (leemos `DB_*` con decouple). Se le explicó a León
+   por qué no ejecutarlo tal cual.
+2. **Primer deploy: "No start command detected".** Causa: Railway usó su builder
+   nuevo **Railpack**, que **ignora `nixpacks.toml`**. Fix: cambiar el Builder a
+   **Nixpacks** en Settings. Con eso Railway leyó nuestro `nixpacks.toml` (el
+   plan mostró exactamente nuestros comandos).
+3. **Segundo deploy: `pip: command not found` (exit 127).** Causa: peculiaridad
+   de Nix — al personalizar el paso de instalación, `pip`/`ensurepip` no quedan
+   en el PATH. Pelear con Nix (venv, ensurepip) es un pozo sin fondo en nixpkgs.
+   **Fix definitivo: `Dockerfile`** (`python:3.13-slim`, pip garantizado) — build
+   determinista, inmune al builder de Railway, con el layout de subcarpeta y
+   `requirements-runtime.txt` controlados explícitamente. Commit `f05344b`.
+   `collectstatic`/`migrate`/`gunicorn` corren en el ARRANQUE (en un build de
+   Docker en Railway las variables del servicio no están disponibles; en runtime
+   sí). Se conservó `nixpacks.toml` como fallback inerte.
+
+**Estado de Railway al cerrar:** proyecto creado (entorno "production"),
+PostgreSQL y Redis provisionados (activos), servicio web conectado a la rama
+`sprint-5-produccion`, dominio público generado. **Pendiente:** cambiar el
+Builder a **Dockerfile**, cargar las variables de entorno, y redesplegar.
+
+### Qué queda pendiente — pasos exactos del siguiente bloque de Railway
+
+1. **Builder → Dockerfile** (servicio web → Settings → Build → Builder).
+2. **Cargar variables** (Variables → Raw Editor), incluyendo el truco
+   `ALLOWED_HOSTS=${{RAILWAY_PUBLIC_DOMAIN}}` y
+   `CSRF_TRUSTED_ORIGINS=https://${{RAILWAY_PUBLIC_DOMAIN}}` para no depender de
+   copiar el dominio a mano; `DB_*` con `${{Postgres.*}}` y `REDIS_URL` con
+   `${{Redis.REDIS_URL}}`; `SECRET_KEY` nuevo, `EMAIL_*`, `TWILIO_AUTH_TOKEN`,
+   `DJANGO_SETTINGS_MODULE=Registro_Post_Quirurgico.settings_production`. Lista
+   completa en `docs/railway_deploy.md`.
+3. **Redesplegar** y verificar build + arranque (pasar el log si falla).
+4. **`createsuperuser`** desde la shell del servicio en Railway.
+5. Abrir la URL pública `/admin/` y confirmar que carga con estilos.
+6. **Cron jobs** (los 4 de `docs/cron_setup.md`, orden:
+   `desactivar_pacientes_vencidos` antes de `crear_checkins_diarios`).
+7. **Webhook de Twilio** → apuntar a la URL de Railway (Auth Token primario).
+8. Antes del primer paciente real: prueba manual del bot por WhatsApp (tono
+   MEDIA/ALTA + flujo de consentimiento) y completar los `[corchetes]` del
+   formato HABEAS DATA.
+
+**Nota sobre Twilio (aclaración de esta sesión):** el Auth Token primario NO
+caduca; la restricción de 72 h del plan gratis es del **Sandbox de WhatsApp**
+(cada teléfono de prueba debe re-enviar el `join ...` cada 72 h de
+inactividad), no de la credencial ni del despliegue.
