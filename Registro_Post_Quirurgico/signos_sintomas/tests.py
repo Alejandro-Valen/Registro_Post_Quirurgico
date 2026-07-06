@@ -2721,6 +2721,50 @@ class PacienteCedulaTests(TestCase):
         paciente.full_clean()  # no debe lanzar — ya tiene pk
 
 
+class CrearAdminCommandTests(TestCase):
+    """Comando crear_admin — superusuario idempotente desde variables de entorno."""
+
+    def test_no_op_sin_variables(self):
+        import os
+        from unittest.mock import patch
+        from django.core.management import call_command
+        with patch.dict(os.environ):
+            os.environ.pop('DJANGO_SUPERUSER_USERNAME', None)
+            os.environ.pop('DJANGO_SUPERUSER_PASSWORD', None)
+            call_command('crear_admin', verbosity=0)
+        self.assertEqual(get_user_model().objects.count(), 0)
+
+    def test_crea_superusuario_con_password_limpia(self):
+        import os
+        from unittest.mock import patch
+        from django.core.management import call_command
+        with patch.dict(os.environ, {
+            'DJANGO_SUPERUSER_USERNAME': 'jefe',
+            'DJANGO_SUPERUSER_PASSWORD': 'clave-limpia-123',
+            'DJANGO_SUPERUSER_EMAIL': 'jefe@x.com',
+        }):
+            call_command('crear_admin', verbosity=0)
+        u = get_user_model().objects.get(username='jefe')
+        self.assertTrue(u.is_staff)
+        self.assertTrue(u.is_superuser)
+        self.assertTrue(u.check_password('clave-limpia-123'))
+
+    def test_actualiza_password_de_usuario_existente(self):
+        import os
+        from unittest.mock import patch
+        from django.core.management import call_command
+        User = get_user_model()
+        User.objects.create_user(username='jefe', password='vieja')
+        with patch.dict(os.environ, {
+            'DJANGO_SUPERUSER_USERNAME': 'jefe',
+            'DJANGO_SUPERUSER_PASSWORD': 'nueva-clave-456',
+        }):
+            call_command('crear_admin', verbosity=0)
+        u = User.objects.get(username='jefe')
+        self.assertTrue(u.check_password('nueva-clave-456'))
+        self.assertTrue(u.is_superuser)
+
+
 class SeedDemoTests(TestCase):
     """A-3 — guard de entorno y usuario demo sin superuser."""
 
