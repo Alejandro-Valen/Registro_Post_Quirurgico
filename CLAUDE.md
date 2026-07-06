@@ -395,30 +395,36 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7/7 + mejoras post-Bloque 7 (A: motivo de resolución, B: tono del bot), rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B completos y **app desplegada en Railway** (bot vivo end-to-end); falta cron + requisitos de piloto real. Rama `sprint-5-produccion` |
 
-**Punto actual (04/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B
-completos (**191 tests OK**), y **despliegue en Railway EN CURSO**. El repo
-ya está preparado para deploy (Dockerfile, `requirements-runtime.txt` con
-gunicorn/whitenoise, WhiteNoise para estáticos, `nixpacks.toml` como
-fallback). En Railway ya están el proyecto, PostgreSQL, Redis y el servicio
-web (rama `sprint-5-produccion`) con dominio generado.
-**Próximo paso exacto (siguiente bloque Railway):** (1) Builder → Dockerfile;
-(2) cargar variables de entorno (ver `docs/railway_deploy.md`; usar
-`ALLOWED_HOSTS=${{RAILWAY_PUBLIC_DOMAIN}}` y `DB_*` con `${{Postgres.*}}`);
-(3) redesplegar y verificar; (4) `createsuperuser`; (5) cron jobs
-(`docs/cron_setup.md`); (6) webhook de Twilio → URL de Railway.
-Antes del primer paciente real: completar los `[corchetes]` de
-`docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` y la prueba manual del bot por
-WhatsApp (tono MEDIA/ALTA + consentimiento).
+**Punto actual (06/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, y
+**la app DESPLEGADA y funcional en Railway** (**194 tests OK**). URL:
+`registropostquirurgico-production-1f96.up.railway.app`. Corriendo: web
+(Dockerfile) + PostgreSQL + Redis, migraciones aplicadas, estáticos con
+WhiteNoise, **bot de WhatsApp respondiendo end-to-end** (Sandbox de Twilio),
+acceso al Admin resuelto (comando `crear_admin`), y limpieza de seguridad
+hecha.
+**Próximo paso exacto (al retomar):** **Bloque 6 — Cron jobs en Railway**
+(ver `docs/cron_setup.md`; propuesta simplificada de 2 servicios cron). Luego,
+los **requisitos del piloto real con pacientes** — ver la sección nueva
+"Requisitos para un PILOTO REAL con pacientes" en
+`ROADMAP_MONITOREO_POSQUIRURGICO.md` (plan de pago Railway, WhatsApp Business
+en Twilio, HABEAS DATA, prueba WhatsApp con paciente de prueba).
 
-**Nota de despliegue (04/07/2026):** el build usa **Dockerfile**
-(`python:3.13-slim`), NO Nixpacks. Se llegó ahí tras dos fallos: Railpack
-ignoraba `nixpacks.toml` ("No start command detected"), y al forzar Nixpacks
-falló con `pip: command not found` (peculiaridad de Nix). El Dockerfile es
-determinista. `requirements.txt` (raíz) es el pip freeze de desarrollo
-Windows y NO debe usarse para deploy — el deploy instala
-`requirements-runtime.txt`.
+**Notas de despliegue (06/07/2026):**
+- El build usa **Dockerfile** (`python:3.13-slim`), NO Nixpacks/Railpack.
+  Railpack ignora `nixpacks.toml` ("No start command detected"); Nixpacks
+  falló con `pip: command not found` (peculiaridad de Nix). El Dockerfile es
+  determinista; `nixpacks.toml` queda como fallback inerte.
+- `requirements.txt` (raíz) es el pip freeze de desarrollo Windows y **NO** se
+  usa para deploy — el Dockerfile instala `requirements-runtime.txt`.
+- **Variables de Railway: valor crudo, nunca entre `< >` ni comillas.** Los
+  placeholders `<...>` pegados literalmente fueron la causa raíz del 403 de
+  Twilio y de los login fallidos al Admin (detalle en BITACORA 06/07/2026).
+- El superusuario en producción se gestiona con el comando **`crear_admin`**
+  (idempotente, desde `DJANGO_SUPERUSER_*`), no con `createsuperuser` (que no
+  actualiza usuarios existentes). El interruptor `RESET_AXES=1` corre
+  `axes_reset` al arranque para desbloquear axes; se quita tras usarlo.
 
 Decisiones de producto P-1 a P-15 confirmadas en sesión (01/07/2026) —
 ver tabla completa en `ROADMAP_MONITOREO_POSQUIRURGICO.md`, FASE 5.

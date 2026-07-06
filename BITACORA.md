@@ -2424,3 +2424,97 @@ Builder a **Dockerfile**, cargar las variables de entorno, y redesplegar.
 caduca; la restricción de 72 h del plan gratis es del **Sandbox de WhatsApp**
 (cada teléfono de prueba debe re-enviar el `join ...` cada 72 h de
 inactividad), no de la credencial ni del despliegue.
+
+---
+
+## Sesión 06/07/2026 — Despliegue en Railway COMPLETADO (app viva end-to-end)
+
+**Responsable:** León (Arquitecto IA) guiando; Alejandro ejecutando en Railway;
+Claude Code guiando clic por clic y resolviendo el código.
+**Estado:** **App desplegada y funcional en producción.** URL:
+`registropostquirurgico-production-1f96.up.railway.app`. **194 tests OK.**
+
+### Qué se logró
+- App Django corriendo en Railway con **Dockerfile** (build determinista).
+- PostgreSQL + Redis provisionados; **migraciones aplicadas** en la nube.
+- Estáticos servidos con **WhiteNoise** (Admin con estilos).
+- **Bot de WhatsApp respondiendo end-to-end** (WhatsApp → Twilio → Railway →
+  Django → bot → respuesta). Verificado: un número no registrado recibe
+  `MSG_NO_REGISTRADO`.
+- **Acceso al Admin** resuelto y **limpieza de seguridad** hecha.
+
+### Secuencia de problemas y soluciones (lo valioso — no omitir ninguno)
+1. **"No start command detected" (Railpack).** Railway usó por defecto su
+   builder nuevo **Railpack**, que **ignora `nixpacks.toml`**. Se cambió el
+   Builder a **Nixpacks** en Settings → leyó bien nuestro plan.
+2. **`pip: command not found` (Nixpacks/Nix).** Al personalizar la instalación,
+   Nix no deja `pip`/`ensurepip` en el PATH. Pelear con Nix es un pozo sin
+   fondo → se pivoteó a un **`Dockerfile`** (`python:3.13-slim`, pip
+   garantizado). `collectstatic`/`migrate` corren en el ARRANQUE porque en un
+   build de Docker en Railway las variables del servicio no están disponibles.
+3. **"couldn't locate the dockerfile".** Railway estaba reconstruyendo un
+   **commit viejo** (sin Dockerfile) al hacer "Redeploy" sobre un deployment
+   anterior. Un commit vacío NO disparó deploy (Railway ignora commits sin
+   cambios de archivos); se resolvió con un commit real / desplegando el último
+   commit.
+4. **`Bad Request (400)` / ALLOWED_HOSTS.** El `${{RAILWAY_PUBLIC_DOMAIN}}` no
+   quedó apuntando al dominio visitado. Se **fijó el dominio a mano** en
+   `ALLOWED_HOSTS` y `CSRF_TRUSTED_ORIGINS`.
+5. **Nadie podía entrar al Admin.** La BD estaba vacía (sin usuarios); `demo_medico`
+   no se crea en producción (guard A-3). Se creó el superusuario desde variables
+   `DJANGO_SUPERUSER_*` en el arranque. **`createsuperuser --noinput` NO
+   actualiza usuarios existentes**, así que cuando las credenciales quedaron
+   "sucias" no había forma de corregir → se creó el comando **`crear_admin`**
+   (idempotente: crea o re-establece la contraseña exacta; no-op sin variables).
+6. **Bloqueo de `django-axes`.** Tras varios intentos fallidos, axes bloqueó la
+   IP (5 intentos → 1 h). Se agregó el interruptor **`RESET_AXES=1`** que corre
+   `axes_reset` al arranque; se quita después para no debilitar la protección.
+7. **La causa raíz de los login fallidos y del 403 de Twilio: los `< >`.** Los
+   placeholders `<...>` de las instrucciones se pegaron **literalmente** en las
+   variables (token, y muy probablemente usuario/contraseña). El
+   `TWILIO_AUTH_TOKEN` con `< >` daba **403 exacto** en el webhook (la firma no
+   coincidía). Al dejar los valores **pelados** (sin `< >`, sin comillas, sin
+   espacios) y re-crear el admin con `crear_admin`, todo funcionó. **Lección:
+   en Railway las variables van con el valor crudo, nunca entre `< >` ni
+   comillas.**
+
+### Decisiones clave
+- **Builder = Dockerfile** (no Nixpacks/Railpack) — determinista, inmune a los
+  cambios de builder de Railway. `nixpacks.toml` queda como fallback inerte.
+- Comando **`crear_admin`** como forma soportada de gestionar el superusuario en
+  producción sin shell interactivo.
+- `requirements.txt` (freeze Windows) **nunca** se usa para deploy; el Dockerfile
+  instala `requirements-runtime.txt`.
+
+### Limpieza de seguridad (hecha)
+- Superusuario creado con contraseña limpia (vía `crear_admin`), login exitoso.
+- Variables **`RESET_AXES`** y **`DJANGO_SUPERUSER_PASSWORD`** eliminadas
+  (axes restaurado; sin contraseña suelta en variables). Quedan
+  `DJANGO_SUPERUSER_USERNAME`/`EMAIL` (inofensivas — `crear_admin` no toca nada
+  sin el password).
+
+### Tests
+194 OK (191 previos + 3 de `crear_admin`). `manage.py check` limpio.
+
+### Commits de la sesión
+`9fd25cf`, `8a573f0`, `f05344b` (prep + Dockerfile), `ab9b397` (trigger),
+`aaf4aba`, `2ef5092` (superuser/axes al arranque), `8efb0ef` (`crear_admin`),
++ este cierre `docs`.
+
+### Aclaración importante para producción (discutida en sesión)
+El bot responde mientras (a) **Railway** siga corriendo (tiene **costo mensual
+por uso** — sin plan/pago se suspende) y (b) el **canal de Twilio** siga activo.
+Hoy usan el **Sandbox de WhatsApp** (solo pruebas: regla 72 h, número
+compartido). Para pacientes reales hace falta la **API de WhatsApp Business**
+(número propio aprobado por Meta + **facturación de Twilio por conversación**).
+Los **cron jobs NO mantienen el bot vivo** — automatizan el flujo diario
+(crear check-ins, etc.). Hoy el sistema es **reactivo** (responde cuando el
+paciente escribe); el recordatorio saliente sigue siendo stub. Requisitos del
+piloto real listados en ROADMAP (FASE 5, sección "Requisitos para piloto real").
+
+### Qué queda pendiente — paso exacto para retomar
+1. **Bloque 6 — Cron jobs** en Railway (crear servicios cron; propuesta
+   simplificada de 2 servicios). Es lo más laborioso; se pausó aquí.
+2. Requisitos del piloto real con pacientes (ver ROADMAP): plan de pago Railway,
+   WhatsApp Business en Twilio, HABEAS DATA completo, prueba WhatsApp con
+   paciente de prueba + check-in.

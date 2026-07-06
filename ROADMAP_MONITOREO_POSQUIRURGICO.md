@@ -743,7 +743,16 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
     cuenta de médico real (staff, no-superuser). `seed_demo` ahora crea
     `demo_medico` con `is_staff=True, is_superuser=False`, representando
     la experiencia real del médico.
-- [ ] Desplegar en Railway o Render con PostgreSQL en la nube
+- [x] **Desplegado en Railway con PostgreSQL + Redis en la nube (06/07/2026).**
+  App viva en `registropostquirurgico-production-1f96.up.railway.app`. Build
+  con **Dockerfile** (`python:3.13-slim`) tras descartar Railpack (ignora
+  `nixpacks.toml`) y Nixpacks (`pip: command not found` por Nix). Migraciones
+  aplicadas, estáticos con WhiteNoise, **bot de WhatsApp respondiendo
+  end-to-end** (Sandbox de Twilio), acceso al Admin resuelto con el comando
+  `crear_admin`, y limpieza de seguridad hecha. Detalle completo (incluida la
+  causa raíz: placeholders `< >` pegados literalmente en las variables) en
+  BITACORA.md, sesión 06/07/2026. **194 tests OK.** **Pendiente del despliegue:
+  cron jobs** (ver `docs/cron_setup.md` + Bloque 6, abajo).
 - [x] **Bloque 5 (01/07/2026):** SMTP real. Variables `EMAIL_*` agregadas
   al `settings_production.py` **existente** (append, no reemplazo —
   conserva DEBUG=False, HSTS, cookies seguras y cache Redis del Sprint
@@ -843,6 +852,55 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
 - [ ] Integrar capa RAG/MCP para respuestas del bot (P-13) — prerrequisito:
   corpus de `knowledge_base.md` validado por el médico
 - [ ] OpenMed para anonimización PII de exportación (P-14)
+
+---
+
+## Requisitos para un PILOTO REAL con pacientes
+
+> Estado a 06/07/2026: la app **ya está desplegada y probada** en Railway con
+> el Sandbox de Twilio. Esto es lo que falta para pasar de "pruebas" a
+> "pacientes reales". Ninguno bloquea seguir probando el sistema con el Sandbox.
+
+**Infraestructura / operación (con costo):**
+- [ ] **Plan de pago en Railway.** Railway cobra por uso mensual (web + Postgres
+  + Redis 24/7). Sin plan/pago activo, el servicio se suspende y el bot deja de
+  responder.
+- [ ] **Bloque 6 — Cron jobs en Railway.** Programar los 4 comandos (ver
+  `docs/cron_setup.md`; orden obligatorio: `desactivar_pacientes_vencidos`
+  **antes** de `crear_checkins_diarios`). Sin esto no se crean los check-ins
+  diarios. Los cron **no** mantienen el bot vivo — automatizan el flujo diario.
+  Propuesta simplificada para Railway: 2 servicios cron (mañana 11:00 UTC con
+  los comandos en secuencia, tarde 23:00 UTC con `cerrar_checkins_vencidos`).
+
+**Canal de WhatsApp (con costo y aprobación):**
+- [ ] **Pasar del Sandbox de Twilio a la API de WhatsApp Business.** El Sandbox
+  es solo para pruebas (regla de 72 h por teléfono, número compartido). Para
+  pacientes reales se requiere: número propio aprobado por Meta/WhatsApp,
+  **facturación de Twilio** (costo por conversación), y **plantillas
+  pre-aprobadas** para mensajes iniciados por el sistema.
+- [ ] **Implementar el envío saliente real de Twilio** en `enviar_recordatorios`
+  (hoy es un stub). Solo necesario si se quieren recordatorios proactivos; hoy
+  el sistema es reactivo (responde cuando el paciente escribe primero).
+
+**Legal / clínico:**
+- [ ] **HABEAS DATA:** completar los `[corchetes]` de
+  `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` con los datos reales del
+  médico/institución, imprimirlo y firmarlo con cada paciente antes de marcar
+  `consentimiento_informado=True`.
+
+**Validación end-to-end (con el Sandbox alcanza):**
+- [ ] Crear un **paciente de prueba** en el Admin (con `consentimiento_informado`),
+  correr `crear_checkins_diarios`, y hacer una **prueba real de WhatsApp
+  completa** (recorrer las 10 preguntas y verificar que se crea el
+  `RegistroDiario` y las alertas).
+- [ ] Prueba manual del **tono del bot** (Bloque B): disparar una alerta MEDIA y
+  una ALTA y confirmar los mensajes de cierre `MSG_CIERRE_ALERTA_*`.
+
+**Limpieza técnica menor (no bloqueante):**
+- [ ] Revisar/limpiar el dominio duplicado en Railway (si quedaron dos).
+- [ ] `inicio_entornoR.bat` apunta a un venv (`entorno_registro`) que ya no
+  existe; recrear el venv o borrar el `.bat` (hoy todo corre en el Python
+  global).
 
 ---
 
