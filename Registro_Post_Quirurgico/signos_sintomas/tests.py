@@ -2721,6 +2721,30 @@ class PacienteCedulaTests(TestCase):
         paciente.full_clean()  # no debe lanzar — ya tiene pk
 
 
+class CronMatutinoCommandTests(TestCase):
+    """Comando cron_matutino — corre las 4 tareas de la mañana en orden."""
+
+    def test_llama_las_cuatro_tareas_en_orden(self):
+        from unittest.mock import patch
+        from django.core.management import call_command
+        with patch(
+            'signos_sintomas.management.commands.cron_matutino.call_command'
+        ) as mock_call:
+            call_command('cron_matutino', verbosity=0)
+        llamadas = [c.args[0] for c in mock_call.call_args_list]
+        self.assertEqual(llamadas, [
+            'desactivar_pacientes_vencidos',
+            'crear_checkins_diarios',
+            'cerrar_checkins_vencidos',
+            'enviar_recordatorios',
+        ])
+
+    def test_corre_sin_error_con_bd_vacia(self):
+        from django.core.management import call_command
+        # Con 0 pacientes las 4 tareas deben correr sin lanzar excepción.
+        call_command('cron_matutino', verbosity=0)
+
+
 class CrearAdminCommandTests(TestCase):
     """Comando crear_admin — superusuario idempotente desde variables de entorno."""
 
