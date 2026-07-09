@@ -56,7 +56,7 @@ class Command(BaseCommand):
             enviados += 1
 
         resumen = (
-            f"enviar_recordatorios {ahora.date()}: "
+            f"enviar_recordatorios {timezone.localdate()}: "
             f"{enviados} check-ins procesados (envío Twilio diferido a FASE 4)."
         )
         logger.info(resumen)

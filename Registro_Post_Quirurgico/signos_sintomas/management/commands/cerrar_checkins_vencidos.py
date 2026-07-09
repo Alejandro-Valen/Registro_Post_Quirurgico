@@ -111,7 +111,7 @@ class Command(BaseCommand):
             )
 
         resumen = (
-            f"cerrar_checkins_vencidos {ahora.date()}: "
+            f"cerrar_checkins_vencidos {timezone.localdate()}: "
             f"{cerrados} check-ins cerrados, {alertas_creadas} alertas SILENCIO creadas."
         )
         logger.info(resumen)
