@@ -865,12 +865,13 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
 - [ ] **Plan de pago en Railway.** Railway cobra por uso mensual (web + Postgres
   + Redis 24/7). Sin plan/pago activo, el servicio se suspende y el bot deja de
   responder.
-- [ ] **Bloque 6 — Cron jobs en Railway.** Programar los 4 comandos (ver
-  `docs/cron_setup.md`; orden obligatorio: `desactivar_pacientes_vencidos`
-  **antes** de `crear_checkins_diarios`). Sin esto no se crean los check-ins
-  diarios. Los cron **no** mantienen el bot vivo — automatizan el flujo diario.
-  Propuesta simplificada para Railway: 2 servicios cron (mañana 11:00 UTC con
-  los comandos en secuencia, tarde 23:00 UTC con `cerrar_checkins_vencidos`).
+- [x] **Bloque 6 — Cron jobs en Railway (08/07/2026): HECHO.** Dos servicios
+  cron funcionando: **`cron-manana`** (`0 11 * * *` UTC = 6 AM Bogotá) corre el
+  comando único `cron_matutino` (las 4 tareas en orden por dentro), y
+  **`cron-tarde`** (`0 23 * * *` UTC = 6 PM Bogotá) corre
+  `cerrar_checkins_vencidos`. Se creó `cron_matutino` porque encadenar con `&&`
+  en el Custom Start Command de Railway solo corría el primer comando. Ambos
+  verificados en vivo. Detalle en BITACORA 08/07/2026.
 
 **Canal de WhatsApp (con costo y aprobación):**
 - [ ] **Pasar del Sandbox de Twilio a la API de WhatsApp Business.** El Sandbox

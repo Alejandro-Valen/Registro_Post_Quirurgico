@@ -2518,3 +2518,68 @@ piloto real listados en ROADMAP (FASE 5, sección "Requisitos para piloto real")
 2. Requisitos del piloto real con pacientes (ver ROADMAP): plan de pago Railway,
    WhatsApp Business en Twilio, HABEAS DATA completo, prueba WhatsApp con
    paciente de prueba + check-in.
+
+---
+
+## Sesión 08/07/2026 — Cron jobs en Railway COMPLETADO
+
+**Responsable:** León (Arquitecto IA) guiando; Alejandro ejecutando en Railway;
+Claude Code guiando y resolviendo el código.
+**Estado:** **Los dos servicios cron funcionan en Railway.** **196 tests OK.**
+
+### Qué se logró
+- **`cron-manana`** (`0 11 * * *` UTC = 6:00 AM Bogotá): corre las 4 tareas
+  matutinas en orden.
+- **`cron-tarde`** (`0 23 * * *` UTC = 6:00 PM Bogotá): corre
+  `cerrar_checkins_vencidos`.
+- Ambos verificados en vivo (con horario temporal `*/5 * * * *`): logs limpios,
+  "0" en todo (aún sin pacientes), sin errores.
+
+### Cómo funciona el cron en Railway (para la próxima vez)
+Un cron en Railway es **un servicio aparte** que usa el mismo repo/Dockerfile,
+pero con **"Custom Start Command"** propio (corre un comando y termina, no
+gunicorn) y un **"Cron Schedule"** (en **UTC**). Cada servicio cron necesita
+**sus propias variables de entorno** (se pegan las mismas del web salvo
+ALLOWED_HOSTS/superusuario). El horario va en UTC: Bogotá es UTC−5, así que
+6 AM = 11:00 UTC y 6 PM = 23:00 UTC. **Mínimo de intervalo: 5 minutos** (no
+acepta `* * * * *`; para probar se usa `*/5 * * * *`).
+
+### Problemas y soluciones (lo valioso)
+1. **El `&&` en el Custom Start Command solo corría el PRIMER comando.** El
+   servicio quedaba "Completed" (exit 0) pero solo ejecutaba
+   `desactivar_pacientes_vencidos`; el resto de la cadena `&&` se descartaba.
+   **Solución: comando único `cron_matutino`** (nuevo, `signos_sintomas/
+   management/commands/cron_matutino.py`) que corre las 4 tareas por dentro con
+   `call_command` secuencial — orden garantizado (`desactivar` antes de
+   `crear_checkins`), y testeable. 2 tests nuevos. El Custom Start Command del
+   cron mañana quedó en `python Registro_Post_Quirurgico/manage.py cron_matutino`.
+2. **Cambiar el Custom Start Command no bastaba** — hay que **redesplegar** el
+   servicio cron para que el nuevo comando (y el nuevo código) tomen efecto; si
+   no, las siguientes corridas seguían usando el comando viejo.
+3. **Fecha del resumen en UTC (cosmético).** `cerrar_checkins_vencidos` y
+   `enviar_recordatorios` imprimían la fecha del resumen con `ahora.date()`
+   (UTC) → el log mostraba 07-09 en la noche de Bogotá. **La lógica ya era
+   correcta** (compara instantes con `timezone.now()`, no fechas); solo se
+   cambió la línea de resumen a `timezone.localdate()` (norma del proyecto).
+   Sin efecto clínico.
+
+### Tests
+196 OK (194 previos + 2 de `cron_matutino`). `manage.py check` limpio.
+
+### Commits de la sesión
+`0fc869c` (comando `cron_matutino` + tests), `86a0640` (fix cosmético de fecha
+en logs de cron), + este cierre `docs`.
+
+### Qué queda pendiente — próxima sesión
+**Toda la parte técnica del despliegue y la automatización está COMPLETA.** Lo
+siguiente NO es infraestructura, sino **tener algo que mostrarle al médico** y
+preparar el piloto:
+1. **Landing page de presentación del médico (P-12).** Trabajo de front-end en
+   la app `home` — una página pulida para presentar el sistema/médico. Es el
+   entregable "para mostrar al médico".
+2. **Preparar una demo del dashboard** con datos de ejemplo (ojo: `seed_demo`
+   NO corre en producción por el guard A-3; para la demo hay que crear 1-2
+   pacientes de ejemplo a mano en el Admin, o correr el flujo real por WhatsApp
+   con un número de prueba para generar datos).
+3. Resto de requisitos del piloto real (ROADMAP): plan de pago Railway, pasar a
+   WhatsApp Business, HABEAS DATA.

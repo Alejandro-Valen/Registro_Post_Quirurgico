@@ -395,21 +395,32 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B completos y **app desplegada en Railway** (bot vivo end-to-end); falta cron + requisitos de piloto real. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B, **app desplegada en Railway + cron funcionando** (bot vivo end-to-end). Falta: landing del médico (P-12) + requisitos de piloto real. Rama `sprint-5-produccion` |
 
-**Punto actual (06/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, y
-**la app DESPLEGADA y funcional en Railway** (**194 tests OK**). URL:
+**Punto actual (08/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, **la
+app desplegada en Railway** y **el cron funcionando** (**196 tests OK**). URL:
 `registropostquirurgico-production-1f96.up.railway.app`. Corriendo: web
-(Dockerfile) + PostgreSQL + Redis, migraciones aplicadas, estáticos con
-WhiteNoise, **bot de WhatsApp respondiendo end-to-end** (Sandbox de Twilio),
-acceso al Admin resuelto (comando `crear_admin`), y limpieza de seguridad
-hecha.
-**Próximo paso exacto (al retomar):** **Bloque 6 — Cron jobs en Railway**
-(ver `docs/cron_setup.md`; propuesta simplificada de 2 servicios cron). Luego,
-los **requisitos del piloto real con pacientes** — ver la sección nueva
-"Requisitos para un PILOTO REAL con pacientes" en
-`ROADMAP_MONITOREO_POSQUIRURGICO.md` (plan de pago Railway, WhatsApp Business
-en Twilio, HABEAS DATA, prueba WhatsApp con paciente de prueba).
+(Dockerfile) + PostgreSQL + Redis, migraciones aplicadas, WhiteNoise, **bot de
+WhatsApp respondiendo end-to-end** (Sandbox de Twilio), Admin accesible
+(`crear_admin`), seguridad limpia, y **2 servicios cron** (`cron-manana` con el
+comando único `cron_matutino` a las 11:00 UTC; `cron-tarde` con
+`cerrar_checkins_vencidos` a las 23:00 UTC). **Toda la parte técnica de
+despliegue y automatización está COMPLETA.**
+**Próximo paso exacto (al retomar):** ya NO es infraestructura, sino **"algo
+que mostrarle al médico"** → (1) **Landing page de presentación del médico
+(P-12)** — front-end en la app `home`; (2) preparar una **demo del dashboard**
+con datos de ejemplo (ojo: `seed_demo` NO corre en producción por el guard
+A-3; crear 1-2 pacientes de ejemplo a mano o correr el flujo real por WhatsApp).
+Resto de requisitos del piloto real en `ROADMAP_MONITOREO_POSQUIRURGICO.md`,
+sección "Requisitos para un PILOTO REAL con pacientes" (plan Railway, WhatsApp
+Business, HABEAS DATA).
+
+**Nota cron (08/07/2026):** en Railway, encadenar comandos con `&&` en el
+Custom Start Command **solo corre el primero** → se creó el comando único
+`cron_matutino` (corre las 4 tareas matutinas en orden con `call_command`).
+Los horarios cron van en **UTC** (Bogotá −5: 6 AM = 11:00 UTC, 6 PM = 23:00
+UTC); mínimo de intervalo 5 min. Cambiar el Custom Start Command exige
+**redesplegar** el servicio cron para que tome efecto.
 
 **Notas de despliegue (06/07/2026):**
 - El build usa **Dockerfile** (`python:3.13-slim`), NO Nixpacks/Railpack.
