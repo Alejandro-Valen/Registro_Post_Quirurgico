@@ -845,7 +845,13 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   para detectar caídas totales independientemente del cron
 - [ ] Nginx: `proxy_set_header REMOTE_ADDR $remote_addr;` para que el
   rate limit funcione correctamente con la IP real del cliente
-- [ ] Landing page estática de presentación del médico (P-12)
+- [x] Landing page de presentación del médico (P-12) — hecha en la app `home`
+  (Django, no estática): `/` como landing del médico + sistema de diseño
+  compartido (`base.html` + `static/home/css/site.css`); contenido en
+  marcadores `[corchetes]` + flag `MOSTRAR_AVISO_BOCETO`. **Pendiente:** datos
+  reales del médico y deploy a Railway.
+- [x] Demo del dashboard — comando `seed_demo_produccion` (seguro para prod,
+  2 pacientes de ejemplo, reversible con `--limpiar`)
 - [ ] Entrega final al equipo médico
 
 **Diferido explícitamente a Sprint 6:**

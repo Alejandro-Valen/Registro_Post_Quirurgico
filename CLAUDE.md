@@ -395,25 +395,37 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B, **app desplegada en Railway + cron funcionando** (bot vivo end-to-end). Falta: landing del médico (P-12) + requisitos de piloto real. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B, **app en Railway + cron** (bot end-to-end), y **landing del médico (P-12) + comando seed de demo listos (202 tests OK)**. Falta: deploy de la landing a Railway + datos reales del médico + requisitos de piloto. Rama `sprint-5-produccion` |
 
-**Punto actual (08/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, **la
-app desplegada en Railway** y **el cron funcionando** (**196 tests OK**). URL:
-`registropostquirurgico-production-1f96.up.railway.app`. Corriendo: web
-(Dockerfile) + PostgreSQL + Redis, migraciones aplicadas, WhiteNoise, **bot de
-WhatsApp respondiendo end-to-end** (Sandbox de Twilio), Admin accesible
-(`crear_admin`), seguridad limpia, y **2 servicios cron** (`cron-manana` con el
-comando único `cron_matutino` a las 11:00 UTC; `cron-tarde` con
-`cerrar_checkins_vencidos` a las 23:00 UTC). **Toda la parte técnica de
-despliegue y automatización está COMPLETA.**
-**Próximo paso exacto (al retomar):** ya NO es infraestructura, sino **"algo
-que mostrarle al médico"** → (1) **Landing page de presentación del médico
-(P-12)** — front-end en la app `home`; (2) preparar una **demo del dashboard**
-con datos de ejemplo (ojo: `seed_demo` NO corre en producción por el guard
-A-3; crear 1-2 pacientes de ejemplo a mano o correr el flujo real por WhatsApp).
-Resto de requisitos del piloto real en `ROADMAP_MONITOREO_POSQUIRURGICO.md`,
-sección "Requisitos para un PILOTO REAL con pacientes" (plan Railway, WhatsApp
-Business, HABEAS DATA).
+**Punto actual (10/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
+desplegada en Railway y el cron funcionando, y ahora la **landing de
+presentación del médico (P-12)** y el **comando seed de demo** listos
+(**202 tests OK**). URL:
+`registropostquirurgico-production-1f96.up.railway.app`.
+- **Landing (P-12):** la página `/` (app `home`) se convirtió en la presentación
+  del médico + sistema, con un **sistema de diseño compartido**
+  (`home/static/home/css/site.css` + `home/static/home/js/pulse.js` +
+  `home/templates/home/base.html`) que reusan `index.html` y `contacto.html`.
+  Nav conectado a `/contacto/` y al Admin (enlace "Acceso médico" →
+  `{% url 'admin:index' %}`). Contenido del médico en marcadores `[entre
+  corchetes]` + flag `MOSTRAR_AVISO_BOCETO` en `home/views.py` (aviso de boceto
+  que se apaga con los datos reales). 6 smoke tests en `home/tests.py`.
+- **Demo del dashboard:** comando
+  `signos_sintomas/management/commands/seed_demo_produccion.py` — idempotente y
+  **seguro para producción** (a diferencia de `seed_demo`, bloqueado por A-3):
+  `--confirmar` obligatorio, NO crea usuarios (asigna a un médico existente con
+  `--medico` o al primer superusuario), pacientes marcados `DEMO — ` /
+  cédula `DEMO-000X` / teléfono ficticio, y **reversible** con
+  `--limpiar --confirmar`. Crea 2 pacientes de ejemplo con registros y alertas.
+**Próximo paso exacto (al retomar):** **desplegar la landing a Railway** →
+`git push` a la rama que observa el servicio web (el Dockerfile corre
+`collectstatic`+`migrate` en el arranque; la landing NO añade migraciones), y
+luego correr `seed_demo_produccion --confirmar` en el Shell del servicio para
+poblar la demo del panel. Después: **datos reales del médico** (reemplazar
+`[corchetes]`, subir logo/colores, `MOSTRAR_AVISO_BOCETO=False`) y los
+requisitos del piloto real en `ROADMAP_MONITOREO_POSQUIRURGICO.md`, sección
+"Requisitos para un PILOTO REAL con pacientes" (plan Railway, WhatsApp Business,
+HABEAS DATA).
 
 **Nota cron (08/07/2026):** en Railway, encadenar comandos con `&&` en el
 Custom Start Command **solo corre el primero** → se creó el comando único

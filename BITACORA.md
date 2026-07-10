@@ -2583,3 +2583,88 @@ preparar el piloto:
    con un número de prueba para generar datos).
 3. Resto de requisitos del piloto real (ROADMAP): plan de pago Railway, pasar a
    WhatsApp Business, HABEAS DATA.
+
+---
+
+## Sesión 10/07/2026 — Landing del médico (P-12) + demo del dashboard (seed seguro)
+
+**Sprint:** 5 (Producción) · **Responsable:** León (Arquitecto) + Claude Code ·
+**Estado:** ✅ Completado en código (pendiente el deploy a Railway).
+
+### Qué se hizo
+- **Landing de presentación del médico (P-12)** — front-end en la app `home`.
+  Decisión con el Arquitecto: convertir la página principal `/` en la
+  presentación del médico + sistema (no una página aparte). Flujo: primero un
+  **boceto en un Artifact** para aprobación visual, luego portado a Django.
+  - **Sistema de diseño compartido nuevo** (fin del CSS copiado-pegado entre
+    plantillas): `home/static/home/css/site.css` (tokens de color en `:root`,
+    temas claro y oscuro, componentes) + `home/static/home/js/pulse.js` (línea
+    de pulso del hero, respeta `prefers-reduced-motion`).
+  - **Plantilla base** `home/templates/home/base.html` (head, header/nav, footer,
+    bloques) que comparten `index.html` (landing) y `contacto.html` (rearmada,
+    formulario intacto).
+  - Nav conectado: Inicio · El especialista · Cómo funciona · Contacto ·
+    **Acceso médico** → `{% url 'admin:index' %}` (antes era link muerto `#`).
+  - Identidad visual "calma clínica": verde petróleo + coral, tipografía serif
+    con carácter, motivo de telemetría/pulso — deliberadamente lejos del azul
+    genérico anterior. Guías aplicadas: skill `artifact-design` + auditoría de la
+    skill oficial **Anthropic Frontend Design** y las **Vercel Web Interface
+    Guidelines**.
+  - Contenido del médico en **marcadores `[entre corchetes]`** + flag
+    `MOSTRAR_AVISO_BOCETO` en `home/views.py` (aviso de "boceto" que se apaga con
+    los datos reales). Espacios documentados para logo/identidad.
+  - **6 smoke tests** en `home/tests.py` (antes vacío).
+- **Comando seed seguro para la demo del dashboard**:
+  `signos_sintomas/management/commands/seed_demo_produccion.py`. Crea **2
+  pacientes de ejemplo** (uno de evolución complicada, otro leve) con registros
+  y alertas para mostrar el panel. A diferencia de `seed_demo` (bloqueado en prod
+  por A-3), este SÍ puede correr en producción de forma segura: **no crea
+  usuarios/contraseñas** (asigna a un médico existente con `--medico` o al primer
+  superusuario), exige `--confirmar`, marca los pacientes de forma inconfundible
+  (prefijo `DEMO — `, cédula `DEMO-000X`, teléfono ficticio `+57555000000X`) y es
+  **reversible** con `--limpiar --confirmar`.
+
+### Decisiones
+- Landing = la página `/` (no una página aparte): es lo que ve cualquier
+  visitante; menos páginas, más impacto.
+- El contenido del médico NO se inventa: placeholders marcados hasta que el
+  Arquitecto traiga nombre/especialidad/bio/foto/logo/colores.
+- Demo con comando seed seguro (no a mano): reproducible y borrable.
+
+### Problemas y soluciones (lo valioso)
+1. **Comentario `{# … #}` multilínea se imprimía como texto** en el header (y el
+   `{% static %}` de dentro llegó a resolverse), descuadrando la marca. Causa: en
+   Django los comentarios `{# #}` son de **una sola línea**; uno multilínea no se
+   comenta. Solución: `{% comment %}…{% endcomment %}`. Verificado.
+2. **El runserver servía la plantilla vieja** tras editar (proceso `--noreload`,
+   plantilla ya parseada al arranque). Solución: reiniciar el servidor. Recordar:
+   con `--noreload` hay que reiniciar para ver cambios de plantilla.
+3. **`WARNING` "Alerta ALTA sin médico o sin email"** al correr el seed en local:
+   correcto — el superusuario `admin` local no tiene email, así que no se envía la
+   notificación. En producción el médico SÍ necesita email configurado.
+
+### Limpieza de datos locales
+Se borraron de la base **LOCAL** (no producción) los ejemplos viejos que
+confundían: paciente manual "Alejandro Valencia", paciente "Camilo Andrés Rueda
+Vargas" (del `seed_demo`) y el usuario `demo_medico` — respetando el orden por las
+FK `PROTECT` (Alerta → CheckInProgramado → RegistroDiario → ConversacionWhatsApp
+→ Paciente). Quedaron solo los 2 pacientes DEMO nuevos. Producción nunca tuvo
+estos (`seed_demo` está bloqueado allá).
+
+### Tests
+**202 OK** (196 previos + 6 de `home`). `manage.py check` limpio.
+`collectstatic --dry-run` descubre `site.css` y `pulse.js`.
+
+### Commits de la sesión
+`feat:` landing + comando seed + tests; `docs:` este cierre (BITACORA + CLAUDE +
+ROADMAP).
+
+### Qué queda pendiente — próxima sesión
+1. **Deploy a Railway** de estos cambios: `git push` a la rama que observa el
+   servicio web (Settings → Source). El Dockerfile corre `collectstatic`+`migrate`
+   en el arranque; la landing NO añade migraciones. Luego correr
+   `seed_demo_produccion --confirmar` en el Shell del servicio para poblar la demo.
+2. **Datos reales del médico**: reemplazar los `[corchetes]`, subir logo/colores y
+   poner `MOSTRAR_AVISO_BOCETO = False`.
+3. Resto de requisitos del piloto real (plan Railway, WhatsApp Business, HABEAS
+   DATA).
