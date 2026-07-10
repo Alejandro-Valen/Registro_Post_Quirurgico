@@ -29,8 +29,17 @@ def _rate_limit_contacto_excedido(ip):
     return conteo > _LIMITE_CONTACTO_HORA
 
 
+# Mientras el médico no entregue sus datos reales, la landing muestra
+# marcadores [entre corchetes] + un aviso de "boceto". Para pasar a producción
+# final (datos reales cargados), poner MOSTRAR_AVISO_BOCETO = False.
+MOSTRAR_AVISO_BOCETO = True
+
+
 def index(request):
-    return render(request, "home/index.html")
+    return render(request, "home/index.html", {
+        "seccion": "inicio",
+        "mostrar_aviso_boceto": MOSTRAR_AVISO_BOCETO,
+    })
 
 
 def contacto(request):
@@ -57,5 +66,10 @@ def contacto(request):
     return render(
         request,
         "home/contacto.html",
-        {"mensaje_enviado": mensaje_enviado, "error_rate_limit": error_rate_limit},
+        {
+            "mensaje_enviado": mensaje_enviado,
+            "error_rate_limit": error_rate_limit,
+            "seccion": "contacto",
+            "mostrar_aviso_boceto": MOSTRAR_AVISO_BOCETO,
+        },
     )
