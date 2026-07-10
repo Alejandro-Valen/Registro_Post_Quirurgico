@@ -55,7 +55,10 @@ ROOT_URLCONF = 'Registro_Post_Quirurgico.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        # Carpeta de plantillas del proyecto — se busca ANTES que las de las
+        # apps, así podemos sobreescribir plantillas del Admin (base_site.html,
+        # índice del panel del médico).
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [

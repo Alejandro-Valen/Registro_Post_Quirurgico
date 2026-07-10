@@ -628,3 +628,14 @@ class CheckInProgramadoAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
+
+
+# --- Branding del Admin (identidad "calma clínica") + tablero de triage ---
+# El texto de la cabecera y el título de la página de inicio. El índice usa una
+# plantilla propia (admin/index_panel.html) que EXTIENDE el índice real de
+# Django e inyecta el tablero encima con {{ block.super }} — no se pierde nada
+# del admin (lista de apps, barra lateral, acciones recientes).
+admin.site.site_header = 'Seguimiento Postquirúrgico'
+admin.site.site_title = 'Seguimiento Postquirúrgico'
+admin.site.index_title = 'Panel del médico'
+admin.site.index_template = 'admin/index_panel.html'

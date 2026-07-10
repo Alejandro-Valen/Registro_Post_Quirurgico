@@ -1,0 +1,112 @@
+{% load i18n %}
+<div class="pt-wrap">
+
+  <div class="pt-head">
+    <h1>Lo que necesita atención hoy</h1>
+    <span class="pt-date">{{ hoy|date:"l j \d\e F, Y" }}{% if not es_super %} · tus pacientes{% endif %}</span>
+  </div>
+
+  <div class="pt-kpis">
+    <div class="pt-kpi{% if kpi.alta %} crit{% endif %}">
+      <div class="pt-k"><span class="pt-dotk" style="background:var(--pt-alta)"></span> Alertas ALTA sin resolver</div>
+      <div class="pt-v tnum">{{ kpi.alta }}</div>
+      <div class="pt-sub">requieren contacto con el paciente</div>
+    </div>
+    <div class="pt-kpi">
+      <div class="pt-k"><span class="pt-dotk" style="background:var(--pt-faint)"></span> Silencios hoy</div>
+      <div class="pt-v tnum">{{ kpi.silencios }}</div>
+      <div class="pt-sub">no respondieron el check-in</div>
+    </div>
+    <div class="pt-kpi">
+      <div class="pt-k"><span class="pt-dotk" style="background:var(--pt-media)"></span> Check-ins pendientes</div>
+      <div class="pt-v tnum">{{ kpi.pendientes }}<span class="pt-of"> / {{ kpi.total }}</span></div>
+      <div class="pt-sub">respondidos hoy: {{ kpi.respondidos }}</div>
+    </div>
+    <div class="pt-kpi">
+      <div class="pt-k"><span class="pt-dotk" style="background:var(--pt-baja)"></span> En seguimiento</div>
+      <div class="pt-v tnum">{{ kpi.activos }}</div>
+      <div class="pt-sub">pacientes activos</div>
+    </div>
+  </div>
+
+  <div class="pt-grid">
+    <div class="pt-card">
+      <div class="pt-hd"><h2>Necesita atención ahora</h2><span class="pt-count">Ordenado por gravedad</span></div>
+
+      {% for a in atencion %}
+      <div class="pt-arow">
+        <span class="pt-stripe {{ a.sev }}" aria-hidden="true"></span>
+        <div class="pt-main">
+          <div class="pt-pt">{{ a.nombre }}</div>
+          <div class="pt-diag">{{ a.diag }}</div>
+          <div class="pt-meta">Día {{ a.pod }} · {{ a.telefono }}</div>
+          <div class="pt-actions">
+            <a class="pt-btn solid" href="{% url 'admin:signos_sintomas_paciente_change' a.paciente_id %}">Ver paciente</a>
+            <a class="pt-btn" href="{% url 'admin:signos_sintomas_alerta_change' a.alerta_id %}">Ver alerta</a>
+          </div>
+        </div>
+        <div class="pt-when">hace {{ a.fecha|timesince }}</div>
+        <div class="pt-right"><span class="pt-pill {{ a.sev }}">{{ a.sev_label }}</span></div>
+      </div>
+      {% empty %}
+      <div class="pt-empty">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        <p>Sin alertas pendientes. Todo bajo control.</p>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div>
+      <div class="pt-card pt-side">
+        <div class="pt-hd"><h2>Check-ins de hoy</h2></div>
+        <div class="pt-checkins">
+          <div class="pt-prog tnum">{{ kpi.respondidos }}<small> / {{ kpi.total }} respondidos</small></div>
+          <div class="pt-bar"><i style="width:{{ kpi.pct }}%"></i></div>
+          <div class="pt-legend"><span><b>{{ kpi.pendientes }}</b> pendientes</span><span><b>{{ kpi.silencios }}</b> silencios</span></div>
+        </div>
+      </div>
+
+      <div class="pt-card pt-side">
+        <div class="pt-hd"><h2>Silencios</h2><span class="pt-count">Sin respuesta hoy</span></div>
+        {% for s in silencios %}
+        <a class="pt-srow" href="{% url 'admin:signos_sintomas_paciente_change' s.paciente_id %}">
+          <span class="pt-av" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></span>
+          <span class="pt-srow-main"><span class="pt-nm">{{ s.nombre }}</span><span class="pt-mt">Día {{ s.pod }} · {{ s.etiqueta }}</span></span>
+          <span class="pt-pill sil">Silencio</span>
+        </a>
+        {% empty %}
+        <div class="pt-empty small"><p>Nadie sin responder hoy.</p></div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <h2 class="pt-section-title">Pacientes en seguimiento</h2>
+  <div class="pt-card">
+    <div class="pt-tablewrap">
+      <table class="pt-table">
+        <thead>
+          <tr><th>Paciente</th><th>Post-op</th><th class="pt-hide-sm">Última toma</th><th class="pt-hide-sm">Cirugía</th><th>Alertas activas</th></tr>
+        </thead>
+        <tbody>
+          {% for p in pacientes %}
+          <tr>
+            <td><a class="pt-plink" href="{% url 'admin:signos_sintomas_paciente_change' p.id %}">{{ p.nombre }}</a></td>
+            <td class="pt-pod">Día {{ p.pod }}</td>
+            <td class="pt-hide-sm pt-muted">{% if p.ultima %}{{ p.ultima|date:"j M, H:i" }}{% else %}—{% endif %}</td>
+            <td class="pt-hide-sm pt-muted">{{ p.cirugia }}</td>
+            <td>
+              {% if p.n_alta %}<span class="pt-dot" style="background:var(--pt-alta)"></span> <span style="color:var(--pt-alta);font-weight:600">{{ p.n_alta }} alta{{ p.n_alta|pluralize }}</span>
+              {% elif p.n_media %}<span class="pt-dot" style="background:var(--pt-media)"></span> <span style="color:var(--pt-media);font-weight:600">{{ p.n_media }} media{{ p.n_media|pluralize }}</span>
+              {% else %}<span class="pt-dot" style="background:var(--pt-baja)"></span> <span class="pt-muted">sin alertas</span>{% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="pt-muted" style="text-align:center;padding:22px">Aún no hay pacientes en seguimiento.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
