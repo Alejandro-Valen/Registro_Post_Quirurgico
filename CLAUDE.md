@@ -513,6 +513,36 @@ completo en BITACORA.md.
 de contacto (`home/views.py`) y del webhook (`views.py`) dependen de que esto esté
 correcto en producción. Se resuelve al desplegar, no en el código Django.
 
+**Por resolver (al 10/07/2026) — lista consolidada de lo pendiente:**
+1. **[CRÍTICO] El correo de alerta ALTA no sale desde Railway.** Al poblar la
+   demo se detectó que `send_mail` (SMTP síncrono, `fail_silently=False`) en
+   `signos_sintomas/signals.py` **se cuelga en `socket.connect` a
+   `smtp.gmail.com`** desde el contenedor de Railway — el plan de Railway
+   probablemente **bloquea el puerto SMTP saliente**. Impacto: la notificación
+   por email al médico (feature clave) NO funciona en producción. A decidir:
+   migrar de Gmail SMTP a una **API HTTP de correo** (Resend / SendGrid /
+   Mailgun) que no dependa del puerto SMTP, o habilitar SMTP en Railway. Además
+   `send_mail` no tiene timeout ni es no-bloqueante: conviene enviarlo con
+   timeout o en segundo plano para que un fallo de correo no bloquee el flujo.
+   (El comando `seed_demo_produccion` ya silencia el correo durante el seed, así
+   que esto NO afecta a la demo, solo a las alertas reales.)
+2. **Datos reales del médico en la landing (P-12):** reemplazar los
+   `[corchetes]`, subir logo/colores propios, y poner
+   `MOSTRAR_AVISO_BOCETO = False` en `home/views.py`.
+3. **Cuenta del médico (staff, no superusuario):** crear su usuario
+   `is_staff=True`/`is_superuser=False` con email, un **grupo "Médicos"** con
+   permisos de ver/editar Pacientes/Registros/Alertas, y asignarle sus
+   pacientes (`medico_responsable`). El scoping por médico ya está en el Admin;
+   falta la cuenta + permisos. (Idea: un comando `crear_medico` que lo haga de
+   una.)
+4. **Requisitos del piloto real** (ver ROADMAP, "Requisitos para un PILOTO REAL
+   con pacientes"): plan de pago Railway, salir del Sandbox de Twilio a
+   **WhatsApp Business API**, completar los corchetes de
+   `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md`, y prueba real por WhatsApp.
+5. **`enviar_recordatorios` sigue stub** (Twilio saliente real): hoy el sistema
+   es reactivo (responde cuando el paciente escribe); el envío matutino
+   automático real está pendiente.
+
 **Diferido explícitamente:**
 - Desplegar en Railway o Render con PostgreSQL en la nube.
 - Integración Twilio saliente real en `enviar_recordatorios` (stub hoy).

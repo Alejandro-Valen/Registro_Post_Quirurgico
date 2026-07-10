@@ -2668,3 +2668,28 @@ ROADMAP).
    poner `MOSTRAR_AVISO_BOCETO = False`.
 3. Resto de requisitos del piloto real (plan Railway, WhatsApp Business, HABEAS
    DATA).
+
+### Follow-up (mismo 10/07/2026) — SMTP en Railway + fix del seed
+
+Al **poblar la demo en producción** (desde la terminal del contenedor de
+Railway), `seed_demo_produccion --confirmar` se **colgó tras crear al primer
+paciente** (María). Traceback: la señal de `Alerta` envía el correo de alerta
+ALTA con `send_mail` **síncrono** (SMTP, `fail_silently=False`, `signals.py:72`);
+la conexión a `smtp.gmail.com` **se quedó bloqueada en `socket.connect`** desde el
+contenedor → nunca llegó al 2º paciente. Causa probable: **Railway bloquea el
+puerto SMTP saliente** en el plan actual.
+
+**Fix aplicado (seed):** el comando ahora **silencia el envío de correos**
+mientras crea los datos de ejemplo (`EMAIL_BACKEND` → `dummy` en un try/finally
+alrededor del loop, restaurándolo al final). Los pacientes y alertas se crean
+igual; no se toca SMTP. Verificado en local (crea los 2, 44 alertas). Commit
+`fix:`. **Recuperación en Railway:** tras redesplegar, en una terminal NUEVA del
+contenedor: `seed_demo_produccion --limpiar --confirmar` (borra a María a medias)
+y luego `seed_demo_produccion --confirmar` (crea los 2).
+
+**⚠️ Pendiente CRÍTICO (no resuelto) — correos de alerta ALTA reales:** si el
+SMTP saliente está bloqueado en Railway, **las notificaciones ALTA reales al
+médico tampoco saldrán**. Es una feature clave del piloto. A decidir: migrar de
+Gmail SMTP a una **API HTTP de correo** (Resend/SendGrid/Mailgun) o habilitar
+SMTP en Railway; y hacer el envío con **timeout / no bloqueante** (hoy un fallo
+de SMTP cuelga el hilo). Anotado también en la lista "Por resolver" de CLAUDE.md.
