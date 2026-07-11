@@ -2693,3 +2693,82 @@ médico tampoco saldrán**. Es una feature clave del piloto. A decidir: migrar d
 Gmail SMTP a una **API HTTP de correo** (Resend/SendGrid/Mailgun) o habilitar
 SMTP en Railway; y hacer el envío con **timeout / no bloqueante** (hoy un fallo
 de SMTP cuelga el hilo). Anotado también en la lista "Por resolver" de CLAUDE.md.
+
+### Follow-up (mismo 10/07/2026) — Branding + tablero de triage del Admin
+
+El médico entra a `/admin/` (ese es su dashboard). Se mejoró **sin forkear el
+admin**, conservando toda la funcionalidad (listas, filtros, búsqueda, gráficas
+del Sprint 4, flujo de resolver, scoping por médico):
+- **Branding "calma clínica"**: `admin.site.site_header/site_title/index_title`
+  + override de `templates/admin/base_site.html` que carga
+  `signos_sintomas/static/admin/css/panel_admin.css`. El CSS **sobreescribe las
+  variables propias del Admin de Django** (cabecera, enlaces, botones) — aditivo
+  y reversible. Se agregó `TEMPLATES['DIRS'] = [BASE_DIR/'templates']` en
+  settings para poder sobreescribir plantillas del Admin.
+- **Tablero de triage como índice**: `admin.site.index_template =
+  'admin/index_panel.html'`, que **extiende el índice real de Django** e inyecta
+  el panel con `{{ block.super }}` (así no se pierde la lista de apps ni la barra
+  lateral). Datos vía template tag `{% panel_triage %}`
+  (`signos_sintomas/templatetags/panel_admin.py`) con **scoping por médico**:
+  KPIs (alertas ALTA sin resolver, silencios, check-ins de hoy, pacientes
+  activos), lista "necesita atención ahora" (por gravedad, con enlaces reales al
+  admin), silencios y tabla de pacientes en seguimiento.
+- Flujo usado (igual que la landing): **boceto en Artifact** aprobado por León,
+  luego portado al admin real. Se centró el índice en un marco de **1280px**
+  (`body.dashboard #content`) a pedido del Arquitecto (se veía pegado a la
+  izquierda). Commit `feat` `5e2daee`.
+
+**Aclaración importante que surgió:** el Artifact es una **maqueta estática**
+(no interactúa); la funcionalidad real vive en el Django Admin, que se conserva
+intacta — solo se suma el tablero y se repinta.
+
+### Follow-up (mismo 10/07/2026) — Agrupación de alertas por problema + contador
+
+**Duda del Arquitecto:** en "Necesita atención" un paciente aparecía muchas
+veces. Diagnóstico con datos: NO era un bug del motor — eran alertas distintas
+(mismo tipo disparado en varios días + varios tipos); la deduplicación vieja
+(Bloque 2B) solo actuaba dentro de un mismo check-in. **Decisión tomada en
+sesión (León):** que la alerta se **actualice** en vez de crear una por día, con
+un **contador de recurrencia**.
+
+- **Modelo `Alerta`**: campos `veces` (nº de check-ins que detectaron el
+  problema) y `fecha_ultima_deteccion` (migración **0018**). `severidad` = la
+  **máxima** alcanzada mientras la alerta está abierta.
+- **`alert_engine`**: nuevo helper `_registrar_alerta` reemplaza
+  `_deduplicar`+`create` en las 8 reglas. Si hay alerta abierta del mismo
+  `(paciente, tipo)`, la actualiza (sube `veces`/fecha, y severidad si es mayor;
+  nunca baja). Dedup dentro del mismo check-in: dos reglas del mismo tipo cuentan
+  **una** detección (marca por `registro_origen`). Si el médico **resuelve** y el
+  problema reaparece → alerta **nueva**. `evaluar_registro` devuelve instancias
+  únicas (la última que tocó cada alerta, para reflejar la severidad final —
+  bug encontrado: la primera instancia quedaba desactualizada en memoria).
+  **NINGUNA regla ni umbral clínico cambió.**
+- **`signals.py`**: el correo de alerta ALTA se envía solo al **alcanzar ALTA**
+  (creación o escalada, marcada con `_escalo_a_alta`), **no** en cada
+  recurrencia. Alivia el spam y el tema del SMTP.
+- **Admin**: columna "Recurrencia" (badge ×N, resaltado si ≥3). **Tablero**:
+  badge ×N junto al nombre.
+- **Tests**: se reescribieron los 5 de la deduplicación vieja a la nueva
+  semántica + 2 nuevos (correo-solo-al-escalar y resolver→reaparecer-crea-nueva).
+  **204 OK.**
+- **Demo re-sembrada** en local: **María pasó de 29 alertas → 6** (una por
+  problema, con su ×N). Commits `feat` `128c537` y `docs` `3bdd27e`.
+
+### Estado al cierre (10/07/2026)
+**204 tests OK**, `check` limpio. Todo pusheado a `sprint-5-produccion` (HEAD
+`3bdd27e`). Commits de la sesión: `b335ff2` (feat landing+seed), `cb1f0ba`
+(docs), `0c9825f` (fix seed SMTP), `b7bfb90` (docs pendientes), `5e2daee` (feat
+panel/branding), `128c537` (feat agrupación), `3bdd27e` (docs), + este cierre.
+
+### Pendiente para la próxima sesión
+1. **Deploy a Railway** del acumulado de la sesión (push ya hecho; falta que
+   Railway redespliegue y correr `seed_demo_produccion --limpiar --confirmar` +
+   `--confirmar` en el contenedor para la demo con las alertas agrupadas).
+2. **[CRÍTICO] Correo de alerta ALTA en producción** — SMTP saliente bloqueado
+   en Railway (migrar a API HTTP de correo o habilitar SMTP; ver "Por resolver"
+   en CLAUDE.md).
+3. **Datos reales del médico** en la landing (`[corchetes]`, logo/colores,
+   `MOSTRAR_AVISO_BOCETO=False`).
+4. **Cuenta del médico** (staff scoped) + grupo "Médicos" con permisos (posible
+   comando `crear_medico`).
+5. Requisitos del piloto real (plan Railway, WhatsApp Business, HABEAS DATA).

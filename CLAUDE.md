@@ -421,13 +421,24 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B, **app en Railway + cron** (bot end-to-end), y **landing del médico (P-12) + comando seed de demo listos (202 tests OK)**. Falta: deploy de la landing a Railway + datos reales del médico + requisitos de piloto. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B, **app en Railway + cron** (bot end-to-end), **landing del médico (P-12)**, **comando seed de demo**, **panel/branding del Admin (tablero de triage)** y **agrupación de alertas por problema con contador** (**204 tests OK**). Falta: deploy a Railway + datos reales del médico + correo ALTA en prod (SMTP bloqueado) + requisitos de piloto. Rama `sprint-5-produccion` |
 
 **Punto actual (10/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
-desplegada en Railway y el cron funcionando, y ahora la **landing de
-presentación del médico (P-12)** y el **comando seed de demo** listos
-(**202 tests OK**). URL:
+desplegada en Railway y el cron funcionando, y en esta sesión: la **landing de
+presentación del médico (P-12)**, el **comando seed de demo**, el
+**branding + tablero de triage del Admin**, y la **agrupación de alertas por
+problema con contador de recurrencia** (**204 tests OK**). URL:
 `registropostquirurgico-production-1f96.up.railway.app`.
+- **Panel del médico (Admin):** `/admin/` con branding "calma clínica"
+  (override de `admin/base_site.html` + `signos_sintomas/static/admin/css/panel_admin.css`
+  que sobreescribe las variables del Admin) y un **tablero de triage** como
+  índice (`admin/index_panel.html` extiende el índice real + template tag
+  `{% panel_triage %}` en `signos_sintomas/templatetags/panel_admin.py`, scoping
+  por médico). Todo el índice centrado en 1280px. NO se forkeó el admin: se
+  conservan listas, filtros, búsqueda, gráficas y el flujo de resolver.
+- **Alertas agrupadas por problema:** una alerta abierta por (paciente, tipo)
+  con contador `veces` (badge ×N en tablero y Admin); correo ALTA solo al
+  escalar. Ver sección "Modelos → Alerta".
 - **Landing (P-12):** la página `/` (app `home`) se convirtió en la presentación
   del médico + sistema, con un **sistema de diseño compartido**
   (`home/static/home/css/site.css` + `home/static/home/js/pulse.js` +

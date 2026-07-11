@@ -852,6 +852,13 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   reales del médico y deploy a Railway.
 - [x] Demo del dashboard — comando `seed_demo_produccion` (seguro para prod,
   2 pacientes de ejemplo, reversible con `--limpiar`)
+- [x] Panel del médico (Admin): branding "calma clínica" + tablero de triage
+  como índice (sin forkear el admin; se conservan listas/filtros/gráficas)
+- [x] Agrupación de alertas por problema: una alerta abierta por (paciente,tipo)
+  con contador `veces` (badge ×N); correo ALTA solo al escalar (migración 0018)
+- [ ] Correo de alerta ALTA en producción — SMTP saliente bloqueado en Railway
+  (migrar a API HTTP de correo o habilitar SMTP; enviar con timeout/no bloqueante)
+- [ ] Cuenta del médico (staff scoped) + grupo "Médicos" con permisos
 - [ ] Entrega final al equipo médico
 
 **Diferido explícitamente a Sprint 6:**
