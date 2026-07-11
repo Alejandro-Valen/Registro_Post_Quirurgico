@@ -2761,9 +2761,10 @@ un **contador de recurrencia**.
 panel/branding), `128c537` (feat agrupación), `3bdd27e` (docs), + este cierre.
 
 ### Pendiente para la próxima sesión
-1. **Deploy a Railway** del acumulado de la sesión (push ya hecho; falta que
-   Railway redespliegue y correr `seed_demo_produccion --limpiar --confirmar` +
-   `--confirmar` en el contenedor para la demo con las alertas agrupadas).
+1. ~~Deploy a Railway del acumulado + re-seed de la demo~~ **✅ HECHO
+   (10/07/2026)**: el acumulado de la sesión quedó desplegado en Railway y la
+   demo re-sembrada (`--limpiar --confirmar` → `--confirmar`) con las alertas ya
+   agrupadas (contador ×N).
 2. **[CRÍTICO] Correo de alerta ALTA en producción** — SMTP saliente bloqueado
    en Railway (migrar a API HTTP de correo o habilitar SMTP; ver "Por resolver"
    en CLAUDE.md).
