@@ -224,21 +224,47 @@ captura el bot (escala cualitativa, accesible para cualquier paciente).
 el paciente lo menciona espontáneamente (ej. "poco, 30ml"). El alert_engine usa
 `aspecto_drenaje`, no `cantidad_drenaje` ni `volumen_drenaje_ml`, para las alertas.
 
-### Alerta (Sprint 1, ampliado en Sprint 4 y Bloque A)
+### Alerta (Sprint 1, ampliado en Sprint 4, Bloque A y agrupación 10/07/2026)
 ```python
 paciente              ForeignKey(Paciente, PROTECT)
 registro_origen       ForeignKey(RegistroDiario, PROTECT, null=True, blank=True)
                       # null solo para alertas SILENCIO (check-in sin respuesta)
 tipo                  CharField choices=[SEPSIS,FUGA_ANASTOMOTICA,ILEO_PARALITICO,DOLOR_AGUDO,INTOLERANCIA_ORAL,TAQUICARDIA,SILENCIO]
-severidad             CharField choices=[ALTA,MEDIA,BAJA]
+severidad             CharField choices=[ALTA,MEDIA,BAJA]  # = MÁXIMA alcanzada mientras la alerta está abierta
 mensaje               TextField
 resuelta              BooleanField default=False
-fecha_alerta          DateTimeField auto_now_add=True
+fecha_alerta          DateTimeField auto_now_add=True  # PRIMERA detección
+veces                 PositiveSmallIntegerField default=1  # nº de check-ins que la detectaron (contador de recurrencia)
+fecha_ultima_deteccion DateTimeField null=True blank=True  # detección más reciente
 fecha_resolucion      DateTimeField null=True blank=True
 motivo_resolucion     CharField choices=[CONTACTO,URGENCIAS,MEDICACION,FP_MEDICION,FP_RANGO,ESPONTANEO,OTRO] null=True blank=True
                       # Bloque A — obligatorio al resolver (vía formulario intermedio del Admin)
 motivo_resolucion_detalle CharField(500) null=True blank=True  # requerido solo si motivo=OTRO
 ```
+
+**Agrupación de alertas por problema (decisión Arquitecto, 10/07/2026):** el
+`alert_engine` ya NO crea una alerta por check-in. Hay a lo sumo **UNA alerta
+abierta (`resuelta=False`) por `(paciente, tipo)`**: si el mismo problema se
+detecta de nuevo mientras sigue abierta, se **actualiza** (helper
+`_registrar_alerta`, reemplaza la vieja `_deduplicar` por día) — sube `veces`,
+`fecha_ultima_deteccion`, y la `severidad` si la nueva es mayor (la severidad =
+la máxima; nunca baja sola). Dentro de un mismo check-in, dos reglas del mismo
+tipo cuentan como **una** detección. Si el médico **resuelve** la alerta y el
+problema **reaparece** después, se abre una **nueva** (evento nuevo). **Ninguna
+regla ni umbral clínico cambió** — solo cómo se almacenan las detecciones. El
+Admin muestra un badge de recurrencia "×N"; el tablero de triage también.
+
+**Correo de alerta ALTA (actualizado 10/07/2026):** `signals.py` envía el email
+al médico solo cuando la alerta **alcanza ALTA por primera vez** (creación ALTA
+o **escalada** a ALTA, marcada por `_escalo_a_alta` desde el engine), **no** en
+cada recurrencia diaria del mismo problema.
+
+**Motivo de resolución (Bloque A, 02/07/2026):** el médico debe elegir un
+motivo al marcar una alerta como resuelta — la acción "Marcar como resuelta"
+del Admin muestra un formulario intermedio (default "Atendido — contacté al
+paciente"; "Otro" exige detalle libre). Sirve para ajustar umbrales clínicos
+con datos reales en el futuro. El scoping por médico se aplica en cada paso
+(un médico no-superuser solo resuelve alertas de sus propios pacientes).
 
 **Motivo de resolución (Bloque A, 02/07/2026):** el médico debe elegir un
 motivo al marcar una alerta como resuelta — la acción "Marcar como resuelta"
