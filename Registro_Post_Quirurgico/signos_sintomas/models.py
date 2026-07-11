@@ -303,6 +303,23 @@ class Alerta(models.Model):
         help_text="El oncólogo marca esto cuando atiende la alerta"
     )
     fecha_alerta = models.DateTimeField(auto_now_add=True)
+    veces = models.PositiveSmallIntegerField(
+        default=1,
+        verbose_name="Detecciones",
+        help_text=(
+            "En cuántos check-ins se ha detectado este problema mientras la "
+            "alerta sigue abierta (contador de recurrencia). 1 = primera vez."
+        ),
+    )
+    fecha_ultima_deteccion = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Última detección",
+        help_text=(
+            "Último check-in en que se volvió a detectar el problema. "
+            "fecha_alerta = primera detección; esta = la más reciente."
+        ),
+    )
     fecha_resolucion = models.DateTimeField(
         null=True,
         blank=True,

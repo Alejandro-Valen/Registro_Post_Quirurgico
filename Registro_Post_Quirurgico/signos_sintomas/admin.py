@@ -517,13 +517,30 @@ _COLORES_SEVERIDAD = {
 
 @admin.register(Alerta)
 class AlertaAdmin(admin.ModelAdmin):
-    list_display = ['paciente', 'tipo', 'severidad_badge',
+    list_display = ['paciente', 'tipo', 'severidad_badge', 'recurrencia',
                     'resuelta', 'fecha_alerta', 'mensaje_corto']
     list_filter = ['tipo', 'severidad', 'resuelta']
     search_fields = ['paciente__nombre_completo']
     actions = ['marcar_resuelta']
-    readonly_fields = ['fecha_alerta', 'fecha_resolucion', 'registro_origen',
+    readonly_fields = ['fecha_alerta', 'fecha_ultima_deteccion', 'veces',
+                       'fecha_resolucion', 'registro_origen',
                        'motivo_resolucion', 'motivo_resolucion_detalle']
+
+    @admin.display(description='Recurrencia', ordering='veces')
+    def recurrencia(self, obj):
+        """Contador de check-ins en que se ha detectado el problema mientras
+        la alerta sigue abierta. ×1 = primera vez; ×N resalta persistencia."""
+        if obj.veces <= 1:
+            return format_html('<span style="color:#6b7280;">×{}</span>', obj.veces)
+        # Resalta la persistencia: cuantas más veces, más notorio.
+        fondo = '#fee2e2' if obj.veces >= 3 else '#fef3c7'
+        texto = '#7f1d1d' if obj.veces >= 3 else '#78350f'
+        return format_html(
+            '<span title="Detectada en {n} check-ins" style="'
+            'background:{fondo};color:{texto};padding:2px 8px;border-radius:4px;'
+            'font-weight:bold;font-size:0.85em;">×{n}</span>',
+            n=obj.veces, fondo=fondo, texto=texto,
+        )
 
     @admin.display(description='Severidad', ordering='severidad')
     def severidad_badge(self, obj):

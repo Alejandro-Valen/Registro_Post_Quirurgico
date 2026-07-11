@@ -124,6 +124,9 @@ html[data-theme="dark"] .pt-wrap {
 .pt-stripe { width:4px; align-self:stretch; min-height:40px; border-radius:4px; }
 .pt-stripe.alta{background:var(--pt-alta);} .pt-stripe.media{background:var(--pt-media);} .pt-stripe.baja{background:var(--pt-baja);}
 .pt-main .pt-pt { font-weight:600; font-size:14.5px; color:var(--pt-ink); }
+.pt-veces { font-size:11px; font-weight:700; padding:1px 7px; border-radius:999px;
+  background:var(--pt-media-soft); color:var(--pt-media); vertical-align:middle;
+  font-variant-numeric:tabular-nums; }
 .pt-main .pt-diag { font-size:13px; color:var(--pt-soft); margin-top:2px; }
 .pt-main .pt-meta { font-size:12px; color:var(--pt-faint); margin-top:3px; font-family:var(--pt-mono); }
 .pt-actions { display:flex; gap:7px; margin-top:8px; }

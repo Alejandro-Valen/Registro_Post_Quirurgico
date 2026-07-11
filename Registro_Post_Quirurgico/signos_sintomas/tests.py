@@ -2227,6 +2227,35 @@ class AlertaEmailNotificacionTests(TestCase):
             )
         self.assertEqual(len(mail.outbox), 0)
 
+    def test_email_solo_al_alcanzar_alta_no_en_recurrencia(self):
+        """El correo se envía cuando la alerta ALCANZA ALTA (creación o
+        escalada), NO en cada recurrencia diaria del mismo problema."""
+        from django.core import mail
+
+        def _reg(fc):
+            return RegistroDiario.objects.create(
+                paciente=self.paciente,
+                temperatura=Decimal('37.0'), dolor_eva=2,
+                aspecto_drenaje='sin_drenaje', presencia_gases=True,
+                episodios_nauseas=0, frecuencia_cardiaca=fc,
+            )
+
+        # MEDIA (taquicardia 120): no envía.
+        with self.captureOnCommitCallbacks(execute=True):
+            evaluar_registro(_reg(120))
+        self.assertEqual(len(mail.outbox), 0)
+
+        # Escala a ALTA (150): envía 1.
+        with self.captureOnCommitCallbacks(execute=True):
+            evaluar_registro(_reg(150))
+        self.assertEqual(len(mail.outbox), 1)
+
+        # Recurrencia a ALTA (155): NO reenvía.
+        with self.captureOnCommitCallbacks(execute=True):
+            evaluar_registro(_reg(155))
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(Alerta.objects.filter(tipo='TAQUICARDIA').count(), 1)
+
 
 class CacheProductionConfigTests(TestCase):
     """D1 — Detecta dependencia redis faltante cuando producción usa RedisCache."""
@@ -2390,8 +2419,10 @@ class AlertFechaReferenciaTests(TestCase):
 
 
 class AlertDeduplicacionTests(TestCase):
-    """Bloque 2B — deduplicación Opción A+: una alerta por tipo/día,
-    escalamiento intra-día permitido (decisión 0-②)."""
+    """Agrupación de alertas por problema (decisión Arquitecto 10/07/2026):
+    una sola alerta ABIERTA por (paciente, tipo); las recurrencias la
+    ACTUALIZAN (contador `veces` + severidad máxima), no crean filas nuevas.
+    Reemplaza la deduplicación por día del Bloque 2B (Opción A+)."""
 
     def _paciente(self, tel):
         return Paciente.objects.create(
@@ -2421,46 +2452,50 @@ class AlertDeduplicacionTests(TestCase):
             episodios_nauseas=0,
         )
 
-    def test_misma_severidad_mismo_dia_bloquea_duplicado(self):
+    def test_recurrencia_misma_severidad_sube_contador(self):
         """Dos check-ins el mismo día con la misma condición y severidad:
-        el segundo no crea una alerta duplicada del mismo tipo."""
+        no se crea otra alerta — se actualiza la abierta y sube el contador."""
         paciente = self._paciente("+573008881001")
         alertas1 = evaluar_registro(self._reg_fc(paciente, 150))  # ALTA TAQUICARDIA
         self.assertEqual(len([a for a in alertas1 if a.tipo == "TAQUICARDIA"]), 1)
 
-        alertas2 = evaluar_registro(self._reg_fc(paciente, 155))  # también ALTA → bloqueado
-        self.assertEqual(len([a for a in alertas2 if a.tipo == "TAQUICARDIA"]), 0)
+        alertas2 = evaluar_registro(self._reg_fc(paciente, 155))  # también ALTA → actualiza
+        taqui2 = [a for a in alertas2 if a.tipo == "TAQUICARDIA"]
+        self.assertEqual(len(taqui2), 1)
         self.assertEqual(Alerta.objects.filter(tipo="TAQUICARDIA").count(), 1)
+        self.assertEqual(taqui2[0].veces, 2)
 
-    def test_escalamiento_intradiario_crea_alerta_mayor(self):
-        """Mañana BAJA → tarde MEDIA: la MEDIA no es bloqueada porque su
-        severidad es mayor. Opción A+ permite escalamiento intra-día."""
+    def test_escalamiento_intradiario_actualiza_misma_alerta(self):
+        """Mañana BAJA → tarde MEDIA (mismo día): la alerta abierta sube a
+        MEDIA y el contador a 2, sin crear una segunda fila."""
         paciente = self._paciente("+573008881002")
         alertas1 = evaluar_registro(self._reg_fc(paciente, 105))  # BAJA
         self.assertEqual([a for a in alertas1 if a.tipo == "TAQUICARDIA"][0].severidad, "BAJA")
 
-        alertas2 = evaluar_registro(self._reg_fc(paciente, 120))  # MEDIA > BAJA → no bloqueado
+        alertas2 = evaluar_registro(self._reg_fc(paciente, 120))  # MEDIA > BAJA → escala
         taqui2 = [a for a in alertas2 if a.tipo == "TAQUICARDIA"]
         self.assertEqual(len(taqui2), 1)
         self.assertEqual(taqui2[0].severidad, "MEDIA")
-        self.assertEqual(Alerta.objects.filter(tipo="TAQUICARDIA").count(), 2)
+        self.assertEqual(taqui2[0].veces, 2)
+        self.assertEqual(Alerta.objects.filter(tipo="TAQUICARDIA").count(), 1)
 
-    def test_severidad_menor_mismo_dia_bloqueada(self):
-        """Mañana ALTA → tarde BAJA del mismo tipo: la BAJA es bloqueada.
-        Una alerta no puede 'bajar' de severidad una vez alcanzada."""
+    def test_severidad_menor_no_baja_pero_cuenta(self):
+        """Mañana ALTA → tarde BAJA del mismo tipo: la alerta NO baja de
+        severidad (se queda ALTA), pero la recurrencia sí suma al contador."""
         paciente = self._paciente("+573008881003")
         evaluar_registro(self._reg_fc(paciente, 150))  # ALTA
         self.assertEqual(Alerta.objects.filter(tipo="TAQUICARDIA").count(), 1)
 
-        alertas2 = evaluar_registro(self._reg_fc(paciente, 103))  # BAJA → bloqueado
-        self.assertEqual(len([a for a in alertas2 if a.tipo == "TAQUICARDIA"]), 0)
+        alertas2 = evaluar_registro(self._reg_fc(paciente, 103))  # BAJA → no baja severidad
+        taqui2 = [a for a in alertas2 if a.tipo == "TAQUICARDIA"]
+        self.assertEqual(len(taqui2), 1)
+        self.assertEqual(taqui2[0].severidad, "ALTA")
+        self.assertEqual(taqui2[0].veces, 2)
         self.assertEqual(Alerta.objects.filter(tipo="TAQUICARDIA").count(), 1)
 
-    def test_diferentes_dias_no_se_bloquean(self):
-        """La deduplicación es diaria: ALTA ayer NO bloquea ALTA hoy.
-        Se parchea fecha_alerta al día anterior porque auto_now_add siempre
-        pone el timestamp de ahora — en producción la alerta de ayer fue
-        creada realmente ayer, aquí hay que simularlo con update()."""
+    def test_recurrencia_entre_dias_actualiza_alerta(self):
+        """Recurrencia entre días: SEPSIS ayer + SEPSIS hoy = UNA sola alerta
+        abierta con el contador en 2 (antes creaba una por día)."""
         paciente = self._paciente("+573008881004")
         ayer = timezone.localdate() - timedelta(days=1)
 
@@ -2476,8 +2511,10 @@ class AlertDeduplicacionTests(TestCase):
         self.assertEqual(Alerta.objects.filter(tipo="SEPSIS").count(), 1)
 
         alertas_hoy = evaluar_registro(self._reg_temp(paciente, "38.1"))
-        self.assertEqual(len([a for a in alertas_hoy if a.tipo == "SEPSIS"]), 1)
-        self.assertEqual(Alerta.objects.filter(tipo="SEPSIS").count(), 2)
+        sepsis_hoy = [a for a in alertas_hoy if a.tipo == "SEPSIS"]
+        self.assertEqual(len(sepsis_hoy), 1)
+        self.assertEqual(Alerta.objects.filter(tipo="SEPSIS").count(), 1)
+        self.assertEqual(sepsis_hoy[0].veces, 2)
 
     def test_diferentes_tipos_mismo_dia_no_se_bloquean(self):
         """SEPSIS e ILEO_PARALITICO son tipos distintos: coexisten en el mismo día."""
@@ -2495,11 +2532,11 @@ class AlertDeduplicacionTests(TestCase):
         self.assertIn("SEPSIS", tipos)
         self.assertIn("ILEO_PARALITICO", tipos)
 
-    def test_gases_baja_y_nauseas_alta_mismo_dia_generan_dos_ileo(self):  # noqa: E501
-        """Gases=False (BAJA) y nauseas=5 (ALTA) en el mismo registro:
-        _evaluar_gases crea ILEO BAJA, luego _evaluar_nauseas prueba ALTA →
-        ALTA > BAJA → no bloqueada → se crean 2 alertas ILEO (escalamiento
-        intra-evaluación, Opción A+ lo permite porque la severidad sube)."""
+    def test_gases_baja_y_nauseas_alta_mismo_checkin_una_ileo_alta(self):  # noqa: E501
+        """Gases=False (BAJA) y nauseas=5 (ALTA) en el MISMO registro:
+        _evaluar_gases abre ILEO, _evaluar_nauseas la sube a ALTA — es UNA
+        sola alerta ILEO (misma detección/check-in), con severidad ALTA y
+        contador 1 (no cuenta doble dentro del mismo check-in)."""
         paciente = self._paciente("+573008881006")
         registro = RegistroDiario.objects.create(
             paciente=paciente,
@@ -2511,10 +2548,28 @@ class AlertDeduplicacionTests(TestCase):
         )
         alertas = evaluar_registro(registro)
         ileo = [a for a in alertas if a.tipo == "ILEO_PARALITICO"]
-        self.assertEqual(len(ileo), 2)
-        severidades = {a.severidad for a in ileo}
-        self.assertIn("BAJA", severidades)
-        self.assertIn("ALTA", severidades)
+        self.assertEqual(len(ileo), 1)
+        self.assertEqual(ileo[0].severidad, "ALTA")
+        self.assertEqual(ileo[0].veces, 1)
+        self.assertEqual(Alerta.objects.filter(tipo="ILEO_PARALITICO").count(), 1)
+
+    def test_resolver_y_recurrencia_crea_alerta_nueva(self):
+        """Si el médico resuelve la alerta y el problema reaparece después,
+        se abre una alerta NUEVA (evento nuevo), no se reabre la vieja."""
+        paciente = self._paciente("+573008881007")
+        evaluar_registro(self._reg_fc(paciente, 150))  # ALTA
+        alerta = Alerta.objects.get(tipo="TAQUICARDIA")
+        self.assertEqual(alerta.veces, 1)
+
+        alerta.resuelta = True          # el médico la atiende
+        alerta.save()
+
+        alertas2 = evaluar_registro(self._reg_fc(paciente, 152))  # reaparece
+        taqui = [a for a in alertas2 if a.tipo == "TAQUICARDIA"]
+        self.assertEqual(len(taqui), 1)
+        self.assertFalse(taqui[0].resuelta)
+        self.assertEqual(taqui[0].veces, 1)  # arranca de cero
+        self.assertEqual(Alerta.objects.filter(tipo="TAQUICARDIA").count(), 2)
 
 
 class SchedulerTests(TestCase):

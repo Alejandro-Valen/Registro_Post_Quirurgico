@@ -37,7 +37,7 @@
       <div class="pt-arow">
         <span class="pt-stripe {{ a.sev }}" aria-hidden="true"></span>
         <div class="pt-main">
-          <div class="pt-pt">{{ a.nombre }}</div>
+          <div class="pt-pt">{{ a.nombre }}{% if a.veces > 1 %} <span class="pt-veces" title="Detectada en {{ a.veces }} check-ins">×{{ a.veces }}</span>{% endif %}</div>
           <div class="pt-diag">{{ a.diag }}</div>
           <div class="pt-meta">Día {{ a.pod }} · {{ a.telefono }}</div>
           <div class="pt-actions">

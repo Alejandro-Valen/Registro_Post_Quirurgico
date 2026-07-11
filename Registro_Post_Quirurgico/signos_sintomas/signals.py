@@ -26,8 +26,15 @@ logger = logging.getLogger(__name__)
 
 @receiver(post_save, sender=Alerta)
 def notificar_alerta_alta(sender, instance, created, **kwargs):
-    """Envía email al médico responsable si la alerta nueva es de severidad ALTA."""
-    if not created or instance.severidad != 'ALTA':
+    """Envía email al médico responsable cuando una alerta ALCANZA severidad
+    ALTA: al crearse como ALTA, o al ESCALAR a ALTA una alerta ya abierta
+    (decisión Arquitecto 10/07/2026). NO se reenvía en cada recurrencia diaria
+    del mismo problema — solo la primera vez que llega a ALTA. La escalada la
+    marca el alert_engine con `instance._escalo_a_alta`."""
+    if instance.severidad != 'ALTA':
+        return
+    escalo_a_alta = getattr(instance, '_escalo_a_alta', False)
+    if not (created or escalo_a_alta):
         return
 
     medico = instance.paciente.medico_responsable

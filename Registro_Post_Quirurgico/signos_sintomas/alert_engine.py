@@ -52,22 +52,71 @@ VENTANAS_DOLOR = [
 DOLOR_DIAS_TENDENCIA = 2
 DOLOR_DELTA_TENDENCIA = 3
 
-# Orden de severidad usado por múltiples reglas y por la deduplicación
-# de alertas (decisión 0-② Sprint 4 — Opción A+).
+# Orden de severidad usado por múltiples reglas y por la agrupación de alertas.
 ORDEN_SEVERIDAD = {'BAJA': 1, 'MEDIA': 2, 'ALTA': 3, None: 0}
 
 
-def _deduplicar(paciente, tipo, severidad, fecha_referencia):
-    """Opción A+ (decisión 0-② Sprint 4): retorna True si ya existe una
-    alerta del mismo tipo/día con severidad igual o mayor.
-    Si retorna True, el llamador debe omitir la creación de la alerta."""
-    alertas_hoy = Alerta.objects.filter(
-        paciente=paciente,
-        tipo=tipo,
-        fecha_alerta__date=fecha_referencia,
-    ).values_list('severidad', flat=True)
-    nueva_orden = ORDEN_SEVERIDAD[severidad]
-    return any(ORDEN_SEVERIDAD[s] >= nueva_orden for s in alertas_hoy)
+def _registrar_alerta(registro, tipo, severidad, mensaje):
+    """Registra una detección clínica como Alerta, AGRUPANDO POR PROBLEMA
+    (decisión Arquitecto, 10/07/2026):
+
+    - Si el paciente ya tiene una alerta ABIERTA (sin resolver) del mismo
+      `tipo`, la ACTUALIZA en vez de crear otra: sube el contador `veces`
+      (cuántos check-ins la han detectado), la `fecha_ultima_deteccion`, y la
+      severidad si esta es MAYOR (la severidad = la máxima alcanzada mientras
+      está abierta; nunca baja sola).
+    - Si no hay ninguna abierta, crea una nueva (`veces`=1).
+    - Si el médico ya resolvió la alerta y el problema reaparece en un check-in
+      posterior, se crea una NUEVA (es un evento nuevo).
+
+    Dedup dentro del MISMO check-in: si la alerta abierta ya fue tocada por
+    este mismo `registro` (otra regla del mismo check-in la registró), no se
+    vuelve a contar — solo se sube la severidad si aplica.
+
+    Reemplaza a la antigua deduplicación por día (Opción A+): ahora hay a lo
+    sumo UNA alerta abierta por (paciente, tipo). NO cambia ninguna regla ni
+    umbral clínico — solo cómo se almacenan las detecciones."""
+    paciente = registro.paciente
+    abierta = (
+        Alerta.objects
+        .filter(paciente=paciente, tipo=tipo, resuelta=False)
+        .order_by('-fecha_alerta')
+        .first()
+    )
+    if abierta is None:
+        return Alerta.objects.create(
+            paciente=paciente,
+            registro_origen=registro,
+            tipo=tipo,
+            severidad=severidad,
+            mensaje=mensaje,
+            veces=1,
+            fecha_ultima_deteccion=timezone.now(),
+        )
+
+    primera_vez_este_checkin = (abierta.registro_origen_id != registro.id)
+    orden_previa = ORDEN_SEVERIDAD[abierta.severidad]
+
+    # Severidad = máxima alcanzada; el mensaje refleja ese nivel más grave.
+    if ORDEN_SEVERIDAD[severidad] > orden_previa:
+        abierta.severidad = severidad
+        abierta.mensaje = mensaje
+
+    # registro_origen marca el último check-in que tocó la alerta; se actualiza
+    # una vez por check-in (así dos reglas del mismo check-in no cuentan doble).
+    if primera_vez_este_checkin:
+        abierta.veces += 1
+        abierta.fecha_ultima_deteccion = timezone.now()
+        abierta.registro_origen = registro
+
+    # Bandera para signals.py: el correo de alerta ALTA se envía solo cuando la
+    # alerta ALCANZA ALTA (creación ALTA o escalada a ALTA), no en cada
+    # recurrencia. Aquí marcamos la escalada; la creación la detecta `created`.
+    abierta._escalo_a_alta = (
+        abierta.severidad == 'ALTA' and orden_previa < ORDEN_SEVERIDAD['ALTA']
+    )
+    abierta.save()
+    return abierta
 
 
 def _severidad_dolor_por_ventana(dia_postoperatorio, dolor_eva):
@@ -108,17 +157,10 @@ def _evaluar_temperatura(registro, fecha_referencia):
     de notificación en monitoreo domiciliario, no solo criterio de alta
     hospitalaria como en otros estudios)."""
     if registro.temperatura >= TEMPERATURA_ALTA:
-        if _deduplicar(registro.paciente, 'SEPSIS', 'ALTA', fecha_referencia):
-            return []
-        return [Alerta.objects.create(
-            paciente=registro.paciente,
-            registro_origen=registro,
-            tipo='SEPSIS',
-            severidad='ALTA',
-            mensaje=(
-                f"Temperatura de {registro.temperatura}°C detectada. "
-                "Posible cuadro de sepsis — ir a urgencias."
-            )
+        return [_registrar_alerta(
+            registro, 'SEPSIS', 'ALTA',
+            f"Temperatura de {registro.temperatura}°C detectada. "
+            "Posible cuadro de sepsis — ir a urgencias."
         )]
 
     if TEMPERATURA_SUBFEBRICULA_MIN <= registro.temperatura < TEMPERATURA_ALTA:
@@ -134,18 +176,11 @@ def _evaluar_temperatura(registro, fecha_referencia):
             if existe:
                 dias_con_subfebricula.add(dia)
         if len(dias_con_subfebricula) >= DIAS_SUBFEBRICULA_PERSISTENTE:
-            if _deduplicar(registro.paciente, 'SEPSIS', 'MEDIA', fecha_referencia):
-                return []
-            return [Alerta.objects.create(
-                paciente=registro.paciente,
-                registro_origen=registro,
-                tipo='SEPSIS',
-                severidad='MEDIA',
-                mensaje=(
-                    f"Subfebrícula ({registro.temperatura}°C) persistente "
-                    f"por {DIAS_SUBFEBRICULA_PERSISTENTE} días consecutivos. "
-                    "Llamar al médico."
-                )
+            return [_registrar_alerta(
+                registro, 'SEPSIS', 'MEDIA',
+                f"Subfebrícula ({registro.temperatura}°C) persistente "
+                f"por {DIAS_SUBFEBRICULA_PERSISTENTE} días consecutivos. "
+                "Llamar al médico."
             )]
 
     # < 37.5°C o subfebrícula de un solo día: sin alerta.
@@ -160,43 +195,22 @@ def _evaluar_drenaje(registro, fecha_referencia):
         return []
 
     if registro.aspecto_drenaje in DRENAJES_ALTA:
-        if _deduplicar(registro.paciente, 'FUGA_ANASTOMOTICA', 'ALTA', fecha_referencia):
-            return []
-        return [Alerta.objects.create(
-            paciente=registro.paciente,
-            registro_origen=registro,
-            tipo='FUGA_ANASTOMOTICA',
-            severidad='ALTA',
-            mensaje=(
-                f"Drenaje {registro.aspecto_drenaje} detectado. "
-                "Posible fuga anastomótica — ir a urgencias."
-            )
+        return [_registrar_alerta(
+            registro, 'FUGA_ANASTOMOTICA', 'ALTA',
+            f"Drenaje {registro.aspecto_drenaje} detectado. "
+            "Posible fuga anastomótica — ir a urgencias."
         )]
     if registro.aspecto_drenaje in DRENAJES_MEDIA:
-        if _deduplicar(registro.paciente, 'FUGA_ANASTOMOTICA', 'MEDIA', fecha_referencia):
-            return []
-        return [Alerta.objects.create(
-            paciente=registro.paciente,
-            registro_origen=registro,
-            tipo='FUGA_ANASTOMOTICA',
-            severidad='MEDIA',
-            mensaje=(
-                f"Drenaje {registro.aspecto_drenaje} detectado. "
-                "Requiere seguimiento — llamar al médico."
-            )
+        return [_registrar_alerta(
+            registro, 'FUGA_ANASTOMOTICA', 'MEDIA',
+            f"Drenaje {registro.aspecto_drenaje} detectado. "
+            "Requiere seguimiento — llamar al médico."
         )]
     if registro.aspecto_drenaje in DRENAJES_BAJA:
-        if _deduplicar(registro.paciente, 'FUGA_ANASTOMOTICA', 'BAJA', fecha_referencia):
-            return []
-        return [Alerta.objects.create(
-            paciente=registro.paciente,
-            registro_origen=registro,
-            tipo='FUGA_ANASTOMOTICA',
-            severidad='BAJA',
-            mensaje=(
-                "Drenaje seroso detectado. "
-                "Aspecto dentro de lo esperado — monitorear."
-            )
+        return [_registrar_alerta(
+            registro, 'FUGA_ANASTOMOTICA', 'BAJA',
+            "Drenaje seroso detectado. "
+            "Aspecto dentro de lo esperado — monitorear."
         )]
     return []
 
@@ -230,43 +244,22 @@ def _evaluar_gases(registro, fecha_referencia):
         dia_revisado = dia_revisado - timedelta(days=1)
 
     if dias_sin_gases_consecutivos >= DIAS_SIN_GASES_ALTA:
-        if _deduplicar(registro.paciente, 'ILEO_PARALITICO', 'ALTA', fecha_referencia):
-            return []
-        return [Alerta.objects.create(
-            paciente=registro.paciente,
-            registro_origen=registro,
-            tipo='ILEO_PARALITICO',
-            severidad='ALTA',
-            mensaje=(
-                f"Paciente sin gases por {dias_sin_gases_consecutivos} días "
-                "consecutivos. Posible íleo paralítico severo — ir a urgencias."
-            )
+        return [_registrar_alerta(
+            registro, 'ILEO_PARALITICO', 'ALTA',
+            f"Paciente sin gases por {dias_sin_gases_consecutivos} días "
+            "consecutivos. Posible íleo paralítico severo — ir a urgencias."
         )]
     if dias_sin_gases_consecutivos >= DIAS_SIN_GASES_MEDIA:
-        if _deduplicar(registro.paciente, 'ILEO_PARALITICO', 'MEDIA', fecha_referencia):
-            return []
-        return [Alerta.objects.create(
-            paciente=registro.paciente,
-            registro_origen=registro,
-            tipo='ILEO_PARALITICO',
-            severidad='MEDIA',
-            mensaje=(
-                f"Paciente sin gases por {dias_sin_gases_consecutivos} días "
-                "consecutivos. Llamar al médico."
-            )
+        return [_registrar_alerta(
+            registro, 'ILEO_PARALITICO', 'MEDIA',
+            f"Paciente sin gases por {dias_sin_gases_consecutivos} días "
+            "consecutivos. Llamar al médico."
         )]
     if dias_sin_gases_consecutivos >= DIAS_SIN_GASES_BAJA:
-        if _deduplicar(registro.paciente, 'ILEO_PARALITICO', 'BAJA', fecha_referencia):
-            return []
-        return [Alerta.objects.create(
-            paciente=registro.paciente,
-            registro_origen=registro,
-            tipo='ILEO_PARALITICO',
-            severidad='BAJA',
-            mensaje=(
-                f"Paciente sin gases por {dias_sin_gases_consecutivos} día(s). "
-                "Monitorear."
-            )
+        return [_registrar_alerta(
+            registro, 'ILEO_PARALITICO', 'BAJA',
+            f"Paciente sin gases por {dias_sin_gases_consecutivos} día(s). "
+            "Monitorear."
         )]
     return []
 
@@ -320,9 +313,6 @@ def _evaluar_nauseas(registro, fecha_referencia):
     if severidad_final is None:
         return []
 
-    if _deduplicar(registro.paciente, 'ILEO_PARALITICO', severidad_final, fecha_referencia):
-        return []
-
     mensaje = f"{total_episodios_hoy} episodios de náuseas/vómito hoy."
     gano_por_persistencia = (
         ORDEN_SEVERIDAD[severidad_por_persistencia]
@@ -339,12 +329,8 @@ def _evaluar_nauseas(registro, fecha_referencia):
             f" Náuseas persistentes por {dias_con_nauseas_consecutivos} "
             "días consecutivos. Llamar al médico."
         )
-    return [Alerta.objects.create(
-        paciente=registro.paciente,
-        registro_origen=registro,
-        tipo='ILEO_PARALITICO',
-        severidad=severidad_final,
-        mensaje=mensaje
+    return [_registrar_alerta(
+        registro, 'ILEO_PARALITICO', severidad_final, mensaje
     )]
 
 
@@ -390,9 +376,6 @@ def _evaluar_dolor(registro, fecha_referencia):
     if severidad_final is None:
         return []
 
-    if _deduplicar(registro.paciente, 'DOLOR_AGUDO', severidad_final, fecha_referencia):
-        return []
-
     mensaje = (
         f"Dolor EVA {registro.dolor_eva}/10 en día postoperatorio "
         f"{registro.dia_postoperatorio}."
@@ -405,12 +388,8 @@ def _evaluar_dolor(registro, fecha_referencia):
             f" Tendencia al alza detectada (delta {delta_tendencia:.1f} "
             "puntos vs. periodo anterior)."
         )
-    return [Alerta.objects.create(
-        paciente=registro.paciente,
-        registro_origen=registro,
-        tipo='DOLOR_AGUDO',
-        severidad=severidad_final,
-        mensaje=mensaje
+    return [_registrar_alerta(
+        registro, 'DOLOR_AGUDO', severidad_final, mensaje
     )]
 
 
@@ -447,31 +426,17 @@ def _evaluar_tolerancia_liquidos(registro, fecha_referencia):
         dia_revisado = dia_revisado - timedelta(days=1)
 
     if dias_sin_tolerar >= DIAS_SIN_TOLERAR_LIQUIDOS_ALTA:
-        if _deduplicar(registro.paciente, 'INTOLERANCIA_ORAL', 'ALTA', fecha_referencia):
-            return []
-        return [Alerta.objects.create(
-            paciente=registro.paciente,
-            registro_origen=registro,
-            tipo='INTOLERANCIA_ORAL',
-            severidad='ALTA',
-            mensaje=(
-                f"Paciente sin tolerar líquidos por {dias_sin_tolerar} "
-                "días consecutivos. Riesgo de deshidratación — ir a "
-                "urgencias."
-            )
+        return [_registrar_alerta(
+            registro, 'INTOLERANCIA_ORAL', 'ALTA',
+            f"Paciente sin tolerar líquidos por {dias_sin_tolerar} "
+            "días consecutivos. Riesgo de deshidratación — ir a "
+            "urgencias."
         )]
     if dias_sin_tolerar >= DIAS_SIN_TOLERAR_LIQUIDOS_MEDIA:
-        if _deduplicar(registro.paciente, 'INTOLERANCIA_ORAL', 'MEDIA', fecha_referencia):
-            return []
-        return [Alerta.objects.create(
-            paciente=registro.paciente,
-            registro_origen=registro,
-            tipo='INTOLERANCIA_ORAL',
-            severidad='MEDIA',
-            mensaje=(
-                "Paciente no toleró líquidos hoy. Vigilar hidratación "
-                "— llamar al médico."
-            )
+        return [_registrar_alerta(
+            registro, 'INTOLERANCIA_ORAL', 'MEDIA',
+            "Paciente no toleró líquidos hoy. Vigilar hidratación "
+            "— llamar al médico."
         )]
     return []
 
@@ -523,9 +488,6 @@ def _evaluar_hinchazon(registro, fecha_referencia):
     if severidad_hinchazon is None:
         return []
 
-    if _deduplicar(registro.paciente, 'ILEO_PARALITICO', severidad_hinchazon, fecha_referencia):
-        return []
-
     mensajes_h = {
         'BAJA': "Aumento leve de la hinchazón abdominal respecto a ayer. Monitorear.",
         'MEDIA': "Hinchazón abdominal en aumento sostenido sin mejorar. "
@@ -533,12 +495,9 @@ def _evaluar_hinchazon(registro, fecha_referencia):
         'ALTA': "Hinchazón abdominal severa (nivel máximo) sostenida varios días. "
                 "Posible íleo paralítico — ir a urgencias.",
     }
-    return [Alerta.objects.create(
-        paciente=registro.paciente,
-        registro_origen=registro,
-        tipo='ILEO_PARALITICO',
-        severidad=severidad_hinchazon,
-        mensaje=mensajes_h[severidad_hinchazon],
+    return [_registrar_alerta(
+        registro, 'ILEO_PARALITICO', severidad_hinchazon,
+        mensajes_h[severidad_hinchazon]
     )]
 
 
@@ -562,25 +521,19 @@ def _evaluar_frecuencia_cardiaca(registro, fecha_referencia):
     else:
         return []
 
-    if _deduplicar(registro.paciente, 'TAQUICARDIA', severidad_fc, fecha_referencia):
-        return []
-
     mensajes_fc = {
         'BAJA': f"Frecuencia cardíaca de {fc} lpm (taquicardia leve). Monitorear.",
         'MEDIA': f"Frecuencia cardíaca de {fc} lpm. Requiere evaluación — llamar al médico.",
         'ALTA': f"Frecuencia cardíaca de {fc} lpm (taquicardia severa). Escalar — ir a urgencias.",
     }
-    return [Alerta.objects.create(
-        paciente=registro.paciente,
-        registro_origen=registro,
-        tipo='TAQUICARDIA',
-        severidad=severidad_fc,
-        mensaje=mensajes_fc[severidad_fc],
+    return [_registrar_alerta(
+        registro, 'TAQUICARDIA', severidad_fc, mensajes_fc[severidad_fc]
     )]
 
 
 def evaluar_registro(registro, fecha_referencia=None):
-    """Orquesta las 8 reglas clínicas y retorna todas las alertas creadas.
+    """Orquesta las 8 reglas clínicas y retorna todas las alertas creadas
+    O actualizadas en esta evaluación (instancias únicas).
 
     fecha_referencia: fecha calendario que el engine usa como 'hoy' para
     agrupar registros por día. Default: fecha local del registro.
@@ -598,4 +551,15 @@ def evaluar_registro(registro, fecha_referencia=None):
     alertas += _evaluar_tolerancia_liquidos(registro, fecha_referencia)
     alertas += _evaluar_hinchazon(registro, fecha_referencia)
     alertas += _evaluar_frecuencia_cardiaca(registro, fecha_referencia)
-    return alertas
+
+    # Una misma alerta puede ser devuelta por 2 reglas del mismo tipo en el
+    # mismo check-in (p. ej. ILEO por gases y por hinchazón). Devolver una sola
+    # instancia por alerta, y que sea la ÚLTIMA que la tocó — así refleja la
+    # severidad final (la primera instancia quedaría desactualizada en memoria).
+    ultima = {}
+    orden = []
+    for a in alertas:
+        if a.pk not in ultima:
+            orden.append(a.pk)
+        ultima[a.pk] = a
+    return [ultima[pk] for pk in orden]

@@ -88,7 +88,8 @@ def panel_triage(context):
             'diag':        _DIAG_LABEL.get(a.tipo, a.get_tipo_display()),
             'pod':         pod,
             'telefono':    a.paciente.telefono_whatsapp,
-            'fecha':       a.fecha_alerta,
+            'fecha':       a.fecha_ultima_deteccion or a.fecha_alerta,
+            'veces':       a.veces,
         })
 
     # Silencios de hoy.
