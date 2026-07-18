@@ -14,7 +14,8 @@
 #   DJANGO_SETTINGS_MODULE=Registro_Post_Quirurgico.settings_production
 #   SECRET_KEY, ALLOWED_HOSTS, CSRF_TRUSTED_ORIGINS,
 #   DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT,
-#   REDIS_URL, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD
+#   REDIS_URL, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD,
+#   DJANGO_MEDICO_USERNAME, DJANGO_MEDICO_PASSWORD, DJANGO_MEDICO_EMAIL
 
 [phases.install]
 cmds = ["pip install -r requirements-runtime.txt"]
@@ -23,4 +24,4 @@ cmds = ["pip install -r requirements-runtime.txt"]
 cmds = ["python Registro_Post_Quirurgico/manage.py collectstatic --noinput"]
 
 [start]
-cmd = "python Registro_Post_Quirurgico/manage.py migrate --noinput && gunicorn Registro_Post_Quirurgico.wsgi:application --chdir Registro_Post_Quirurgico --bind 0.0.0.0:$PORT"
+cmd = "python Registro_Post_Quirurgico/manage.py migrate --noinput && python Registro_Post_Quirurgico/manage.py crear_admin && python Registro_Post_Quirurgico/manage.py crear_medico && gunicorn Registro_Post_Quirurgico.wsgi:application --chdir Registro_Post_Quirurgico --bind 0.0.0.0:$PORT"

@@ -48,3 +48,43 @@ class ContactoTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(resp.context["mensaje_enviado"])
         self.assertEqual(MensajeContacto.objects.count(), 0)
+
+
+class MensajeContactoAdminTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Group
+        from django.core.management import call_command
+
+        call_command('crear_medico', verbosity=0)
+        self.medico = get_user_model().objects.create_user(
+            username='medico_contacto', password='pass', is_staff=True,
+        )
+        self.medico.groups.add(Group.objects.get(name='Médicos'))
+        self.mensaje = MensajeContacto.objects.create(
+            nombre='Paciente interesado',
+            telefono='+573001112233',
+            mensaje='Necesito información.',
+        )
+        self.client.force_login(self.medico)
+
+    def test_medico_solo_puede_marcar_mensaje_como_revisado(self):
+        url = f'/admin/home/mensajecontacto/{self.mensaje.pk}/change/'
+        self.assertEqual(self.client.get(url).status_code, 200)
+        resp = self.client.post(url, {
+            'nombre': 'Nombre manipulado',
+            'telefono': '000',
+            'mensaje': 'Contenido manipulado',
+            'revisado': 'on',
+        })
+        self.assertEqual(resp.status_code, 302)
+
+        self.mensaje.refresh_from_db()
+        self.assertEqual(self.mensaje.nombre, 'Paciente interesado')
+        self.assertEqual(self.mensaje.telefono, '+573001112233')
+        self.assertEqual(self.mensaje.mensaje, 'Necesito información.')
+        self.assertTrue(self.mensaje.revisado)
+
+    def test_medico_no_puede_borrar_mensaje(self):
+        url = f'/admin/home/mensajecontacto/{self.mensaje.pk}/delete/'
+        self.assertEqual(self.client.get(url).status_code, 403)

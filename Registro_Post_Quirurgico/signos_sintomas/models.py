@@ -2,6 +2,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import CheckConstraint, Q
+from django.utils import timezone
 
 
 class Paciente(models.Model):
@@ -214,7 +215,11 @@ class RegistroDiario(models.Model):
             "falsas alertas provenían del sensor de FR)."
         )
     )
-    fecha_registro = models.DateTimeField(auto_now_add=True, db_index=True)
+    fecha_registro = models.DateTimeField(
+        default=timezone.now,
+        editable=False,
+        db_index=True,
+    )
     dia_postoperatorio = models.PositiveSmallIntegerField(
         editable=False,
         default=0
@@ -248,14 +253,15 @@ class RegistroDiario(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-        from django.utils import timezone
-        hoy = timezone.localdate()
-        # Piso en 0: un registro en el día de la cirugía o anterior (paciente
-        # pre-registrado con cirugía a futuro, o typo en fecha_cirugia) nunca
-        # debe producir un dia_postoperatorio negativo — violaría el CHECK del
-        # PositiveSmallIntegerField y haría crashear el save() del bot. Se
-        # conserva el dato para revisión del médico en vez de rechazarlo.
-        self.dia_postoperatorio = max(0, (hoy - self.paciente.fecha_cirugia).days)
+        if self._state.adding:
+            fecha_referencia = timezone.localdate(self.fecha_registro)
+            # Piso en 0: un registro del día de la cirugía o anterior nunca
+            # debe producir un PositiveSmallIntegerField negativo. El POD queda
+            # congelado al crear para preservar la historia ante ediciones.
+            self.dia_postoperatorio = max(
+                0,
+                (fecha_referencia - self.paciente.fecha_cirugia).days,
+            )
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -336,8 +342,9 @@ class Alerta(models.Model):
     MOTIVO_FP_RANGO    = 'FP_RANGO'
     MOTIVO_ESPONTANEO  = 'ESPONTANEO'
     MOTIVO_OTRO        = 'OTRO'
+    MOTIVO_LEGACY      = 'LEGACY'
 
-    MOTIVOS_RESOLUCION = [
+    MOTIVOS_RESOLUCION_USUARIO = [
         (MOTIVO_CONTACTO,    'Atendido — contacté al paciente'),
         (MOTIVO_URGENCIAS,   'Atendido — derivado a urgencias'),
         (MOTIVO_MEDICACION,  'Atendido — ajuste de medicación'),
@@ -345,6 +352,10 @@ class Alerta(models.Model):
         (MOTIVO_FP_RANGO,    'Falso positivo — dato fuera de rango esperado'),
         (MOTIVO_ESPONTANEO,  'Resuelto espontáneamente — sin intervención'),
         (MOTIVO_OTRO,        'Otro'),
+    ]
+    MOTIVOS_RESOLUCION = [
+        *MOTIVOS_RESOLUCION_USUARIO,
+        (MOTIVO_LEGACY, 'Registro histórico — motivo no capturado'),
     ]
 
     motivo_resolucion = models.CharField(
@@ -382,7 +393,56 @@ class Alerta(models.Model):
                 condition=Q(severidad__in=['ALTA', 'MEDIA', 'BAJA']),
                 name='alerta_severidad_valida',
             ),
+            CheckConstraint(
+                condition=Q(veces__gte=1),
+                name='alerta_veces_positivo',
+            ),
+            CheckConstraint(
+                condition=(
+                    Q(motivo_resolucion__isnull=True)
+                    | Q(motivo_resolucion__in=[
+                        'CONTACTO', 'URGENCIAS', 'MEDICACION', 'FP_MEDICION',
+                        'FP_RANGO', 'ESPONTANEO', 'OTRO', 'LEGACY',
+                    ])
+                ),
+                name='alerta_motivo_resolucion_valido',
+            ),
+            CheckConstraint(
+                condition=(
+                    Q(resuelta=False)
+                    | (
+                        Q(fecha_resolucion__isnull=False)
+                        & Q(motivo_resolucion__isnull=False)
+                    )
+                ),
+                name='alerta_resuelta_con_cierre',
+            ),
+            CheckConstraint(
+                condition=(
+                    ~Q(motivo_resolucion='OTRO')
+                    | (
+                        Q(motivo_resolucion_detalle__isnull=False)
+                        & ~Q(motivo_resolucion_detalle='')
+                    )
+                ),
+                name='alerta_otro_con_detalle',
+            ),
         ]
+
+    def clean(self):
+        super().clean()
+        errores = {}
+        if self.resuelta and not self.fecha_resolucion:
+            errores['fecha_resolucion'] = 'Una alerta resuelta requiere fecha de resolución.'
+        if self.resuelta and not self.motivo_resolucion:
+            errores['motivo_resolucion'] = 'Una alerta resuelta requiere un motivo.'
+        if self.motivo_resolucion == self.MOTIVO_OTRO \
+                and not self.motivo_resolucion_detalle:
+            errores['motivo_resolucion_detalle'] = (
+                'El motivo "Otro" requiere una explicación.'
+            )
+        if errores:
+            raise ValidationError(errores)
 
     def __str__(self):
         estado = "Resuelta" if self.resuelta else "ACTIVA"
@@ -574,6 +634,13 @@ class CheckInProgramado(models.Model):
             CheckConstraint(
                 condition=Q(etiqueta__in=['MAÑANA', 'TARDE']),
                 name='checkin_etiqueta_valida',
+            ),
+            CheckConstraint(
+                condition=(
+                    Q(orden=1, etiqueta='MAÑANA')
+                    | Q(orden=2, etiqueta='TARDE')
+                ),
+                name='checkin_turno_coherente',
             ),
         ]
 

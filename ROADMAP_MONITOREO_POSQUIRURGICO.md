@@ -206,7 +206,7 @@ Registro_Post_Quirurgico/                    ← raíz del repositorio
 | frecuencia_cardiaca | PositiveSmallIntegerField nullable | lpm — alerta TAQUICARDIA por valor absoluto |
 | frecuencia_respiratoria | PositiveSmallIntegerField nullable | rpm — SOLO dashboard, sin alerta (Outersterp 2025) |
 | fecha_registro | DateTimeField auto | Timestamp automático |
-| dia_postoperatorio | PositiveSmallIntegerField | Calculado automáticamente al guardar |
+| dia_postoperatorio | PositiveSmallIntegerField | Calculado con la fecha del registro al crear y luego congelado |
 
 ### Alerta
 | Campo | Tipo | Descripción |
@@ -828,6 +828,9 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   detalle en "Decisiones de diseño pendientes" arriba (checkbox marcado).
   `motivo_resolucion` + `motivo_resolucion_detalle` (migración 0017),
   formulario intermedio obligatorio en el Admin. **183 tests OK.**
+  - [x] **Hardening Loop 1:** formulario de alerta completamente de solo lectura,
+    cierre obligatorio con fecha/motivo a nivel de base de datos y migración
+    conservadora de cierres históricos como `LEGACY` (migración 0019).
 - [x] **Bloque B — Tono de cierre del bot según severidad (02/07/2026):**
   el check-in con alerta MEDIA/ALTA cierra con recomendación de acción al
   paciente (MEDIA: contactar médico; ALTA: urgencias), sin revelar tipo de
@@ -858,7 +861,8 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   con contador `veces` (badge ×N); correo ALTA solo al escalar (migración 0018)
 - [ ] Correo de alerta ALTA en producción — SMTP saliente bloqueado en Railway
   (migrar a API HTTP de correo o habilitar SMTP; enviar con timeout/no bloqueante)
-- [ ] Cuenta del médico (staff scoped) + grupo "Médicos" con permisos
+- [x] Comando idempotente `crear_medico` + grupo "Médicos" de privilegio mínimo
+- [ ] Provisionar y verificar en Railway la cuenta real del médico
 - [ ] Entrega final al equipo médico
 
 **Diferido explícitamente a Sprint 6:**

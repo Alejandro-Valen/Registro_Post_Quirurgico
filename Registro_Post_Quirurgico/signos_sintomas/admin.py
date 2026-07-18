@@ -20,7 +20,7 @@ class MotivoResolucionForm(django_forms.Form):
     ('_selected_action', el mismo nombre que usa el admin) y se re-filtran
     por permisos en la acción, para no confiar en input del cliente."""
     motivo_resolucion = django_forms.ChoiceField(
-        choices=Alerta.MOTIVOS_RESOLUCION,
+        choices=Alerta.MOTIVOS_RESOLUCION_USUARIO,
         initial=Alerta.MOTIVO_CONTACTO,
         label='Motivo de resolución',
     )
@@ -470,9 +470,9 @@ class PacienteAdmin(admin.ModelAdmin):
         return super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
-        if obj is not None and _solo_propios(request):
-            return obj.medico_responsable == request.user
-        return super().has_delete_permission(request, obj)
+        # El seguimiento se cierra con activo=False. El borrado elimina
+        # trazabilidad clínica y queda reservado para mantenimiento excepcional.
+        return request.user.is_superuser
 
 
 @admin.register(RegistroDiario)
@@ -489,23 +489,20 @@ class RegistroDiarioAdmin(admin.ModelAdmin):
             return qs.filter(paciente__medico_responsable=request.user)
         return qs
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """B6: dropdown de paciente limitado a los del médico actual."""
-        if db_field.name == 'paciente' and _solo_propios(request):
-            kwargs['queryset'] = Paciente.objects.filter(
-                medico_responsable=request.user
-            )
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    def get_readonly_fields(self, request, obj=None):
+        if request.user.is_superuser:
+            return ['fecha_registro', 'dia_postoperatorio']
+        return [campo.name for campo in self.model._meta.fields]
+
+    def has_add_permission(self, request):
+        # Los registros se originan exclusivamente en el flujo de WhatsApp.
+        return False
 
     def has_change_permission(self, request, obj=None):
-        if obj is not None and _solo_propios(request):
-            return obj.paciente.medico_responsable == request.user
-        return super().has_change_permission(request, obj)
+        return request.user.is_superuser and super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
-        if obj is not None and _solo_propios(request):
-            return obj.paciente.medico_responsable == request.user
-        return super().has_delete_permission(request, obj)
+        return request.user.is_superuser
 
 
 _COLORES_SEVERIDAD = {
@@ -522,9 +519,11 @@ class AlertaAdmin(admin.ModelAdmin):
     list_filter = ['tipo', 'severidad', 'resuelta']
     search_fields = ['paciente__nombre_completo']
     actions = ['marcar_resuelta']
-    readonly_fields = ['fecha_alerta', 'fecha_ultima_deteccion', 'veces',
-                       'fecha_resolucion', 'registro_origen',
-                       'motivo_resolucion', 'motivo_resolucion_detalle']
+    readonly_fields = [campo.name for campo in Alerta._meta.fields]
+
+    def has_add_permission(self, request):
+        # Las alertas son resultados del motor clínico, no entradas manuales.
+        return False
 
     @admin.display(description='Recurrencia', ordering='veces')
     def recurrencia(self, obj):
@@ -642,6 +641,11 @@ class CheckInProgramadoAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+    def has_change_permission(self, request, obj=None):
+        # Para el médico son eventos operativos de solo lectura. El superusuario
+        # conserva una vía de mantenimiento excepcional.
+        return request.user.is_superuser and super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser

@@ -214,8 +214,8 @@ tolero_liquidos       BooleanField null=True  # null=no capturado, False=no tole
 hinchazon_abdominal   CharField choices=[nada,algo,mucho] null=True  # se evalúa por empeoramiento entre días
 frecuencia_cardiaca   PositiveSmallIntegerField null=True  # lpm — alerta TAQUICARDIA por valor absoluto
 frecuencia_respiratoria PositiveSmallIntegerField null=True  # rpm — SOLO dashboard, sin alerta (Outersterp 2025)
-fecha_registro        DateTimeField auto_now_add=True
-dia_postoperatorio    PositiveSmallIntegerField  # calculado automáticamente en save()
+fecha_registro        DateTimeField default=timezone.now, editable=False
+dia_postoperatorio    PositiveSmallIntegerField  # calculado al crear y luego inmutable
 ```
 
 **Decisión de diseño (Sprint 3):** `cantidad_drenaje` es el dato principal que
@@ -237,7 +237,7 @@ fecha_alerta          DateTimeField auto_now_add=True  # PRIMERA detección
 veces                 PositiveSmallIntegerField default=1  # nº de check-ins que la detectaron (contador de recurrencia)
 fecha_ultima_deteccion DateTimeField null=True blank=True  # detección más reciente
 fecha_resolucion      DateTimeField null=True blank=True
-motivo_resolucion     CharField choices=[CONTACTO,URGENCIAS,MEDICACION,FP_MEDICION,FP_RANGO,ESPONTANEO,OTRO] null=True blank=True
+motivo_resolucion     CharField choices=[CONTACTO,URGENCIAS,MEDICACION,FP_MEDICION,FP_RANGO,ESPONTANEO,OTRO,LEGACY] null=True blank=True
                       # Bloque A — obligatorio al resolver (vía formulario intermedio del Admin)
 motivo_resolucion_detalle CharField(500) null=True blank=True  # requerido solo si motivo=OTRO
 ```
@@ -265,13 +265,9 @@ del Admin muestra un formulario intermedio (default "Atendido — contacté al
 paciente"; "Otro" exige detalle libre). Sirve para ajustar umbrales clínicos
 con datos reales en el futuro. El scoping por médico se aplica en cada paso
 (un médico no-superuser solo resuelve alertas de sus propios pacientes).
-
-**Motivo de resolución (Bloque A, 02/07/2026):** el médico debe elegir un
-motivo al marcar una alerta como resuelta — la acción "Marcar como resuelta"
-del Admin muestra un formulario intermedio (default "Atendido — contacté al
-paciente"; "Otro" exige detalle libre). Sirve para ajustar umbrales clínicos
-con datos reales en el futuro. El scoping por médico se aplica en cada paso
-(un médico no-superuser solo resuelve alertas de sus propios pacientes).
+Desde el Loop 1 de hardening, la alerta completa es de solo lectura en el
+formulario y la base exige fecha + motivo para todo cierre. `LEGACY` identifica
+exclusivamente cierres históricos previos donde ese motivo no se capturó.
 
 ### ConversacionWhatsApp (Sprint 3, ampliado en Sprint 3.5)
 ```python
@@ -421,13 +417,13 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B, **app en Railway + cron** (bot end-to-end), **landing del médico (P-12)**, **comando seed de demo**, **panel/branding del Admin (tablero de triage)** y **agrupación de alertas por problema con contador** (**204 tests OK**). **Todo desplegado en Railway + demo re-sembrada (10/07)**. Falta: correo ALTA en prod (SMTP bloqueado) + datos reales del médico + cuenta staff del médico + requisitos de piloto. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B, **app en Railway + cron** (bot end-to-end), **landing del médico (P-12)**, **panel/branding**, **alertas agrupadas** y **Loop 1 de integridad clínica/permisos** (**217 tests OK**). Desplegado en Railway hasta el estado del 10/07; falta desplegar Loop 1, correo ALTA por API HTTP, datos/cuenta real del médico y requisitos de piloto. Rama `sprint-5-produccion` |
 
 **Punto actual (10/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
 desplegada en Railway y el cron funcionando, y en esta sesión: la **landing de
 presentación del médico (P-12)**, el **comando seed de demo**, el
 **branding + tablero de triage del Admin**, y la **agrupación de alertas por
-problema con contador de recurrencia** (**204 tests OK**). URL:
+problema con contador de recurrencia** y el **Loop 1 de integridad** (**217 tests OK**). URL:
 `registropostquirurgico-production-1f96.up.railway.app`.
 - **Panel del médico (Admin):** `/admin/` con branding "calma clínica"
   (override de `admin/base_site.html` + `signos_sintomas/static/admin/css/panel_admin.css`
@@ -566,12 +562,11 @@ correcto en producción. Se resuelve al desplegar, no en el código Django.
 2. **Datos reales del médico en la landing (P-12):** reemplazar los
    `[corchetes]`, subir logo/colores propios, y poner
    `MOSTRAR_AVISO_BOCETO = False` en `home/views.py`.
-3. **Cuenta del médico (staff, no superusuario):** crear su usuario
-   `is_staff=True`/`is_superuser=False` con email, un **grupo "Médicos"** con
-   permisos de ver/editar Pacientes/Registros/Alertas, y asignarle sus
-   pacientes (`medico_responsable`). El scoping por médico ya está en el Admin;
-   falta la cuenta + permisos. (Idea: un comando `crear_medico` que lo haga de
-   una.)
+3. **Cuenta real del médico:** el comando idempotente `crear_medico` y el grupo
+   de privilegio mínimo ya están implementados. Falta cargar temporalmente
+   `DJANGO_MEDICO_*` en Railway, verificar el acceso y asignarle sus pacientes
+   (`medico_responsable`). Registros/check-ins son de solo lectura; alertas se
+   resuelven únicamente mediante la acción con motivo.
 4. **Requisitos del piloto real** (ver ROADMAP, "Requisitos para un PILOTO REAL
    con pacientes"): plan de pago Railway, salir del Sandbox de Twilio a
    **WhatsApp Business API**, completar los corchetes de

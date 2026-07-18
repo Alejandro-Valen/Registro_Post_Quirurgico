@@ -34,5 +34,6 @@ CMD python Registro_Post_Quirurgico/manage.py collectstatic --noinput \
  && python Registro_Post_Quirurgico/manage.py migrate --noinput \
  && ( [ "$RESET_AXES" = "1" ] && python Registro_Post_Quirurgico/manage.py axes_reset || true ) \
  && (python Registro_Post_Quirurgico/manage.py crear_admin || true) \
+ && python Registro_Post_Quirurgico/manage.py crear_medico \
  && gunicorn Registro_Post_Quirurgico.wsgi:application \
       --chdir Registro_Post_Quirurgico --bind 0.0.0.0:${PORT:-8000}

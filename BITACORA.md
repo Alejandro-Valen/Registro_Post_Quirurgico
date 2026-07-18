@@ -2773,3 +2773,38 @@ panel/branding), `128c537` (feat agrupación), `3bdd27e` (docs), + este cierre.
 4. **Cuenta del médico** (staff scoped) + grupo "Médicos" con permisos (posible
    comando `crear_medico`).
 5. Requisitos del piloto real (plan Railway, WhatsApp Business, HABEAS DATA).
+
+---
+
+## 18/07/2026 — Loop 1: integridad clínica, permisos y depuración conservadora
+
+Se ejecutó el primer loop posterior a la auditoría profunda, sin cambiar
+umbrales ni decisiones clínicas pendientes de validación médica:
+
+- **POD histórico corregido:** `RegistroDiario.fecha_registro` usa ahora
+  `default=timezone.now`, acepta fechas explícitas para importación/seed y
+  `dia_postoperatorio` se calcula solo al crear. La migración 0019 reparó
+  **16 registros locales** afectados por el cálculo anterior con "hoy".
+- **Cierre de alertas íntegro:** formulario de alerta completamente de solo
+  lectura; el cierre solo ocurre mediante la acción con motivo. Restricciones
+  de BD exigen fecha+motivo, `veces >= 1`, motivo válido y detalle para `OTRO`.
+  Cierres antiguos sin motivo se conservan como `LEGACY`, sin inventar una
+  actuación clínica.
+- **Admin con privilegio mínimo:** médicos no pueden modificar ni borrar
+  registros, check-ins o alertas, ni borrar pacientes; sí pueden actualizar
+  sus pacientes, resolver alertas por la acción y marcar mensajes de contacto
+  como revisados. El superusuario conserva mantenimiento excepcional.
+- **Rol reproducible:** nuevo comando idempotente `crear_medico`, integrado al
+  arranque Docker/Nixpacks. Configura el grupo `Médicos`; opcionalmente crea la
+  cuenta desde `DJANGO_MEDICO_*` y rechaza reutilizar un superusuario.
+- **Depuración:** `seed_demo` reutiliza el rol real en vez de mantener permisos
+  paralelos; ambos seeds crean fechas/POD correctos. Se corrigió la guía de
+  Railway (Dockerfile es el despliegue activo) y se eliminó documentación
+  duplicada. No se borraron seeds, fallback Nixpacks ni archivos no rastreados.
+
+**Verificación:** 217 tests OK; `check --deploy` sin issues; migraciones al día;
+`git diff --check` limpio. La migración 0019 quedó aplicada en la base local.
+
+**Pendiente inmediato:** desplegar/revisar el Loop 1 en Railway, provisionar la
+cuenta real del médico y continuar con el Loop 2 de confiabilidad del webhook y
+motor de alertas.

@@ -1082,6 +1082,32 @@ class RegistroDiarioModelTests(TestCase):
         registro = self._crear_registro(paciente)
         self.assertEqual(registro.dia_postoperatorio, 5)
 
+    def test_registro_historico_usa_su_fecha_y_congela_el_pod(self):
+        paciente = Paciente.objects.create(
+            nombre_completo="Paciente Histórico",
+            telefono_whatsapp="+573009990004",
+            fecha_cirugia=timezone.localdate() - timedelta(days=10),
+        )
+        fecha_historica = timezone.now() - timedelta(days=4)
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            fecha_registro=fecha_historica,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        self.assertEqual(registro.dia_postoperatorio, 6)
+
+        paciente.fecha_cirugia = timezone.localdate() - timedelta(days=20)
+        paciente.save()
+        registro.temperatura = Decimal("37.1")
+        registro.save()
+        registro.refresh_from_db()
+
+        self.assertEqual(registro.dia_postoperatorio, 6)
+
 
 class BotWhatsAppTests(TestCase):
     TELEFONO = "+573001112233"
@@ -1788,7 +1814,7 @@ class AdminScopingTests(TestCase):
         # Los usuarios staff necesitan permisos explícitos de modelo para
         # acceder al admin — sin esto los 403 vendrían de falta de permiso
         # general, no del scoping por médico (falso positivo en tests).
-        for model in (Paciente, RegistroDiario, Alerta):
+        for model in (Paciente, RegistroDiario, Alerta, CheckInProgramado):
             ct = ContentType.objects.get_for_model(model)
             perms = Permission.objects.filter(content_type=ct)
             self.medico_a.user_permissions.add(*perms)
@@ -1828,6 +1854,20 @@ class AdminScopingTests(TestCase):
             paciente=self.paciente_b,
             registro_origen=self.registro_b,
             tipo='SEPSIS', severidad='BAJA', mensaje='Alerta B',
+        )
+        self.checkin_a = CheckInProgramado.objects.create(
+            paciente=self.paciente_a,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now(),
+        )
+        self.checkin_b = CheckInProgramado.objects.create(
+            paciente=self.paciente_b,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now(),
         )
 
     def _login(self, user):
@@ -1904,6 +1944,20 @@ class AdminScopingTests(TestCase):
         url = f'/admin/signos_sintomas/registrodiario/{self.registro_b.pk}/change/'
         self.assertEqual(self.client.get(url).status_code, 200)
 
+    def test_medico_ve_registro_propio_pero_no_puede_modificarlo(self):
+        self._login(self.medico_a)
+        url = f'/admin/signos_sintomas/registrodiario/{self.registro_a.pk}/change/'
+        self.assertEqual(self.client.get(url).status_code, 200)
+        resp = self.client.post(url, {'temperatura': '39.9'})
+        self.assertEqual(resp.status_code, 403)
+        self.registro_a.refresh_from_db()
+        self.assertEqual(self.registro_a.temperatura, Decimal('37.0'))
+
+    def test_medico_no_puede_borrar_paciente_propio(self):
+        self._login(self.medico_a)
+        url = f'/admin/signos_sintomas/paciente/{self.paciente_a.pk}/delete/'
+        self.assertEqual(self.client.get(url).status_code, 403)
+
     # ------------------------------------------------------------------ #
     # AlertaAdmin                                                          #
     # ------------------------------------------------------------------ #
@@ -1944,6 +1998,33 @@ class AdminScopingTests(TestCase):
         self._login(self.superuser)
         url = f'/admin/signos_sintomas/alerta/{self.alerta_b.pk}/change/'
         self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_formulario_alerta_no_permite_resolver_directamente(self):
+        self._login(self.medico_a)
+        url = f'/admin/signos_sintomas/alerta/{self.alerta_a.pk}/change/'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, 'name="resuelta"')
+
+        self.client.post(url, {'resuelta': 'on'})
+        self.alerta_a.refresh_from_db()
+        self.assertFalse(self.alerta_a.resuelta)
+
+    def test_medico_ve_checkin_propio_pero_no_puede_modificarlo(self):
+        self._login(self.medico_a)
+        url = f'/admin/signos_sintomas/checkinprogramado/{self.checkin_a.pk}/change/'
+        self.assertEqual(self.client.get(url).status_code, 200)
+        resp = self.client.post(url, {'estado': CheckInProgramado.ESTADO_NO_RESPONDIDO})
+        self.assertEqual(resp.status_code, 403)
+        self.checkin_a.refresh_from_db()
+        self.assertEqual(self.checkin_a.estado, CheckInProgramado.ESTADO_PENDIENTE)
+
+    def test_medico_no_puede_ver_checkin_ajeno(self):
+        self._login(self.medico_a)
+        url = f'/admin/signos_sintomas/checkinprogramado/{self.checkin_b.pk}/change/'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 302)
+        self.assertRegex(resp.url, r'^/admin/')
 
 
 class AlertaAdminAccionesTests(TestCase):
@@ -2050,6 +2131,16 @@ class AlertaMotivoResolucionTests(TestCase):
     def test_motivo_resolucion_null_por_default(self):
         """Una alerta recién creada no tiene motivo de resolución."""
         self.assertIsNone(self.alerta.motivo_resolucion)
+
+    def test_base_de_datos_rechaza_cierre_sin_motivo_y_fecha(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Alerta.objects.filter(pk=self.alerta.pk).update(resuelta=True)
+
+    def test_modelo_rechaza_cierre_sin_motivo_y_fecha(self):
+        self.alerta.resuelta = True
+        with self.assertRaises(ValidationError):
+            self.alerta.full_clean()
 
     def test_accion_sin_aplicar_muestra_formulario_intermedio(self):
         self.client.force_login(self.superuser)
@@ -2562,6 +2653,8 @@ class AlertDeduplicacionTests(TestCase):
         self.assertEqual(alerta.veces, 1)
 
         alerta.resuelta = True          # el médico la atiende
+        alerta.fecha_resolucion = timezone.now()
+        alerta.motivo_resolucion = Alerta.MOTIVO_CONTACTO
         alerta.save()
 
         alertas2 = evaluar_registro(self._reg_fc(paciente, 152))  # reaparece
@@ -2586,7 +2679,10 @@ class SchedulerTests(TestCase):
     def _checkin(self, paciente, orden=1, etiqueta=None, dias_atras=0,
                  estado=CheckInProgramado.ESTADO_PENDIENTE, horas_atras=0):
         if etiqueta is None:
-            etiqueta = CheckInProgramado.ETIQUETA_MANANA
+            etiqueta = (
+                CheckInProgramado.ETIQUETA_TARDE
+                if orden == 2 else CheckInProgramado.ETIQUETA_MANANA
+            )
         fecha_dia = timezone.localdate() - timedelta(days=dias_atras)
         hora_prog = timezone.now() - timedelta(hours=horas_atras)
         ci = CheckInProgramado.objects.create(
@@ -2844,6 +2940,78 @@ class CrearAdminCommandTests(TestCase):
         self.assertTrue(u.is_superuser)
 
 
+class CrearMedicoCommandTests(TestCase):
+    """El rol médico se crea de forma reproducible y con privilegio mínimo."""
+
+    PERMISOS_ESPERADOS = {
+        'add_paciente', 'change_paciente', 'view_paciente',
+        'view_registrodiario',
+        'change_alerta', 'view_alerta',
+        'view_checkinprogramado',
+        'change_mensajecontacto', 'view_mensajecontacto',
+    }
+
+    def test_sin_credenciales_configura_solo_el_grupo(self):
+        import os
+        from unittest.mock import patch
+        from django.contrib.auth.models import Group
+        from django.core.management import call_command
+
+        with patch.dict(os.environ, {}, clear=True):
+            call_command('crear_medico', verbosity=0)
+
+        grupo = Group.objects.get(name='Médicos')
+        self.assertSetEqual(
+            set(grupo.permissions.values_list('codename', flat=True)),
+            self.PERMISOS_ESPERADOS,
+        )
+        self.assertEqual(get_user_model().objects.count(), 0)
+
+    def test_crea_staff_no_superusuario_sin_permisos_extra(self):
+        import os
+        from unittest.mock import patch
+        from django.core.management import call_command
+
+        entorno = {
+            'DJANGO_MEDICO_USERNAME': 'doctora',
+            'DJANGO_MEDICO_PASSWORD': 'clave-medica-segura',
+            'DJANGO_MEDICO_EMAIL': 'doctora@example.com',
+        }
+        with patch.dict(os.environ, entorno, clear=True):
+            call_command('crear_medico', verbosity=0)
+
+        user = get_user_model().objects.get(username='doctora')
+        self.assertTrue(user.is_staff)
+        self.assertFalse(user.is_superuser)
+        self.assertTrue(user.check_password('clave-medica-segura'))
+        self.assertEqual(list(user.groups.values_list('name', flat=True)), ['Médicos'])
+        self.assertEqual(user.user_permissions.count(), 0)
+        self.assertTrue(user.has_perm('signos_sintomas.change_alerta'))
+        self.assertFalse(user.has_perm('signos_sintomas.delete_alerta'))
+        self.assertFalse(user.has_perm('signos_sintomas.change_registrodiario'))
+
+    def test_rechaza_convertir_un_superusuario_existente(self):
+        import os
+        from unittest.mock import patch
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        user = get_user_model().objects.create_superuser(
+            username='jefe', password='clave-original',
+        )
+        entorno = {
+            'DJANGO_MEDICO_USERNAME': 'jefe',
+            'DJANGO_MEDICO_PASSWORD': 'otra-clave',
+        }
+        with patch.dict(os.environ, entorno, clear=True):
+            with self.assertRaises(CommandError):
+                call_command('crear_medico', verbosity=0)
+
+        user.refresh_from_db()
+        self.assertTrue(user.is_superuser)
+        self.assertTrue(user.check_password('clave-original'))
+
+
 class SeedDemoTests(TestCase):
     """A-3 — guard de entorno y usuario demo sin superuser."""
 
@@ -2861,6 +3029,15 @@ class SeedDemoTests(TestCase):
         medico = get_user_model().objects.get(username='demo_medico')
         self.assertTrue(medico.is_staff)
         self.assertFalse(medico.is_superuser)
+        self.assertTrue(medico.groups.filter(name='Médicos').exists())
+        self.assertTrue(medico.has_perm('signos_sintomas.view_registrodiario'))
+        self.assertFalse(medico.has_perm('signos_sintomas.change_registrodiario'))
+        self.assertEqual(
+            list(RegistroDiario.objects.order_by('fecha_registro').values_list(
+                'dia_postoperatorio', flat=True,
+            )),
+            list(range(1, 11)),
+        )
 
 
 class DesactivarPacientesVencidosTests(TestCase):
@@ -3194,6 +3371,8 @@ class GraficaSignosVitalesTests(TestCase):
         Alerta.objects.create(
             paciente=self.paciente, registro_origen=registro,
             tipo='SEPSIS', severidad='ALTA', mensaje='Fiebre alta', resuelta=True,
+            fecha_resolucion=timezone.now(),
+            motivo_resolucion=Alerta.MOTIVO_CONTACTO,
         )
         resp = self.client.get(self._url_change())
         datos = self._extraer_datos(resp.content.decode())

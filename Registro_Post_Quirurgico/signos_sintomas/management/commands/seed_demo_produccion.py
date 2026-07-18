@@ -237,6 +237,7 @@ class Command(BaseCommand):
             tiene_drenaje = aspecto is not None
             registro = RegistroDiario.objects.create(
                 paciente=paciente,
+                fecha_registro=fecha_reg,
                 temperatura=Decimal(str(temp)),
                 dolor_eva=dolor,
                 tiene_drenaje=tiene_drenaje,
@@ -247,9 +248,6 @@ class Command(BaseCommand):
                 tolero_liquidos=tolero,
                 frecuencia_cardiaca=fc,
             )
-            # fecha_registro es auto_now_add; se fija al día correcto con update().
-            RegistroDiario.objects.filter(pk=registro.pk).update(fecha_registro=fecha_reg)
-            registro.refresh_from_db()
 
             CheckInProgramado.objects.create(
                 paciente=paciente,

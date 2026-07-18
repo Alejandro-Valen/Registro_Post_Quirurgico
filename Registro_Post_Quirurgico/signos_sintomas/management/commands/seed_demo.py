@@ -23,10 +23,15 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from signos_sintomas.alert_engine import evaluar_registro
+from signos_sintomas.management.commands.crear_medico import (
+    NOMBRE_GRUPO_MEDICOS,
+    obtener_permisos_medico,
+)
 from signos_sintomas.models import (
     Alerta, CheckInProgramado, Paciente, RegistroDiario
 )
@@ -90,13 +95,6 @@ class Command(BaseCommand):
             Paciente.objects.filter(telefono_whatsapp=TELEFONO_DEMO).delete()
             self.stdout.write(self.style.WARNING('Datos demo anteriores eliminados.'))
 
-        if Paciente.objects.filter(telefono_whatsapp=TELEFONO_DEMO).exists():
-            self.stdout.write(self.style.WARNING(
-                f'El paciente demo ya existe ({TELEFONO_DEMO}). '
-                f'Usa --borrar para recrear.'
-            ))
-            return
-
         # Usuario demo — is_staff sin is_superuser, para representar la
         # experiencia real de un médico (ve solo sus propios pacientes; sin
         # acceso a Usuarios ni AXES). A-3, hallazgo de auditoría 02/07/2026.
@@ -113,6 +111,21 @@ class Command(BaseCommand):
             self.stdout.write(f'  Usuario demo creado: {USERNAME_DEMO} / demo1234')
         else:
             medico = User.objects.get(username=USERNAME_DEMO)
+
+        grupo, _ = Group.objects.get_or_create(name=NOMBRE_GRUPO_MEDICOS)
+        grupo.permissions.set(obtener_permisos_medico())
+        medico.is_staff = True
+        medico.is_superuser = False
+        medico.save(update_fields=['is_staff', 'is_superuser'])
+        medico.groups.set([grupo])
+        medico.user_permissions.clear()
+
+        if Paciente.objects.filter(telefono_whatsapp=TELEFONO_DEMO).exists():
+            self.stdout.write(self.style.WARNING(
+                f'El paciente demo ya existe ({TELEFONO_DEMO}). '
+                f'Usa --borrar para recrear.'
+            ))
+            return
 
         # Paciente ficticio
         hoy = timezone.localdate()
@@ -140,6 +153,7 @@ class Command(BaseCommand):
             tiene_drenaje = aspecto is not None
             registro = RegistroDiario.objects.create(
                 paciente=paciente,
+                fecha_registro=fecha_reg,
                 temperatura=Decimal(str(temp)),
                 dolor_eva=dolor,
                 tiene_drenaje=tiene_drenaje,
@@ -150,11 +164,6 @@ class Command(BaseCommand):
                 tolero_liquidos=tolero,
                 frecuencia_cardiaca=fc,
             )
-            # Fijar fecha_registro al día correcto (auto_now_add no es controlable)
-            RegistroDiario.objects.filter(pk=registro.pk).update(
-                fecha_registro=fecha_reg
-            )
-            registro.refresh_from_db()
 
             # Crear check-in completado para ese día
             CheckInProgramado.objects.create(

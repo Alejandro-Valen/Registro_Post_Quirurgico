@@ -12,13 +12,14 @@
 
 ## 1. Cómo está preparado el repo (parte código, ya hecha)
 
-- **`nixpacks.toml`** (raíz del repo) controla el build y el arranque:
+- **`Dockerfile`** (raíz del repo) controla el build y el arranque:
   - Instala desde **`requirements-runtime.txt`** (limpio), NO desde
     `requirements.txt` (que es el `pip freeze` completo de desarrollo e incluye
     paquetes solo-Windows —`pywin32`, `winrt-*`— que romperían el build en Linux).
-  - Build: `collectstatic` (archivos estáticos del Admin).
-  - Arranque: `migrate` + `gunicorn`, con `--chdir Registro_Post_Quirurgico`
+  - Arranque: `collectstatic` + `migrate` + configuración idempotente de roles
+    + `gunicorn`, con `--chdir Registro_Post_Quirurgico`
     porque `manage.py` vive un nivel debajo de la raíz del repo.
+- **`nixpacks.toml`** queda como fallback; el despliegue actual no lo usa.
 - **`.python-version`** = `3.13` (fija la versión de Python del build).
 - **WhiteNoise** sirve los estáticos del Admin en producción (Railway no tiene
   Nginx delante). Configurado en `settings_production.py`.
@@ -61,6 +62,8 @@
 | `TWILIO_AUTH_TOKEN` | Auth Token **primario** de Twilio (no el de Test) |
 | `TWILIO_VALIDATE_SIGNATURE` | `True` (o omitir — el default ya es `True`) |
 | `DEFAULT_FROM_EMAIL` | *(opcional)* si se omite, usa `EMAIL_HOST_USER` |
+| `DJANGO_SUPERUSER_USERNAME` / `DJANGO_SUPERUSER_PASSWORD` / `DJANGO_SUPERUSER_EMAIL` | Bootstrap temporal de la cuenta técnica. Retirar usuario y contraseña tras verificar el primer arranque. |
+| `DJANGO_MEDICO_USERNAME` / `DJANGO_MEDICO_PASSWORD` / `DJANGO_MEDICO_EMAIL` | Bootstrap temporal de la cuenta `staff` del médico. `crear_medico` la asigna al grupo de privilegio mínimo. Retirar usuario y contraseña tras verificar el acceso. |
 
 > **Nota sobre `DB_*` con `${{Postgres.*}}`:** Railway permite "referenciar"
 > variables de otro servicio. Al escribir `${{Postgres.PGHOST}}` en el servicio
@@ -76,10 +79,10 @@
 2. Añadir el **servicio web** desde el repo de GitHub (rama a decidir: se puede
    desplegar `sprint-5-produccion` o mergear antes a `Desarrollo`).
 3. Cargar **todas** las variables de la tabla de arriba.
-4. Disparar el primer **deploy**. El build corre `collectstatic`; el arranque
-   corre `migrate` + `gunicorn`.
-5. Crear el **superusuario** (una vez): desde la consola/Shell del servicio en
-   Railway, `python Registro_Post_Quirurgico/manage.py createsuperuser`.
+4. Disparar el primer **deploy**. El arranque aplica migraciones, configura el
+   grupo `Médicos`, crea las cuentas cuyas variables existan y levanta Gunicorn.
+5. Verificar el acceso de ambas cuentas y retirar de Railway las variables
+   `*_USERNAME` y `*_PASSWORD` de bootstrap para que no se restablezcan.
 6. Configurar los **cron jobs** (ver `docs/cron_setup.md`): 4 comandos, con
    `desactivar_pacientes_vencidos` **antes** de `crear_checkins_diarios`. En
    Railway se hacen como servicios "Cron" separados que corren el mismo repo con

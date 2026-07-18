@@ -53,6 +53,10 @@ email automático → resolución en ~30 min).
 - **Cómo interpretar las alertas:** severidad ALTA (ir a urgencias/llamar
   ya), MEDIA (llamar al paciente), BAJA (monitorear) — visible como badge
   de color en la lista de Alertas del admin.
+- **Permisos de la cuenta médica:** puede crear/actualizar sus pacientes,
+  consultar registros y check-ins sin alterarlos, revisar mensajes de contacto
+  y resolver alertas mediante el flujo controlado. No puede borrar datos
+  clínicos ni acceder a usuarios, grupos o configuración técnica.
 - **Cómo marcar una alerta como resuelta:** seleccionarla en la lista y
   usar la acción "Marcar como resuelta". Las alertas no se pueden borrar
   (solo un superusuario puede, y no es el flujo normal) — es trazabilidad
