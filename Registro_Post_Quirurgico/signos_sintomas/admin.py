@@ -8,7 +8,13 @@ from django.template.response import TemplateResponse
 from django.utils import timezone
 from django.utils.html import format_html, mark_safe
 
-from .models import Alerta, CheckInProgramado, Paciente, RegistroDiario
+from .models import (
+    Alerta,
+    CheckInProgramado,
+    Paciente,
+    RecepcionWebhookTwilio,
+    RegistroDiario,
+)
 from .management.commands.desactivar_pacientes_vencidos import DIAS_SEGUIMIENTO
 
 
@@ -478,8 +484,13 @@ class PacienteAdmin(admin.ModelAdmin):
 @admin.register(RegistroDiario)
 class RegistroDiarioAdmin(admin.ModelAdmin):
     list_display = ['paciente', 'temperatura', 'dolor_eva',
-                    'aspecto_drenaje', 'presencia_gases', 'fecha_registro']
-    list_filter = ['aspecto_drenaje', 'presencia_gases']
+                    'aspecto_drenaje', 'presencia_gases',
+                    'estado_evaluacion_alertas', 'fecha_registro']
+    list_filter = [
+        'estado_evaluacion_alertas',
+        'aspecto_drenaje',
+        'presencia_gases',
+    ]
     search_fields = ['paciente__nombre_completo']
 
     def get_queryset(self, request):
@@ -503,6 +514,35 @@ class RegistroDiarioAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
+
+
+@admin.register(RecepcionWebhookTwilio)
+class RecepcionWebhookTwilioAdmin(admin.ModelAdmin):
+    list_display = [
+        'message_sid',
+        'estado',
+        'intentos',
+        'fecha_recepcion',
+        'fecha_actualizacion',
+    ]
+    list_filter = ['estado']
+    search_fields = ['message_sid']
+    readonly_fields = [campo.name for campo in RecepcionWebhookTwilio._meta.fields]
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 _COLORES_SEVERIDAD = {

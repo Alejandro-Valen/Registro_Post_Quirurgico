@@ -158,21 +158,23 @@ Registro_Post_Quirurgico/                    ← raíz del repositorio
     │       ├── index.html
     │       └── contacto.html
     └── signos_sintomas/                     ← app núcleo clínico
-        ├── models.py                        ← Paciente, RegistroDiario, Alerta, ConversacionWhatsApp, CheckInProgramado
+        ├── models.py                        ← modelos clínicos + recibo técnico de Twilio
         ├── admin.py                         ← panel del médico: scoping, badges severidad, historial, filtros
-        ├── alert_engine.py                  ← motor de reglas clínicas (8 reglas, deduplicación)
+        ├── alert_engine.py                  ← motor clínico + unicidad concurrente de alertas
+        ├── evaluacion_alertas.py            ← estado auditable y reintentos del motor
         ├── bot.py                           ← máquina de estados WhatsApp (10 preguntas, 2×/día)
         ├── signals.py                       ← email al médico por alerta ALTA (on_commit)
-        ├── views.py                         ← webhook Twilio (validación firma, idempotencia SID)
+        ├── views.py                         ← webhook Twilio (firma + SID durable en PostgreSQL)
         ├── urls.py
         ├── knowledge_base.md                ← placeholder (RAG diferido a FASE 5/6)
         ├── management/commands/
         │   ├── crear_checkins_diarios.py
         │   ├── enviar_recordatorios.py
         │   ├── cerrar_checkins_vencidos.py
+        │   ├── reintentar_evaluaciones_alertas.py
         │   └── seed_demo.py                 ← datos demo (Camilo Rueda, demo_medico/demo1234)
-        ├── migrations/                      ← 0001 a 0013 (última: SILENCIO + registro_origen nullable)
-        └── tests.py                         ← 135 tests
+        ├── migrations/                      ← 0001 a 0021
+        └── tests.py                         ← 234 tests
 ```
 
 ---
@@ -194,7 +196,7 @@ Registro_Post_Quirurgico/                    ← raíz del repositorio
 | Campo | Tipo | Descripción |
 |-------|------|-------------|
 | paciente | ForeignKey(Paciente) PROTECT | No borrar paciente con registros |
-| temperatura | DecimalField(4,1) | °C — alerta si >= 38.0 |
+| temperatura | DecimalField(4,1) | °C — alerta ALTA si >= 37.9 |
 | dolor_eva | PositiveSmallIntegerField | Escala 1-10 |
 | volumen_drenaje_ml | PositiveIntegerField nullable | ml |
 | tiene_drenaje | BooleanField nullable | null=no capturado, False=sin drenaje, True=con drenaje |
@@ -207,18 +209,31 @@ Registro_Post_Quirurgico/                    ← raíz del repositorio
 | frecuencia_respiratoria | PositiveSmallIntegerField nullable | rpm — SOLO dashboard, sin alerta (Outersterp 2025) |
 | fecha_registro | DateTimeField auto | Timestamp automático |
 | dia_postoperatorio | PositiveSmallIntegerField | Calculado con la fecha del registro al crear y luego congelado |
+| estado_evaluacion_alertas | CharField choices | PENDIENTE/PROCESANDO/COMPLETADA/ERROR; indexado |
+| intentos_evaluacion_alertas | PositiveSmallIntegerField | Número de intentos del motor |
+| fecha_ultima_evaluacion_alertas | DateTimeField nullable | Auditoría técnica del último intento |
+| ultimo_error_evaluacion_alertas | CharField(100) | Solo clase del error; nunca respuestas del paciente |
 
 ### Alerta
 | Campo | Tipo | Descripción |
 |-------|------|-------------|
 | paciente | ForeignKey(Paciente) PROTECT | — |
 | registro_origen | ForeignKey(RegistroDiario) PROTECT | Registro que disparó la alerta |
-| tipo | CharField choices | SEPSIS/FUGA_ANASTOMOTICA/ILEO_PARALITICO/DOLOR_AGUDO |
+| tipo | CharField choices | SEPSIS/FUGA_ANASTOMOTICA/ILEO_PARALITICO/DOLOR_AGUDO/INTOLERANCIA_ORAL/TAQUICARDIA/SILENCIO |
 | severidad | CharField choices | ALTA/MEDIA/BAJA |
 | mensaje | TextField | Descripción generada por alert_engine |
 | resuelta | BooleanField | El oncólogo marca cuando atiende |
 | fecha_alerta | DateTimeField auto | Timestamp automático |
 | fecha_resolucion | DateTimeField nullable | Cuándo fue atendida |
+| veces | PositiveSmallIntegerField | Cantidad de detecciones mientras permanece abierta |
+
+Restricción: como máximo una alerta abierta por `(paciente, tipo)`.
+
+### ConversacionWhatsApp / RecepcionWebhookTwilio
+- `ConversacionWhatsApp.checkin_actual` fija el evento exacto que el paciente
+  está respondiendo y permite coordinar el bot con el cron.
+- `RecepcionWebhookTwilio` conserva solo `MessageSid`, token idempotente,
+  estado, intentos y timestamps. No guarda teléfono ni cuerpo del mensaje.
 
 ---
 
@@ -862,6 +877,13 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
 - [ ] Correo de alerta ALTA en producción — SMTP saliente bloqueado en Railway
   (migrar a API HTTP de correo o habilitar SMTP; enviar con timeout/no bloqueante)
 - [x] Comando idempotente `crear_medico` + grupo "Médicos" de privilegio mínimo
+- [x] **Hardening Loop 2 — confiabilidad del webhook y alertas:** recibo
+  persistente por `MessageSid` en PostgreSQL (sin teléfono ni Body), reintento
+  después de error, estado PENDIENTE/COMPLETADA/ERROR por `RegistroDiario`,
+  comando `reintentar_evaluaciones_alertas`, unicidad de alerta abierta bajo
+  concurrencia y vínculo de la conversación al check-in exacto.
+- [ ] Crear y verificar en Railway el servicio cron frecuente
+  `reintentar_evaluaciones_alertas` (`*/5 * * * *`) después del merge/deploy.
 - [ ] Provisionar y verificar en Railway la cuenta real del médico
 - [ ] Entrega final al equipo médico
 
@@ -882,13 +904,15 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
 - [ ] **Plan de pago en Railway.** Railway cobra por uso mensual (web + Postgres
   + Redis 24/7). Sin plan/pago activo, el servicio se suspende y el bot deja de
   responder.
-- [x] **Bloque 6 — Cron jobs en Railway (08/07/2026): HECHO.** Dos servicios
+- [x] **Bloque 6 — Cron jobs base en Railway (08/07/2026): HECHO.** Dos servicios
   cron funcionando: **`cron-manana`** (`0 11 * * *` UTC = 6 AM Bogotá) corre el
-  comando único `cron_matutino` (las 4 tareas en orden por dentro), y
+  comando único `cron_matutino` (las tareas matutinas en orden), y
   **`cron-tarde`** (`0 23 * * *` UTC = 6 PM Bogotá) corre
   `cerrar_checkins_vencidos`. Se creó `cron_matutino` porque encadenar con `&&`
   en el Custom Start Command de Railway solo corría el primer comando. Ambos
   verificados en vivo. Detalle en BITACORA 08/07/2026.
+- [ ] **Cron de recuperación Loop 2:** crear en Railway un tercer servicio que
+  ejecute `python manage.py reintentar_evaluaciones_alertas` cada 5 minutos.
 
 **Canal de WhatsApp (con costo y aprobación):**
 - [ ] **Pasar del Sandbox de Twilio a la API de WhatsApp Business.** El Sandbox

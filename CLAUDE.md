@@ -417,13 +417,13 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B, **app en Railway + cron** (bot end-to-end), **landing del médico (P-12)**, **panel/branding**, **alertas agrupadas** y **Loop 1 de integridad clínica/permisos** (**217 tests OK**). Desplegado en Railway hasta el estado del 10/07; falta desplegar Loop 1, correo ALTA por API HTTP, datos/cuenta real del médico y requisitos de piloto. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B, **app en Railway + cron** (bot end-to-end), **landing del médico (P-12)**, **panel/branding**, **alertas agrupadas**, **Loop 1 de integridad/permisos** y **Loop 2 de entrega confiable** (**234 tests OK**). Railway sigue desplegado hasta el estado del 10/07; falta desplegar Loops 1-2, crear el cron frecuente de reintentos, resolver correo ALTA, datos/cuenta real del médico y requisitos de piloto. Rama `sprint-5-produccion` |
 
-**Punto actual (10/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
-desplegada en Railway y el cron funcionando, y en esta sesión: la **landing de
-presentación del médico (P-12)**, el **comando seed de demo**, el
-**branding + tablero de triage del Admin**, y la **agrupación de alertas por
-problema con contador de recurrencia** y el **Loop 1 de integridad** (**217 tests OK**). URL:
+**Punto actual (18/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
+desplegada en Railway y el cron base funcionando. Localmente quedaron cerrados
+el **Loop 1 de integridad clínica/permisos** y el **Loop 2 de confiabilidad del
+webhook y entrega de alertas** (**234 tests OK**). Railway aún no contiene estos
+dos loops. URL:
 `registropostquirurgico-production-1f96.up.railway.app`.
 - **Panel del médico (Admin):** `/admin/` con branding "calma clínica"
   (override de `admin/base_site.html` + `signos_sintomas/static/admin/css/panel_admin.css`
@@ -435,6 +435,12 @@ problema con contador de recurrencia** y el **Loop 1 de integridad** (**217 test
 - **Alertas agrupadas por problema:** una alerta abierta por (paciente, tipo)
   con contador `veces` (badge ×N en tablero y Admin); correo ALTA solo al
   escalar. Ver sección "Modelos → Alerta".
+- **Loop 2 de confiabilidad:** el `MessageSid` se reclama en PostgreSQL sin
+  guardar teléfono ni Body; el avance del bot y el recibo se confirman en una
+  misma transacción. Cada registro conserva el estado de su evaluación y el
+  command `reintentar_evaluaciones_alertas` recupera PENDIENTE/ERROR. La BD
+  garantiza una sola alerta abierta por paciente/tipo y la conversación queda
+  ligada al check-in exacto para coordinarse con el cron.
 - **Landing (P-12):** la página `/` (app `home`) se convirtió en la presentación
   del médico + sistema, con un **sistema de diseño compartido**
   (`home/static/home/css/site.css` + `home/static/home/js/pulse.js` +
@@ -450,11 +456,11 @@ problema con contador de recurrencia** y el **Loop 1 de integridad** (**217 test
   `--medico` o al primer superusuario), pacientes marcados `DEMO — ` /
   cédula `DEMO-000X` / teléfono ficticio, y **reversible** con
   `--limpiar --confirmar`. Crea 2 pacientes de ejemplo con registros y alertas.
-**Próximo paso exacto (al retomar):** **desplegar la landing a Railway** →
-`git push` a la rama que observa el servicio web (el Dockerfile corre
-`collectstatic`+`migrate` en el arranque; la landing NO añade migraciones), y
-luego correr `seed_demo_produccion --confirmar` en el Shell del servicio para
-poblar la demo del panel. Después: **datos reales del médico** (reemplazar
+**Próximo paso exacto (al retomar):** revisar/pushear el commit del Loop 2 y
+desplegar Loops 1-2 a Railway. El arranque aplicará las migraciones 0019-0021;
+después crear el servicio cron `reintentar_evaluaciones_alertas` cada 5 minutos
+y ejecutar un smoke test real de SID duplicado + check-in completo. Después:
+**datos reales del médico** (reemplazar
 `[corchetes]`, subir logo/colores, `MOSTRAR_AVISO_BOCETO=False`) y los
 requisitos del piloto real en `ROADMAP_MONITOREO_POSQUIRURGICO.md`, sección
 "Requisitos para un PILOTO REAL con pacientes" (plan Railway, WhatsApp Business,

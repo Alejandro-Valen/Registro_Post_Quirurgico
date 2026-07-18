@@ -4,14 +4,21 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured, ValidationError
-from django.db import IntegrityError, transaction
-from django.test import TestCase, override_settings
+from django.db import IntegrityError, close_old_connections, transaction
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from . import bot
 from .alert_engine import evaluar_registro
-from .models import Alerta, CheckInProgramado, ConversacionWhatsApp, Paciente, RegistroDiario
+from .models import (
+    Alerta,
+    CheckInProgramado,
+    ConversacionWhatsApp,
+    Paciente,
+    RecepcionWebhookTwilio,
+    RegistroDiario,
+)
 
 
 class AlertEngineTests(TestCase):
@@ -1154,10 +1161,12 @@ class BotWhatsAppTests(TestCase):
 
     def test_primer_mensaje_inicia_cuestionario(self):
         self._crear_paciente()
+        checkin = CheckInProgramado.objects.get()
         respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
         self.assertEqual(respuesta, bot.MSG_PREGUNTA_TEMPERATURA)
         conv = ConversacionWhatsApp.objects.get()
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_TEMPERATURA)
+        self.assertEqual(conv.checkin_actual, checkin)
 
     def test_flujo_completo_crea_registro(self):
         self._crear_paciente()
@@ -1180,7 +1189,12 @@ class BotWhatsAppTests(TestCase):
         self.assertTrue(registro.tolero_liquidos)
         conv = ConversacionWhatsApp.objects.get()
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_COMPLETADO)
+        self.assertIsNone(conv.checkin_actual)
         self.assertIsNone(conv.temp_temperatura)  # parciales limpiados
+        self.assertEqual(
+            registro.estado_evaluacion_alertas,
+            RegistroDiario.EVALUACION_COMPLETADA,
+        )
 
     def test_alerta_no_se_muestra_al_paciente(self):
         # Bloque B: evaluar_registro ahora corre de forma síncrona dentro de
@@ -1347,6 +1361,26 @@ class BotWhatsAppTests(TestCase):
         self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_COMPLETADO)
         self.assertEqual(checkin.registro, registro)
         self.assertIsNotNone(checkin.fecha_respuesta)
+
+    def test_con_dos_turnos_completa_el_checkin_fijado_al_iniciar(self):
+        paciente = self._crear_paciente()
+        primero = CheckInProgramado.objects.get(orden=1)
+        segundo = CheckInProgramado.objects.create(
+            paciente=paciente,
+            fecha_dia=timezone.localdate(),
+            orden=2,
+            etiqueta=CheckInProgramado.ETIQUETA_TARDE,
+            hora_programada=timezone.now(),
+        )
+
+        self._completar_flujo()
+
+        primero.refresh_from_db()
+        segundo.refresh_from_db()
+        self.assertEqual(primero.estado, CheckInProgramado.ESTADO_COMPLETADO)
+        self.assertIsNotNone(primero.registro_id)
+        self.assertEqual(segundo.estado, CheckInProgramado.ESTADO_PENDIENTE)
+        self.assertIsNone(segundo.registro_id)
 
 
 class BotMensajeCierreAlertaTests(TestCase):
@@ -1541,15 +1575,23 @@ class ParseEnteroRangoDecimalTests(TestCase):
 
     def test_fc_decimal_pide_reintento(self):
         """Flujo real: paciente escribe "78.5" en la pregunta de FC → reintento."""
-        Paciente.objects.create(
+        paciente = Paciente.objects.create(
             nombre_completo="Paciente Decimal FC",
             telefono_whatsapp="+573007778881",
             fecha_cirugia=timezone.localdate() - timedelta(days=3),
             consentimiento_informado=True,
         )
+        checkin = CheckInProgramado.objects.create(
+            paciente=paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now(),
+        )
         from signos_sintomas import bot as b
         conv = ConversacionWhatsApp.objects.create(
-            paciente=Paciente.objects.get(telefono_whatsapp="+573007778881"),
+            paciente=paciente,
+            checkin_actual=checkin,
             estado=ConversacionWhatsApp.ESTADO_FRECUENCIA_CARDIACA,
         )
         respuesta = b.procesar_mensaje("+573007778881", "78.5")
@@ -1652,7 +1694,12 @@ class WebhookWhatsAppTests(TestCase):
             hora_programada=timezone.now(),
         )
         respuesta = self.client.post(
-            self.url, {'From': 'whatsapp:+573001112233', 'Body': 'hola'}
+            self.url,
+            {
+                'From': 'whatsapp:+573001112233',
+                'Body': 'hola',
+                'MessageSid': 'SMwebhookvalido0001',
+            },
         )
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta['Content-Type'], 'application/xml')
@@ -1696,10 +1743,29 @@ class WebhookWhatsAppTests(TestCase):
         # recibe respuesta amable.
         respuesta = self.client.post(
             self.url,
-            {'From': 'whatsapp:+573009999999', 'Body': ''},
+            {
+                'From': 'whatsapp:+573009999999',
+                'Body': '',
+                'MessageSid': 'SMbodyvacio0001',
+            },
         )
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta['Content-Type'], 'application/xml')
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_sid_ausente_devuelve_400_sin_procesar(self):
+        from unittest.mock import patch
+
+        with patch('signos_sintomas.views.procesar_mensaje') as procesar:
+            respuesta = self.client.post(
+                self.url,
+                {'From': 'whatsapp:+573009999999', 'Body': 'hola'},
+            )
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.content, b'')
+        procesar.assert_not_called()
+        self.assertEqual(RecepcionWebhookTwilio.objects.count(), 0)
 
     @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
     def test_idempotencia_mismo_sid_ignora_segundo_mensaje(self):
@@ -1726,6 +1792,137 @@ class WebhookWhatsAppTests(TestCase):
         self.assertNotIn(b'<Message>', segunda.content)
         # Primera sí tiene contenido
         self.assertIn(b'<Message>', primera.content)
+        recepcion = RecepcionWebhookTwilio.objects.get(
+            message_sid='SMidempotencia0001'
+        )
+        self.assertEqual(recepcion.estado, RecepcionWebhookTwilio.ESTADO_COMPLETADO)
+        self.assertEqual(recepcion.intentos, 1)
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_error_del_bot_deja_recepcion_reintentable(self):
+        from unittest.mock import patch
+
+        payload = {
+            'From': 'whatsapp:+573002223355',
+            'Body': 'contenido sensible que no debe persistirse',
+            'MessageSid': 'SMreintento0001',
+        }
+        with patch(
+            'signos_sintomas.views.procesar_mensaje',
+            side_effect=RuntimeError('detalle sensible'),
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(self.url, payload)
+
+        recepcion = RecepcionWebhookTwilio.objects.get(
+            message_sid='SMreintento0001'
+        )
+        self.assertEqual(recepcion.estado, RecepcionWebhookTwilio.ESTADO_ERROR)
+
+        with patch(
+            'signos_sintomas.views.procesar_mensaje',
+            return_value='Reporte recibido',
+        ) as procesar:
+            respuesta = self.client.post(self.url, payload)
+
+        self.assertEqual(respuesta.status_code, 200)
+        procesar.assert_called_once()
+        recepcion.refresh_from_db()
+        self.assertEqual(recepcion.estado, RecepcionWebhookTwilio.ESTADO_COMPLETADO)
+        self.assertEqual(recepcion.intentos, 2)
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_fallo_antes_de_confirmar_recibo_revierte_el_avance_del_bot(self):
+        from unittest.mock import patch
+
+        paciente = Paciente.objects.create(
+            nombre_completo='Paciente Atomicidad Webhook',
+            telefono_whatsapp='+573002223388',
+            fecha_cirugia=timezone.localdate() - timedelta(days=2),
+            consentimiento_informado=True,
+        )
+        CheckInProgramado.objects.create(
+            paciente=paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now(),
+        )
+        payload = {
+            'From': 'whatsapp:+573002223388',
+            'Body': 'hola',
+            'MessageSid': 'SMatomicidad0001',
+        }
+
+        with patch(
+            'signos_sintomas.views._marcar_recepcion_completada',
+            side_effect=RuntimeError('caída antes del commit'),
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(self.url, payload)
+
+        recepcion = RecepcionWebhookTwilio.objects.get(
+            message_sid='SMatomicidad0001'
+        )
+        self.assertEqual(recepcion.estado, RecepcionWebhookTwilio.ESTADO_ERROR)
+        self.assertFalse(ConversacionWhatsApp.objects.filter(paciente=paciente).exists())
+
+        respuesta = self.client.post(self.url, payload)
+
+        self.assertEqual(respuesta.status_code, 200)
+        recepcion.refresh_from_db()
+        self.assertEqual(recepcion.estado, RecepcionWebhookTwilio.ESTADO_COMPLETADO)
+        self.assertEqual(recepcion.intentos, 2)
+        conversacion = ConversacionWhatsApp.objects.get(paciente=paciente)
+        self.assertEqual(
+            conversacion.estado,
+            ConversacionWhatsApp.ESTADO_TEMPERATURA,
+        )
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_sid_en_proceso_devuelve_503_para_que_twilio_reintente(self):
+        from unittest.mock import patch
+
+        RecepcionWebhookTwilio.objects.create(message_sid='SMenproceso0001')
+
+        with patch('signos_sintomas.views.procesar_mensaje') as procesar:
+            respuesta = self.client.post(
+                self.url,
+                {
+                    'From': 'whatsapp:+573002223366',
+                    'Body': 'hola',
+                    'MessageSid': 'SMenproceso0001',
+                },
+            )
+
+        self.assertEqual(respuesta.status_code, 503)
+        self.assertEqual(respuesta['Retry-After'], '30')
+        procesar.assert_not_called()
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_token_idempotencia_se_guarda_sin_datos_medicos(self):
+        from unittest.mock import patch
+
+        with patch(
+            'signos_sintomas.views.procesar_mensaje',
+            return_value='Reporte recibido',
+        ):
+            respuesta = self.client.post(
+                self.url,
+                {
+                    'From': 'whatsapp:+573002223377',
+                    'Body': 'dolor 9 y fiebre',
+                    'MessageSid': 'SMtoken0001',
+                },
+                HTTP_I_TWILIO_IDEMPOTENCY_TOKEN='token-reintento-1',
+            )
+
+        self.assertEqual(respuesta.status_code, 200)
+        recepcion = RecepcionWebhookTwilio.objects.get(message_sid='SMtoken0001')
+        self.assertEqual(recepcion.idempotency_token, 'token-reintento-1')
+        valores = ' '.join(str(valor) for valor in recepcion.__dict__.values())
+        self.assertNotIn('dolor 9', valores)
+        self.assertNotIn('+573002223377', valores)
 
     @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
     def test_rate_limit_excedido_devuelve_twiml_vacio(self):
@@ -1739,11 +1936,171 @@ class WebhookWhatsAppTests(TestCase):
 
         respuesta = self.client.post(
             self.url,
-            {'From': telefono, 'Body': 'hola'},
+            {
+                'From': telefono,
+                'Body': 'hola',
+                'MessageSid': 'SMratelimit0001',
+            },
         )
         self.assertEqual(respuesta.status_code, 200)
         self.assertNotIn(b'<Message>', respuesta.content)
 
+
+class EvaluacionAlertasPersistenteTests(TestCase):
+    def setUp(self):
+        self.paciente = Paciente.objects.create(
+            nombre_completo='Paciente Evaluacion Persistente',
+            telefono_whatsapp='+573002224400',
+            fecha_cirugia=timezone.localdate() - timedelta(days=2),
+        )
+        self.registro = RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('38.2'),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+
+    def test_evaluacion_exitosa_queda_completada(self):
+        from .evaluacion_alertas import evaluar_registro_con_estado
+
+        alertas = evaluar_registro_con_estado(self.registro)
+
+        self.registro.refresh_from_db()
+        self.assertEqual(
+            self.registro.estado_evaluacion_alertas,
+            RegistroDiario.EVALUACION_COMPLETADA,
+        )
+        self.assertEqual(self.registro.intentos_evaluacion_alertas, 1)
+        self.assertIsNotNone(self.registro.fecha_ultima_evaluacion_alertas)
+        self.assertEqual(self.registro.ultimo_error_evaluacion_alertas, '')
+        self.assertEqual([alerta.tipo for alerta in alertas], ['SEPSIS'])
+
+    def test_error_se_persiste_sin_texto_sensible_y_admite_reintento(self):
+        from unittest.mock import patch
+
+        from .evaluacion_alertas import evaluar_registro_con_estado
+
+        with patch(
+            'signos_sintomas.evaluacion_alertas.evaluar_registro',
+            side_effect=RuntimeError('paciente reporta dolor 9'),
+        ):
+            with self.assertRaises(RuntimeError):
+                evaluar_registro_con_estado(self.registro)
+
+        self.registro.refresh_from_db()
+        self.assertEqual(
+            self.registro.estado_evaluacion_alertas,
+            RegistroDiario.EVALUACION_ERROR,
+        )
+        self.assertEqual(self.registro.intentos_evaluacion_alertas, 1)
+        self.assertEqual(self.registro.ultimo_error_evaluacion_alertas, 'RuntimeError')
+        self.assertNotIn('dolor 9', self.registro.ultimo_error_evaluacion_alertas)
+
+        alertas = evaluar_registro_con_estado(self.registro)
+
+        self.registro.refresh_from_db()
+        self.assertEqual(
+            self.registro.estado_evaluacion_alertas,
+            RegistroDiario.EVALUACION_COMPLETADA,
+        )
+        self.assertEqual(self.registro.intentos_evaluacion_alertas, 2)
+        self.assertEqual(self.registro.ultimo_error_evaluacion_alertas, '')
+        self.assertEqual([alerta.tipo for alerta in alertas], ['SEPSIS'])
+
+
+class ReintentarEvaluacionesAlertasCommandTests(TestCase):
+    def _registro(self, telefono):
+        paciente = Paciente.objects.create(
+            nombre_completo='Paciente Reintento Command',
+            telefono_whatsapp=telefono,
+            fecha_cirugia=timezone.localdate() - timedelta(days=2),
+        )
+        return RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal('37.0'),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+
+    def test_procesa_pendientes_y_errores_una_vez(self):
+        from django.core.management import call_command
+
+        pendiente = self._registro('+573002224411')
+        con_error = self._registro('+573002224412')
+        RegistroDiario.objects.filter(pk=con_error.pk).update(
+            estado_evaluacion_alertas=RegistroDiario.EVALUACION_ERROR,
+            ultimo_error_evaluacion_alertas='RuntimeError',
+        )
+
+        call_command('reintentar_evaluaciones_alertas', verbosity=0)
+
+        pendiente.refresh_from_db()
+        con_error.refresh_from_db()
+        self.assertEqual(
+            pendiente.estado_evaluacion_alertas,
+            RegistroDiario.EVALUACION_COMPLETADA,
+        )
+        self.assertEqual(
+            con_error.estado_evaluacion_alertas,
+            RegistroDiario.EVALUACION_COMPLETADA,
+        )
+        self.assertEqual(pendiente.intentos_evaluacion_alertas, 1)
+        self.assertEqual(con_error.intentos_evaluacion_alertas, 1)
+
+    def test_un_error_no_impide_procesar_el_siguiente(self):
+        from unittest.mock import patch
+
+        from django.core.management import call_command
+
+        primero = self._registro('+573002224413')
+        segundo = self._registro('+573002224414')
+
+        def evaluar(registro, fecha_referencia=None):
+            if registro.pk == primero.pk:
+                raise RuntimeError('dato sensible que no debe persistirse')
+            return []
+
+        with patch(
+            'signos_sintomas.evaluacion_alertas.evaluar_registro',
+            side_effect=evaluar,
+        ):
+            call_command('reintentar_evaluaciones_alertas', verbosity=0)
+
+        primero.refresh_from_db()
+        segundo.refresh_from_db()
+        self.assertEqual(
+            primero.estado_evaluacion_alertas,
+            RegistroDiario.EVALUACION_ERROR,
+        )
+        self.assertEqual(primero.ultimo_error_evaluacion_alertas, 'RuntimeError')
+        self.assertEqual(
+            segundo.estado_evaluacion_alertas,
+            RegistroDiario.EVALUACION_COMPLETADA,
+        )
+
+    def test_limite_restringe_cantidad_procesada(self):
+        from django.core.management import call_command
+
+        registros = [
+            self._registro('+573002224421'),
+            self._registro('+573002224422'),
+        ]
+
+        call_command('reintentar_evaluaciones_alertas', limite=1, verbosity=0)
+
+        estados = list(
+            RegistroDiario.objects.filter(pk__in=[r.pk for r in registros])
+            .order_by('pk')
+            .values_list('estado_evaluacion_alertas', flat=True)
+        )
+        self.assertEqual(
+            estados,
+            [RegistroDiario.EVALUACION_COMPLETADA, RegistroDiario.EVALUACION_PENDIENTE],
+        )
 
 class PacienteMedicoFKTests(TestCase):
     """Tests de la relación ForeignKey Paciente → auth.User (medico_responsable)."""
@@ -2665,6 +3022,83 @@ class AlertDeduplicacionTests(TestCase):
         self.assertEqual(Alerta.objects.filter(tipo="TAQUICARDIA").count(), 2)
 
 
+class AlertDeduplicacionConcurrenteTests(TransactionTestCase):
+    def setUp(self):
+        self.paciente = Paciente.objects.create(
+            nombre_completo='Paciente Concurrencia Alertas',
+            telefono_whatsapp='+573008881099',
+            fecha_cirugia=timezone.localdate() - timedelta(days=2),
+        )
+        self.registros = [
+            RegistroDiario.objects.create(
+                paciente=self.paciente,
+                temperatura=Decimal('38.0'),
+                dolor_eva=2,
+                tiene_drenaje=False,
+                presencia_gases=True,
+                episodios_nauseas=0,
+            )
+            for _ in range(2)
+        ]
+
+    def test_bd_impide_dos_alertas_abiertas_del_mismo_tipo(self):
+        Alerta.objects.create(
+            paciente=self.paciente,
+            registro_origen=self.registros[0],
+            tipo='SEPSIS',
+            severidad='ALTA',
+            mensaje='Primera',
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Alerta.objects.create(
+                    paciente=self.paciente,
+                    registro_origen=self.registros[1],
+                    tipo='SEPSIS',
+                    severidad='ALTA',
+                    mensaje='Segunda',
+                )
+
+    def test_dos_workers_convergen_en_una_alerta_abierta(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+
+        from .alert_engine import _registrar_alerta
+
+        barrera = Barrier(2)
+
+        def registrar(registro_pk):
+            close_old_connections()
+            try:
+                registro = RegistroDiario.objects.get(pk=registro_pk)
+                barrera.wait(timeout=5)
+                alerta = _registrar_alerta(
+                    registro,
+                    'SEPSIS',
+                    'ALTA',
+                    'Detección concurrente',
+                )
+                return alerta.pk
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            resultados = list(executor.map(
+                registrar,
+                [registro.pk for registro in self.registros],
+            ))
+
+        self.assertEqual(resultados[0], resultados[1])
+        alertas = Alerta.objects.filter(
+            paciente=self.paciente,
+            tipo='SEPSIS',
+            resuelta=False,
+        )
+        self.assertEqual(alertas.count(), 1)
+        self.assertEqual(alertas.get().veces, 2)
+
+
 class SchedulerTests(TestCase):
     """Bloque 4 — Management commands del scheduler y alerta SILENCIO."""
 
@@ -2739,6 +3173,64 @@ class SchedulerTests(TestCase):
         self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_PENDIENTE)
         self.assertEqual(Alerta.objects.count(), 0)
 
+    def test_checkin_vencido_con_conversacion_reciente_no_se_cierra(self):
+        """El cron no marca silencio mientras el paciente está respondiendo."""
+        from django.core.management import call_command
+
+        paciente = self._paciente()
+        checkin = self._checkin(paciente, horas_atras=11)
+        ConversacionWhatsApp.objects.create(
+            paciente=paciente,
+            checkin_actual=checkin,
+            estado=ConversacionWhatsApp.ESTADO_DOLOR,
+            temp_temperatura=Decimal('37.0'),
+        )
+
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_PENDIENTE)
+        self.assertEqual(Alerta.objects.count(), 0)
+
+    def test_conversacion_abandonada_fuera_de_gracia_si_se_cierra(self):
+        from django.core.management import call_command
+
+        paciente = self._paciente()
+        checkin = self._checkin(paciente, horas_atras=11)
+        conversacion = ConversacionWhatsApp.objects.create(
+            paciente=paciente,
+            checkin_actual=checkin,
+            estado=ConversacionWhatsApp.ESTADO_DOLOR,
+            temp_temperatura=Decimal('37.0'),
+        )
+        ConversacionWhatsApp.objects.filter(pk=conversacion.pk).update(
+            fecha_actualizacion=timezone.now() - timedelta(hours=11),
+        )
+
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
+        self.assertEqual(Alerta.objects.filter(tipo='SILENCIO').count(), 1)
+
+    def test_silencios_repetidos_actualizan_una_sola_alerta_abierta(self):
+        from django.core.management import call_command
+
+        paciente = self._paciente()
+        primero = self._checkin(paciente, orden=1, dias_atras=1, horas_atras=24)
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+        primero.refresh_from_db()
+        self.assertEqual(primero.estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
+
+        segundo = self._checkin(paciente, orden=2, horas_atras=11)
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+
+        segundo.refresh_from_db()
+        alerta = Alerta.objects.get(paciente=paciente, tipo='SILENCIO')
+        self.assertEqual(segundo.estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
+        self.assertFalse(alerta.resuelta)
+        self.assertEqual(alerta.veces, 2)
+
     def test_checkin_vencido_se_cierra_y_crea_alerta_silencio_baja(self):
         """1 check-in sin respuesta → racha 1 → SILENCIO BAJA."""
         from django.core.management import call_command
@@ -2795,6 +3287,73 @@ class SchedulerTests(TestCase):
         call_command('cerrar_checkins_vencidos', verbosity=0)
         alerta = Alerta.objects.filter(tipo='SILENCIO').order_by('-fecha_alerta').first()
         self.assertEqual(alerta.severidad, 'BAJA')
+
+
+class CheckInConcurrenciaTests(TransactionTestCase):
+    def test_inicio_del_bot_y_cierre_cron_no_dejan_estado_contradictorio(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from io import StringIO
+        from threading import Barrier
+
+        from django.core.management import call_command
+
+        paciente = Paciente.objects.create(
+            nombre_completo='Paciente Carrera CheckIn',
+            telefono_whatsapp='+573009991100',
+            fecha_cirugia=timezone.localdate() - timedelta(days=2),
+            consentimiento_informado=True,
+        )
+        checkin = CheckInProgramado.objects.create(
+            paciente=paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now() - timedelta(hours=11),
+        )
+        barrera = Barrier(2)
+
+        def iniciar_bot():
+            close_old_connections()
+            try:
+                barrera.wait(timeout=5)
+                return bot.procesar_mensaje('whatsapp:+573009991100', 'hola')
+            finally:
+                close_old_connections()
+
+        def cerrar_vencidos():
+            close_old_connections()
+            try:
+                barrera.wait(timeout=5)
+                call_command(
+                    'cerrar_checkins_vencidos',
+                    stdout=StringIO(),
+                    verbosity=0,
+                )
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            respuesta_futura = executor.submit(iniciar_bot)
+            cierre_futuro = executor.submit(cerrar_vencidos)
+            respuesta = respuesta_futura.result(timeout=10)
+            cierre_futuro.result(timeout=10)
+
+        checkin.refresh_from_db()
+        conversacion = ConversacionWhatsApp.objects.get(paciente=paciente)
+        if checkin.estado == CheckInProgramado.ESTADO_PENDIENTE:
+            self.assertEqual(respuesta, bot.MSG_PREGUNTA_TEMPERATURA)
+            self.assertEqual(
+                conversacion.estado,
+                ConversacionWhatsApp.ESTADO_TEMPERATURA,
+            )
+            self.assertEqual(conversacion.checkin_actual, checkin)
+            self.assertFalse(Alerta.objects.filter(tipo='SILENCIO').exists())
+        else:
+            self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
+            self.assertEqual(respuesta, bot.MSG_SIN_CHECKIN)
+            self.assertEqual(conversacion.estado, ConversacionWhatsApp.ESTADO_INICIO)
+            self.assertIsNone(conversacion.checkin_actual)
+            self.assertTrue(Alerta.objects.filter(tipo='SILENCIO').exists())
 
 
 class PacienteCedulaTests(TestCase):
@@ -2873,9 +3432,9 @@ class PacienteCedulaTests(TestCase):
 
 
 class CronMatutinoCommandTests(TestCase):
-    """Comando cron_matutino — corre las 4 tareas de la mañana en orden."""
+    """Comando cron_matutino — corre las 5 tareas de la mañana en orden."""
 
-    def test_llama_las_cuatro_tareas_en_orden(self):
+    def test_llama_las_cinco_tareas_en_orden(self):
         from unittest.mock import patch
         from django.core.management import call_command
         with patch(
@@ -2888,11 +3447,12 @@ class CronMatutinoCommandTests(TestCase):
             'crear_checkins_diarios',
             'cerrar_checkins_vencidos',
             'enviar_recordatorios',
+            'reintentar_evaluaciones_alertas',
         ])
 
     def test_corre_sin_error_con_bd_vacia(self):
         from django.core.management import call_command
-        # Con 0 pacientes las 4 tareas deben correr sin lanzar excepción.
+        # Con 0 pacientes las 5 tareas deben correr sin lanzar excepción.
         call_command('cron_matutino', verbosity=0)
 
 

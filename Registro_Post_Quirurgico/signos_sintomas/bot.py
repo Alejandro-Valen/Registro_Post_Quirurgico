@@ -8,7 +8,7 @@ Diseño:
 - El estado de la conversación se persiste en el modelo ConversacionWhatsApp,
   porque cada mensaje de WhatsApp llega como una petición independiente.
 - El bot NO diagnostica ni muestra alertas al paciente. Solo captura telemetría,
-  delega en alert_engine.evaluar_registro() y responde una confirmación neutra.
+  ejecuta el motor con estado persistente y responde una confirmación neutra.
 
 Máquina de estados (10 preguntas):
     INICIO
@@ -34,7 +34,7 @@ from decimal import Decimal, InvalidOperation
 from django.db import transaction
 from django.utils import timezone
 
-from .alert_engine import evaluar_registro
+from .evaluacion_alertas import evaluar_registro_con_estado
 from .models import CheckInProgramado, ConversacionWhatsApp, Paciente, RegistroDiario
 
 logger = logging.getLogger(__name__)
@@ -255,11 +255,12 @@ def _procesar_con_conv(conv, paciente, texto, hoy):
         _limpiar_temporales(conv)
         # Si hay check-in PENDIENTE hoy, ir directo a TEMPERATURA (el mensaje
         # de abandono ya pregunta la temperatura — sin paso extra para el paciente).
-        checkin_hoy = CheckInProgramado.objects.filter(
+        checkin_hoy = CheckInProgramado.objects.select_for_update().filter(
             paciente=paciente,
             fecha_dia=hoy,
             estado=CheckInProgramado.ESTADO_PENDIENTE,
         ).order_by('orden').first()
+        conv.checkin_actual = checkin_hoy
         conv.estado = (
             ConversacionWhatsApp.ESTADO_TEMPERATURA if checkin_hoy
             else ConversacionWhatsApp.ESTADO_INICIO
@@ -269,7 +270,29 @@ def _procesar_con_conv(conv, paciente, texto, hoy):
 
     # Si ya estamos en mitad del flujo de hoy, continuar respondiendo.
     if en_flujo:
-        return _procesar_respuesta_flujo(conv, paciente, texto, hoy)
+        checkin = None
+        if conv.checkin_actual_id is not None:
+            checkin = CheckInProgramado.objects.select_for_update().filter(
+                pk=conv.checkin_actual_id,
+                paciente=paciente,
+                estado=CheckInProgramado.ESTADO_PENDIENTE,
+            ).first()
+        else:
+            # Compatibilidad con conversaciones iniciadas antes de la migración
+            # que incorporó checkin_actual.
+            checkin = CheckInProgramado.objects.select_for_update().filter(
+                paciente=paciente,
+                fecha_dia=hoy,
+                estado=CheckInProgramado.ESTADO_PENDIENTE,
+            ).order_by('orden').first()
+            if checkin is not None:
+                conv.checkin_actual = checkin
+                conv.save(update_fields=['checkin_actual', 'fecha_actualizacion'])
+
+        if checkin is None:
+            _reiniciar(conv)
+            return MSG_SIN_CHECKIN
+        return _procesar_respuesta_flujo(conv, paciente, texto, checkin)
 
     # Fuera del flujo (INICIO o COMPLETADO): FAQ disponible siempre.
     respuesta_duda = _responder_duda(texto)
@@ -277,13 +300,14 @@ def _procesar_con_conv(conv, paciente, texto, hoy):
         return respuesta_duda
 
     # Buscar el CheckInProgramado PENDIENTE de hoy.
-    checkin = CheckInProgramado.objects.filter(
+    checkin = CheckInProgramado.objects.select_for_update().filter(
         paciente=paciente,
         fecha_dia=hoy,
         estado=CheckInProgramado.ESTADO_PENDIENTE,
     ).order_by('orden').first()
 
     if checkin is not None:
+        conv.checkin_actual = checkin
         conv.estado = ConversacionWhatsApp.ESTADO_TEMPERATURA
         conv.save()
         return MSG_PREGUNTA_TEMPERATURA
@@ -302,7 +326,7 @@ def _procesar_con_conv(conv, paciente, texto, hoy):
 # ---------------------------------------------------------------------------
 # Despacho de cada pregunta del flujo
 # ---------------------------------------------------------------------------
-def _procesar_respuesta_flujo(conv, paciente, texto, hoy):
+def _procesar_respuesta_flujo(conv, paciente, texto, checkin):
     estado = conv.estado
 
     if estado == ConversacionWhatsApp.ESTADO_TEMPERATURA:
@@ -417,8 +441,8 @@ def _procesar_respuesta_flujo(conv, paciente, texto, hoy):
             conv.temp_tolero_liquidos = False
         else:
             return MSG_REINTENTO_TOLERANCIA_LIQUIDOS
-        _registro, alertas_nuevas = _crear_registro(conv, paciente, hoy)
-        _finalizar(conv, hoy)
+        _registro, alertas_nuevas = _crear_registro(conv, paciente, checkin)
+        _finalizar(conv, checkin.fecha_dia)
         return _mensaje_cierre(alertas_nuevas)
 
     # Estado inesperado: reiniciar de forma segura.
@@ -438,9 +462,9 @@ def _mensaje_cierre(alertas_nuevas):
     return MSG_CONFIRMACION
 
 
-def _crear_registro(conv, paciente, hoy):
+def _crear_registro(conv, paciente, checkin):
     """Crea el RegistroDiario definitivo, lo vincula al CheckInProgramado
-    PENDIENTE de hoy (Bloque 3) y evalúa las alertas de forma síncrona.
+    fijado al iniciar la conversación y evalúa las alertas de forma síncrona.
 
     Devuelve `(registro, alertas_nuevas)`. La evaluación es síncrona (Bloque B,
     02/07/2026) — no diferida a on_commit — porque el bot necesita conocer la
@@ -477,26 +501,16 @@ def _crear_registro(conv, paciente, hoy):
         tolero_liquidos=conv.temp_tolero_liquidos,
     )
 
-    # Vincular al CheckInProgramado PENDIENTE de hoy (primero en orden).
-    checkin = CheckInProgramado.objects.filter(
-        paciente=paciente,
-        fecha_dia=hoy,
-        estado=CheckInProgramado.ESTADO_PENDIENTE,
-    ).order_by('orden').first()
-
-    if checkin is not None:
-        checkin.registro = registro
-        checkin.estado = CheckInProgramado.ESTADO_COMPLETADO
-        checkin.fecha_respuesta = timezone.now()
-        checkin.save()
-        fecha_referencia = checkin.fecha_dia
-    else:
-        fecha_referencia = hoy
+    checkin.registro = registro
+    checkin.estado = CheckInProgramado.ESTADO_COMPLETADO
+    checkin.fecha_respuesta = timezone.now()
+    checkin.save()
+    fecha_referencia = checkin.fecha_dia
 
     alertas_nuevas = []
     try:
         with transaction.atomic():  # savepoint: aísla un posible fallo del engine
-            alertas_nuevas = evaluar_registro(
+            alertas_nuevas = evaluar_registro_con_estado(
                 registro, fecha_referencia=fecha_referencia
             )
     except Exception:
@@ -504,7 +518,7 @@ def _crear_registro(conv, paciente, hoy):
         # No se pierde nada; el paciente recibe el cierre neutro.
         logger.exception(
             "Fallo al evaluar alertas del registro pk=%s (paciente pk=%s); "
-            "el registro queda guardado, cierre neutro.",
+            "queda marcado para reintento y se usa cierre neutro.",
             registro.pk, paciente.pk,
         )
         alertas_nuevas = []
@@ -691,6 +705,7 @@ def _limpiar_temporales(conv):
 def _reiniciar(conv):
     """Prepara la conversación para un nuevo ciclo diario."""
     conv.estado = ConversacionWhatsApp.ESTADO_INICIO
+    conv.checkin_actual = None
     _limpiar_temporales(conv)
     conv.save()
 
@@ -699,5 +714,6 @@ def _finalizar(conv, hoy):
     """Cierra el registro del día: marca COMPLETADO y limpia parciales."""
     conv.estado = ConversacionWhatsApp.ESTADO_COMPLETADO
     conv.fecha_ultimo_registro = hoy
+    conv.checkin_actual = None
     _limpiar_temporales(conv)
     conv.save()

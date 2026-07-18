@@ -66,7 +66,7 @@ CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
 # Cache compartido entre workers (A3/A5/C7 dependen de esto).
 # En producción se REQUIERE Redis o Memcached — el backend de memoria de
 # Django (default) no comparte estado entre procesos/workers y haría que
-# la idempotencia por SID y el rate limiting fallaran silenciosamente.
+# los rate limits compartidos entre workers fallarían silenciosamente.
 # Variable de entorno: REDIS_URL=redis://:password@host:6379/1
 CACHES = {
     'default': {

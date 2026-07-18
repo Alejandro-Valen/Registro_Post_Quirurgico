@@ -27,7 +27,7 @@ from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from signos_sintomas.alert_engine import evaluar_registro
+from signos_sintomas.evaluacion_alertas import evaluar_registro_con_estado
 from signos_sintomas.management.commands.crear_medico import (
     NOMBRE_GRUPO_MEDICOS,
     obtener_permisos_medico,
@@ -177,7 +177,7 @@ class Command(BaseCommand):
                 registro=registro,
             )
 
-            alertas = evaluar_registro(
+            alertas = evaluar_registro_con_estado(
                 registro,
                 fecha_referencia=registro.fecha_registro.date(),
             )

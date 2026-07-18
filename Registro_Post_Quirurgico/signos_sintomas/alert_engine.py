@@ -1,7 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from .models import Alerta, RegistroDiario
@@ -56,6 +56,48 @@ DOLOR_DELTA_TENDENCIA = 3
 ORDEN_SEVERIDAD = {'BAJA': 1, 'MEDIA': 2, 'ALTA': 3, None: 0}
 
 
+def _obtener_o_crear_alerta_abierta(
+    paciente,
+    tipo,
+    severidad,
+    mensaje,
+    registro_origen=None,
+):
+    abierta = (
+        Alerta.objects.select_for_update()
+        .filter(paciente=paciente, tipo=tipo, resuelta=False)
+        .order_by('-fecha_alerta')
+        .first()
+    )
+    if abierta is not None:
+        return abierta, False
+
+    try:
+        # El savepoint permite recuperarse si otro worker crea la misma alerta
+        # entre el SELECT anterior y este INSERT.
+        with transaction.atomic():
+            alerta = Alerta.objects.create(
+                paciente=paciente,
+                registro_origen=registro_origen,
+                tipo=tipo,
+                severidad=severidad,
+                mensaje=mensaje,
+                veces=1,
+                fecha_ultima_deteccion=timezone.now(),
+            )
+        return alerta, True
+    except IntegrityError as error:
+        try:
+            alerta = (
+                Alerta.objects.select_for_update()
+                .get(paciente=paciente, tipo=tipo, resuelta=False)
+            )
+        except Alerta.DoesNotExist:
+            raise error
+        return alerta, False
+
+
+@transaction.atomic
 def _registrar_alerta(registro, tipo, severidad, mensaje):
     """Registra una detección clínica como Alerta, AGRUPANDO POR PROBLEMA
     (decisión Arquitecto, 10/07/2026):
@@ -77,22 +119,15 @@ def _registrar_alerta(registro, tipo, severidad, mensaje):
     sumo UNA alerta abierta por (paciente, tipo). NO cambia ninguna regla ni
     umbral clínico — solo cómo se almacenan las detecciones."""
     paciente = registro.paciente
-    abierta = (
-        Alerta.objects
-        .filter(paciente=paciente, tipo=tipo, resuelta=False)
-        .order_by('-fecha_alerta')
-        .first()
+    abierta, creada = _obtener_o_crear_alerta_abierta(
+        paciente,
+        tipo,
+        severidad,
+        mensaje,
+        registro_origen=registro,
     )
-    if abierta is None:
-        return Alerta.objects.create(
-            paciente=paciente,
-            registro_origen=registro,
-            tipo=tipo,
-            severidad=severidad,
-            mensaje=mensaje,
-            veces=1,
-            fecha_ultima_deteccion=timezone.now(),
-        )
+    if creada:
+        return abierta
 
     primera_vez_este_checkin = (abierta.registro_origen_id != registro.id)
     orden_previa = ORDEN_SEVERIDAD[abierta.severidad]
@@ -114,6 +149,33 @@ def _registrar_alerta(registro, tipo, severidad, mensaje):
     # recurrencia. Aquí marcamos la escalada; la creación la detecta `created`.
     abierta._escalo_a_alta = (
         abierta.severidad == 'ALTA' and orden_previa < ORDEN_SEVERIDAD['ALTA']
+    )
+    abierta.save()
+    return abierta
+
+
+@transaction.atomic
+def registrar_alerta_silencio(checkin, severidad, mensaje):
+    """Agrupa una detección de silencio sin crear alertas abiertas duplicadas."""
+    abierta, creada = _obtener_o_crear_alerta_abierta(
+        checkin.paciente,
+        'SILENCIO',
+        severidad,
+        mensaje,
+    )
+    if creada:
+        return abierta
+
+    orden_previa = ORDEN_SEVERIDAD[abierta.severidad]
+    if ORDEN_SEVERIDAD[severidad] > orden_previa:
+        abierta.severidad = severidad
+        abierta.mensaje = mensaje
+
+    abierta.veces += 1
+    abierta.fecha_ultima_deteccion = timezone.now()
+    abierta._escalo_a_alta = (
+        abierta.severidad == 'ALTA'
+        and orden_previa < ORDEN_SEVERIDAD['ALTA']
     )
     abierta.save()
     return abierta

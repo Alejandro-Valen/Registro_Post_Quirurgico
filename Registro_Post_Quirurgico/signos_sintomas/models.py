@@ -224,6 +224,39 @@ class RegistroDiario(models.Model):
         editable=False,
         default=0
     )
+    EVALUACION_PENDIENTE = 'PENDIENTE'
+    EVALUACION_PROCESANDO = 'PROCESANDO'
+    EVALUACION_COMPLETADA = 'COMPLETADA'
+    EVALUACION_ERROR = 'ERROR'
+    ESTADO_EVALUACION_CHOICES = [
+        (EVALUACION_PENDIENTE, 'Pendiente'),
+        (EVALUACION_PROCESANDO, 'Procesando'),
+        (EVALUACION_COMPLETADA, 'Completada'),
+        (EVALUACION_ERROR, 'Error; requiere reintento'),
+    ]
+    estado_evaluacion_alertas = models.CharField(
+        max_length=12,
+        choices=ESTADO_EVALUACION_CHOICES,
+        default=EVALUACION_PENDIENTE,
+        db_index=True,
+        editable=False,
+    )
+    intentos_evaluacion_alertas = models.PositiveSmallIntegerField(
+        default=0,
+        editable=False,
+    )
+    fecha_ultima_evaluacion_alertas = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+    )
+    ultimo_error_evaluacion_alertas = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        editable=False,
+        help_text='Solo conserva el tipo de error; nunca respuestas del paciente.',
+    )
 
     class Meta:
         verbose_name = "Registro Diario"
@@ -249,6 +282,12 @@ class RegistroDiario(models.Model):
                     | Q(hinchazon_abdominal__in=['nada', 'algo', 'mucho'])
                 ),
                 name='registrodiario_hinchazon_abdominal_valido',
+            ),
+            CheckConstraint(
+                condition=Q(estado_evaluacion_alertas__in=[
+                    'PENDIENTE', 'PROCESANDO', 'COMPLETADA', 'ERROR',
+                ]),
+                name='registro_estado_evaluacion_valido',
             ),
         ]
 
@@ -427,6 +466,11 @@ class Alerta(models.Model):
                 ),
                 name='alerta_otro_con_detalle',
             ),
+            models.UniqueConstraint(
+                fields=['paciente', 'tipo'],
+                condition=Q(resuelta=False),
+                name='unique_alerta_abierta_paciente_tipo',
+            ),
         ]
 
     def clean(self):
@@ -493,6 +537,15 @@ class ConversacionWhatsApp(models.Model):
         on_delete=models.PROTECT,
         related_name='conversacion',
         help_text="Cada paciente tiene una sola conversación activa con el bot"
+    )
+    checkin_actual = models.OneToOneField(
+        'CheckInProgramado',
+        on_delete=models.SET_NULL,
+        related_name='conversacion_activa',
+        null=True,
+        blank=True,
+        editable=False,
+        help_text='Check-in exacto cuyas respuestas se están recolectando.',
     )
     estado = models.CharField(
         max_length=40,
@@ -646,3 +699,50 @@ class CheckInProgramado(models.Model):
 
     def __str__(self):
         return f"{self.paciente} — {self.fecha_dia} {self.etiqueta} ({self.estado})"
+
+
+class RecepcionWebhookTwilio(models.Model):
+    """Recibo técnico para procesar cada mensaje entrante como máximo una vez.
+
+    No persiste teléfono ni contenido del mensaje. `message_sid` es el
+    identificador opaco que Twilio asigna al webhook.
+    """
+
+    ESTADO_PROCESANDO = 'PROCESANDO'
+    ESTADO_COMPLETADO = 'COMPLETADO'
+    ESTADO_ERROR = 'ERROR'
+    ESTADO_CHOICES = [
+        (ESTADO_PROCESANDO, 'Procesando'),
+        (ESTADO_COMPLETADO, 'Completado'),
+        (ESTADO_ERROR, 'Error; admite reintento'),
+    ]
+
+    message_sid = models.CharField(max_length=64, unique=True)
+    idempotency_token = models.CharField(max_length=128, blank=True, default='')
+    estado = models.CharField(
+        max_length=12,
+        choices=ESTADO_CHOICES,
+        default=ESTADO_PROCESANDO,
+        db_index=True,
+    )
+    intentos = models.PositiveSmallIntegerField(default=1)
+    fecha_recepcion = models.DateTimeField(auto_now_add=True, db_index=True)
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Recepción webhook Twilio'
+        verbose_name_plural = 'Recepciones webhook Twilio'
+        ordering = ['-fecha_recepcion']
+        constraints = [
+            CheckConstraint(
+                condition=Q(estado__in=['PROCESANDO', 'COMPLETADO', 'ERROR']),
+                name='webhook_twilio_estado_valido',
+            ),
+            CheckConstraint(
+                condition=Q(intentos__gte=1),
+                name='webhook_twilio_intentos_positivo',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.message_sid} — {self.estado}'

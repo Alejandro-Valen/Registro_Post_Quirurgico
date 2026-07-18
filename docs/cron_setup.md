@@ -5,7 +5,7 @@
 > el destino de despliegue es Railway o Render (ambos Linux), no la
 > máquina de Alejandro. Ver ROADMAP_MONITOREO_POSQUIRURGICO.md, FASE 5.
 
-## Los 4 management commands que deben programarse
+## Los 5 management commands que deben programarse
 
 | Command | Qué hace | Hora local (Bogotá) |
 |---------|----------|----------------------|
@@ -13,6 +13,7 @@
 | `crear_checkins_diarios` | Crea los 2 check-ins del día (mañana/tarde) para pacientes activos | 6:00 AM |
 | `enviar_recordatorios` | Envía el recordatorio matutino de WhatsApp (stub hasta integrar Twilio saliente) | 7:00 AM |
 | `cerrar_checkins_vencidos` | Cierra check-ins PENDIENTE vencidos (10h de gracia) → NO_RESPONDIDO + alerta SILENCIO | 6:00 AM y 6:00 PM |
+| `reintentar_evaluaciones_alertas` | Recupera registros cuya evaluación clínica quedó pendiente o falló | Cada 5 minutos |
 
 **Orden obligatorio a las 5:55-6:00 AM:** `desactivar_pacientes_vencidos`
 **siempre antes** de `crear_checkins_diarios`. Si se invierte el orden, un
@@ -27,6 +28,11 @@ en `signos_sintomas/tests.py`.
 (mañana y tarde) con sus propias ventanas de gracia de 10 horas — una
 corrida cierra los vencidos de la tarde anterior, la otra los de la
 mañana.
+
+`reintentar_evaluaciones_alertas` es una tarea técnica y no envía preguntas
+al paciente. Procesa como máximo 100 registros por corrida, bloquea cada fila
+y continúa con las demás si una evaluación vuelve a fallar. El cron matutino
+también lo ejecuta como respaldo, pero no reemplaza la corrida frecuente.
 
 ## Crontab (producción Linux — Railway/Render con worker o VPS)
 
@@ -51,6 +57,9 @@ SHELL=/bin/bash
 
 # 6:00 PM Bogotá = 23:00 UTC — cerrar vencidos de la tarde
 0 23 * * * cd /app && python manage.py cerrar_checkins_vencidos >> /var/log/monitoreo/vencidos.log 2>&1
+
+# Recuperar evaluaciones de alertas pendientes o fallidas
+*/5 * * * * cd /app && python manage.py reintentar_evaluaciones_alertas >> /var/log/monitoreo/reintentos-alertas.log 2>&1
 ```
 
 **`MAILTO`:** con esta línea al inicio del crontab, cualquier error en la
@@ -83,13 +92,14 @@ esto reemplaza o complementa el `MAILTO` de arriba al momento del deploy.
 - [ ] `enviar_recordatorios` corrió sin error (aunque el envío real de
   WhatsApp saliente siga en stub — ver Sprint 5, tareas diferidas)
 - [ ] `cerrar_checkins_vencidos` corrió en sus dos horarios sin error
+- [ ] `reintentar_evaluaciones_alertas` corre cada 5 minutos y deja en cero
+  los registros PENDIENTE/ERROR tras una prueba de recuperación
 - [ ] Un fallo forzado (ej. detener la BD un momento) efectivamente
   genera un email a `MAILTO`
 
 ## Diferido explícitamente (no bloquea Sprint 5)
 
-- Migración a Celery beat si los fallos de cron son frecuentes o se
-  necesita retry automático — la lógica ya está encapsulada en los
-  management commands, migrarla es decorar con `@shared_task`.
+- Migración a Celery beat si el volumen supera lo razonable para el cron
+  frecuente — la lógica ya está encapsulada en los management commands.
 - Integración real de Twilio saliente en `enviar_recordatorios` (hoy es
   un stub que solo loguea).

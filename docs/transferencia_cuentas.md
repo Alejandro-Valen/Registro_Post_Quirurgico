@@ -21,7 +21,7 @@ email automático → resolución en ~30 min).
 | Twilio | Envío/recepción de WhatsApp del bot | Cuenta activa desde Sprint 3 (sandbox); falta salida a número de producción | León/Alejandro → Médico |
 | Gmail del sistema | Envío de notificaciones de alerta ALTA (Bloque 5) | Configurada y probada end-to-end (01/07/2026) | León/Alejandro → Médico |
 | Dominio propio (si aplica) | URL pública del sistema | Aún no definido — hoy solo hay `ALLOWED_HOSTS` de desarrollo (`localhost`, `.ngrok-free.dev`) | León/Alejandro → Médico |
-| Redis (cache compartido) | Requerido en producción para idempotencia del webhook y rate limiting entre workers (Sprint 3-Hardening, hallazgo D1) | Pendiente de contratar/desplegar junto con el servidor | León/Alejandro → Médico |
+| Redis (cache compartido) | Requerido en producción para rate limiting compartido entre workers; la idempotencia del webhook usa PostgreSQL | Pendiente de contratar/desplegar junto con el servidor | León/Alejandro → Médico |
 
 ## Protocolo de transferencia (al momento de la venta)
 

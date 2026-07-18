@@ -33,8 +33,8 @@
 
 1. **Servicio web** (el repo, vía GitHub).
 2. **PostgreSQL** (plugin de Railway).
-3. **Redis** (plugin de Railway) — obligatorio: el cache compartido lo usan la
-   idempotencia del webhook y el rate limiting (si falta, fallan en silencio).
+3. **Redis** (plugin de Railway) — obligatorio: el cache compartido sostiene el
+   rate limiting entre workers. La idempotencia del webhook vive en PostgreSQL.
 
 ---
 
@@ -83,10 +83,11 @@
    grupo `Médicos`, crea las cuentas cuyas variables existan y levanta Gunicorn.
 5. Verificar el acceso de ambas cuentas y retirar de Railway las variables
    `*_USERNAME` y `*_PASSWORD` de bootstrap para que no se restablezcan.
-6. Configurar los **cron jobs** (ver `docs/cron_setup.md`): 4 comandos, con
+6. Configurar los **cron jobs** (ver `docs/cron_setup.md`): 5 comandos, con
    `desactivar_pacientes_vencidos` **antes** de `crear_checkins_diarios`. En
    Railway se hacen como servicios "Cron" separados que corren el mismo repo con
-   el comando correspondiente.
+   el comando correspondiente. `reintentar_evaluaciones_alertas` debe correr
+   cada 5 minutos; no procesa mensajes ni modifica los horarios clínicos.
 7. Actualizar el **webhook de Twilio** para que apunte a
    `https://<dominio-railway>/<ruta-del-webhook>` (recordar: Auth Token primario).
 

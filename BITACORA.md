@@ -2808,3 +2808,50 @@ umbrales ni decisiones clínicas pendientes de validación médica:
 **Pendiente inmediato:** desplegar/revisar el Loop 1 en Railway, provisionar la
 cuenta real del médico y continuar con el Loop 2 de confiabilidad del webhook y
 motor de alertas.
+
+---
+
+## 18/07/2026 — Loop 2: webhook durable y entrega recuperable de alertas
+
+Se cerró el segundo loop sin modificar reglas, umbrales ni mensajes clínicos:
+
+- **Idempotencia durable de Twilio:** `MessageSid` deja de depender de una
+  cache de 5 minutos y se registra en PostgreSQL. La fila técnica no guarda
+  teléfono ni `Body`; solo SID, token idempotente, estado, intentos y fechas.
+  SID ausente/malformado devuelve 400; duplicado completado devuelve TwiML
+  vacío; un request que ya está en proceso devuelve 503 para permitir retry.
+- **Atomicidad extremo a extremo:** el avance de la conversación y el estado
+  COMPLETADO del recibo se confirman en la misma transacción. Una caída antes
+  del commit revierte el avance del bot y deja el SID reintentable, evitando
+  interpretar la misma respuesta en dos preguntas distintas.
+- **Motor recuperable:** cada `RegistroDiario` conserva estado de evaluación,
+  intentos, fecha y solo la clase del último error. El nuevo comando
+  `reintentar_evaluaciones_alertas` procesa PENDIENTE/ERROR con locks y sigue
+  con los demás si uno vuelve a fallar. Se integró al cron matutino y se
+  documentó un cron frecuente cada 5 minutos.
+- **Concurrencia de alertas:** restricción parcial de BD para una sola alerta
+  abierta por `(paciente, tipo)`. El engine captura la colisión de dos workers
+  y actualiza la alerta ganadora. La migración 0020 consolida posibles
+  duplicados abiertos conservando contador, severidad máxima y trazabilidad.
+- **Bot y scheduler coordinados:** `ConversacionWhatsApp.checkin_actual` fija
+  el evento desde que inicia el cuestionario. El cron bloquea cada check-in y
+  omite conversaciones con actividad reciente; una conversación abandonada
+  fuera de las mismas 10 horas de gracia sí puede cerrarse. Las alertas SILENCIO
+  repetidas también se agrupan sin violar la nueva unicidad.
+- **Operación/Admin:** el estado de evaluación es visible en registros. Los
+  recibos Twilio son solo lectura y visibles exclusivamente a superusuarios.
+  Seeds y guías de Railway quedaron sincronizados; Redis sigue siendo
+  obligatorio para rate limiting, no para idempotencia.
+
+**Problema encontrado y resuelto:** la primera suite completa encontró una
+prueba antigua que fabricaba una conversación a mitad de flujo sin check-in.
+El bot la rechazó correctamente con `MSG_SIN_CHECKIN`; se corrigió el fixture
+para representar un estado posible del sistema y la suite volvió a verde.
+
+**Verificación:** 234 tests OK en PostgreSQL, incluidas carreras reales de dos
+workers para alertas y bot-vs-cron; `manage.py check`, `check --deploy`,
+`makemigrations --check` y `git diff --check` limpios.
+
+**Pendiente inmediato:** desplegar migraciones 0019-0021 en Railway, crear el
+tercer servicio cron `reintentar_evaluaciones_alertas` cada 5 minutos y hacer
+un smoke test real de SID duplicado + check-in completo antes del Loop 3.
