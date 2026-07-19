@@ -419,13 +419,13 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B, **app en Railway + cron** (bot end-to-end), **landing del médico (P-12)**, **panel/branding**, **alertas agrupadas** y **Loops 1-3 cerrados** (**252 tests OK**). Railway sigue desplegado hasta el estado del 10/07; falta desplegar Loops 1-3, crear el cron frecuente de reintentos, resolver correo ALTA, datos/cuenta real del médico y requisitos de piloto. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B, **app en Railway + cron** (bot end-to-end), **landing del médico (P-12)**, **panel/branding**, **alertas agrupadas** y **Loops 1-3 cerrados** (**256 tests OK**). Railway sigue desplegado hasta el estado del 10/07; falta desplegar Loops 1-3, crear el cron frecuente de reintentos, resolver correo ALTA, datos/cuenta real del médico y requisitos de piloto. Rama `sprint-5-produccion` |
 
 **Punto actual (19/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
 desplegada en Railway y el cron base funcionando. Localmente quedaron cerrados
 el **Loop 1 de integridad clínica/permisos**, el **Loop 2 de confiabilidad del
 webhook y entrega de alertas** y el **Loop 3 de experiencia médica**. Los tres
-están validados localmente (**252 tests OK**); Railway aún no los contiene. URL:
+están validados localmente (**256 tests OK**); Railway aún no los contiene. URL:
 `registropostquirurgico-production-1f96.up.railway.app`.
 - **Panel del médico (Admin):** `/admin/` con branding "calma clínica"
   (override de `admin/base_site.html` + `signos_sintomas/static/admin/css/panel_admin.css`
@@ -453,7 +453,9 @@ están validados localmente (**252 tests OK**); Railway aún no los contiene. UR
   superusuario y el tablero muestra los pendientes propios sin exponer el
   cuerpo. `DeteccionAlerta` desglosa las detecciones nuevas de cada ×N por
   registro/check-in y conserva el contador anterior sin backfill ficticio.
-  El filtro de fecha ahora dice "Todas las fechas". **252 tests OK.**
+  El filtro de fecha ahora dice "Todas las fechas". El detalle usa lenguaje de
+  producto ("Detecciones de la alerta") y los seeds pueden limpiarse sin
+  violar relaciones protegidas. **256 tests OK.**
 - **Landing (P-12):** la página `/` (app `home`) se convirtió en la presentación
   del médico + sistema, con un **sistema de diseño compartido**
   (`home/static/home/css/site.css` + `home/static/home/js/pulse.js` +
@@ -475,7 +477,7 @@ cerrar su hardening pendiente: actualizar Django/dependencias fijadas, validar
 IP real detrás del proxy, desacoplar el correo ALTA con timeout/servicio HTTP,
 activar CSP y servir Chart.js localmente. Luego configurar
 `MEDICO_CONTACTO_USERNAME` con la cuenta staff real y desplegar Loops 1-4 a
-Railway; el arranque aplicará las migraciones clínicas 0019-0022 y `home.0002`.
+Railway; el arranque aplicará las migraciones clínicas 0019-0023 y `home.0002`.
 Crear el servicio cron `reintentar_evaluaciones_alertas` cada 5 minutos y
 ejecutar un smoke test real de SID duplicado + check-in completo. Después:
 **datos reales del médico** (reemplazar

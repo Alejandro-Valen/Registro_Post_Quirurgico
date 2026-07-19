@@ -909,7 +909,12 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
     backfill ficticio (`signos_sintomas.0022`).
   - [x] Panel de mensajes de contacto debajo de Silencios y filtro de fecha
     renombrado a "Todas las fechas". Revisión visual escritorio/móvil sin
-    desbordamientos. **252 tests OK.** Commit de código: `5ad1b71`.
+    desbordamientos.
+  - [x] Cierre UX posterior: el detalle dice "Detecciones de la alerta" sin
+    lenguaje interno de loops; se verificó el ordenamiento real de las tablas
+    y se robusteció la limpieza/recreación de datos demo con FKs protegidas
+    (`signos_sintomas.0023`). **256 tests OK.**
+    Commit base del Loop 3: `5ad1b71`.
 - [ ] Crear y verificar en Railway el servicio cron frecuente
   `reintentar_evaluaciones_alertas` (`*/5 * * * *`) después del merge/deploy.
 - [ ] Provisionar y verificar en Railway la cuenta real del médico

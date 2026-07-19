@@ -2919,3 +2919,37 @@ desacoplado con timeout o API HTTP, CSP y Chart.js local. Luego configurar la
 cuenta real y `MEDICO_CONTACTO_USERNAME`, desplegar migraciones 0019-0022 y
 `home.0002`, crear el cron de reintento cada 5 minutos y ejecutar smoke tests
 reales en Railway.
+
+---
+
+## 19/07/2026 — Seguimiento Loop 3: lenguaje y datos demo verificables
+
+Se atendieron las dudas surgidas durante la revisión del Admin sin cambiar
+reglas, umbrales ni decisiones clínicas:
+
+- **Lenguaje de producto:** se eliminó la referencia interna "desde Loop 3".
+  El inline ahora se llama "Detecciones de la alerta" y cada objeto muestra un
+  identificador compacto con su registro o check-in de origen.
+- **Ordenamiento comprobado:** las columnas del Admin ordenan en el servidor,
+  por eso recargan la página. Los números pequeños son la prioridad de cada
+  criterio. La verificación visual confirmó el cambio de fechas ascendentes a
+  descendentes y el filtro quedó como "Todas las fechas".
+- **Demos reproducibles:** `seed_demo --borrar` ya respeta las relaciones
+  clínicas protegidas y `seed_demo --limpiar` permite retirar el demo local sin
+  recrearlo. La limpieza del seed de producción ahora es atómica y reporta
+  conteos por modelo sin sumar en cascada las detecciones hijas.
+- **Prueba funcional local:** se retiraron los demos previos y se crearon dos
+  pacientes ficticios nuevos para `demo_medico`. El panel mostró 10 alertas
+  abiertas y el detalle de una alerta ×7 mostró sus siete detecciones. No se
+  ejecutó ningún comando contra Railway.
+
+**Migración local aplicada:** `signos_sintomas.0023`, exclusivamente para el
+nombre plural de `DeteccionAlerta`.
+
+**Verificación:** **256 tests OK**; `manage.py check`, `check --deploy`,
+`makemigrations --check --dry-run` y `git diff --check` limpios. Revisión visual
+del filtro, ordenamiento y detalle de detecciones sin errores de consola.
+
+**Pendiente inmediato:** conservar Railway sin cambios hasta el Loop 4. En ese
+loop se desplegarán juntos los cambios acumulados, se configurará la cuenta
+médica real y se decidirá conscientemente si se cargan o limpian demos remotos.
