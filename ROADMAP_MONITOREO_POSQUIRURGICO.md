@@ -915,6 +915,10 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
     y se robusteció la limpieza/recreación de datos demo con FKs protegidas
     (`signos_sintomas.0023`). **256 tests OK.**
     Commit base del Loop 3: `5ad1b71`.
+- [x] Desplegar Loops 1-3 en Railway: commit `de06ff8`, migraciones hasta
+  `signos_sintomas.0023` + `home.0002`, web y dos cron en `SUCCESS`, HTTPS 200
+  y `check --deploy` limpio. Demos remotos renovados (2 activos, 10 alertas
+  abiertas, 36 detecciones). `SECRET_KEY` remoto rotado (19/07/2026).
 - [ ] Crear y verificar en Railway el servicio cron frecuente
   `reintentar_evaluaciones_alertas` (`*/5 * * * *`) después del merge/deploy.
 - [ ] Provisionar y verificar en Railway la cuenta real del médico

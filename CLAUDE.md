@@ -419,13 +419,13 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B, **app en Railway + cron** (bot end-to-end), **landing del médico (P-12)**, **panel/branding**, **alertas agrupadas** y **Loops 1-3 cerrados** (**256 tests OK**). Railway sigue desplegado hasta el estado del 10/07; falta desplegar Loops 1-3, crear el cron frecuente de reintentos, resolver correo ALTA, datos/cuenta real del médico y requisitos de piloto. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B, **app en Railway + cron** (bot end-to-end), **landing del médico (P-12)**, **panel/branding**, **alertas agrupadas** y **Loops 1-3 desplegados** (**256 tests OK**). Railway ejecuta `de06ff8` con migraciones hasta `signos_sintomas.0023` y `home.0002`; falta el Loop 4, cron frecuente de reintentos, correo ALTA, cuenta real del médico y requisitos de piloto. Rama `sprint-5-produccion` |
 
 **Punto actual (19/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
-desplegada en Railway y el cron base funcionando. Localmente quedaron cerrados
-el **Loop 1 de integridad clínica/permisos**, el **Loop 2 de confiabilidad del
-webhook y entrega de alertas** y el **Loop 3 de experiencia médica**. Los tres
-están validados localmente (**256 tests OK**); Railway aún no los contiene. URL:
+desplegada en Railway y el cron base funcionando. Quedaron cerrados, validados
+y desplegados el **Loop 1 de integridad clínica/permisos**, el **Loop 2 de
+confiabilidad del webhook y entrega de alertas** y el **Loop 3 de experiencia
+médica** (**256 tests OK**). URL:
 `registropostquirurgico-production-1f96.up.railway.app`.
 - **Panel del médico (Admin):** `/admin/` con branding "calma clínica"
   (override de `admin/base_site.html` + `signos_sintomas/static/admin/css/panel_admin.css`
@@ -472,12 +472,18 @@ están validados localmente (**256 tests OK**); Railway aún no los contiene. UR
   `--medico` o al primer superusuario), pacientes marcados `DEMO — ` /
   cédula `DEMO-000X` / teléfono ficticio, y **reversible** con
   `--limpiar --confirmar`. Crea 2 pacientes de ejemplo con registros y alertas.
+  En Railway se renovaron el 19/07: 2 activos, 18 registros, 10 alertas abiertas
+  agrupadas y 36 detecciones, asignados temporalmente al superusuario `SeñorAL`.
+- **Estado Railway (19/07/2026):** web y ambos cron en `SUCCESS`, HTTPS 200,
+  migraciones `signos_sintomas.0019-0023` y `home.0002` aplicadas. Se rotó el
+  `SECRET_KEY` débil por uno aleatorio compartido entre los tres servicios;
+  `check --deploy` remoto quedó sin issues. Aún no existe médico staff separado.
 **Próximo paso exacto (al retomar):** iniciar el **Loop 4 de producción** y
 cerrar su hardening pendiente: actualizar Django/dependencias fijadas, validar
 IP real detrás del proxy, desacoplar el correo ALTA con timeout/servicio HTTP,
 activar CSP y servir Chart.js localmente. Luego configurar
-`MEDICO_CONTACTO_USERNAME` con la cuenta staff real y desplegar Loops 1-4 a
-Railway; el arranque aplicará las migraciones clínicas 0019-0023 y `home.0002`.
+`MEDICO_CONTACTO_USERNAME` con la cuenta staff real y desplegar el Loop 4 a
+Railway; las migraciones de los Loops 1-3 ya están aplicadas.
 Crear el servicio cron `reintentar_evaluaciones_alertas` cada 5 minutos y
 ejecutar un smoke test real de SID duplicado + check-in completo. Después:
 **datos reales del médico** (reemplazar

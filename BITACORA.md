@@ -2953,3 +2953,46 @@ del filtro, ordenamiento y detalle de detecciones sin errores de consola.
 **Pendiente inmediato:** conservar Railway sin cambios hasta el Loop 4. En ese
 loop se desplegarán juntos los cambios acumulados, se configurará la cuenta
 médica real y se decidirá conscientemente si se cargan o limpian demos remotos.
+
+---
+
+## 19/07/2026 — Despliegue Loops 1-3 y renovación de demos en Railway
+
+Con autorización explícita para borrar los demos remotos se sincronizó el
+entorno `production` del proyecto Railway `zooming-trust`:
+
+- **Despliegue confirmado:** GitHub había activado automáticamente el commit
+  `de06ff8` en el servicio web y los dos cron. Los tres quedaron en `SUCCESS`;
+  el web usa Dockerfile, responde HTTPS 200 y tiene aplicadas las migraciones
+  `signos_sintomas.0019-0023` y `home.0002`.
+- **Demos renovados:** se eliminaron únicamente `DEMO-0001` y `DEMO-0002` con
+  18 registros, 14 alertas y 22 check-ins anteriores. Se recrearon dentro del
+  contenedor Railway: 2 pacientes activos asignados temporalmente a `SeñorAL`,
+  18 registros, 10 alertas abiertas agrupadas, 18 check-ins y 36 detecciones.
+  El contador máximo verificado es ×8.
+- **Hallazgo de configuración resuelto:** el `check --deploy` dentro de Railway
+  detectó `security.W009` porque `SECRET_KEY` era débil. Se generó un valor
+  criptográficamente aleatorio, se transmitió solo por stdin y se aplicó igual
+  al web y ambos cron. Tras los tres redespliegues, `check --deploy` quedó en
+  cero issues. La rotación invalida sesiones anteriores del Admin.
+- **Acceso operativo:** se instaló temporalmente Railway CLI 5.27 vía `npx`, se
+  autenticó la cuenta y se enlazó exclusivamente el servicio web de production.
+  Se creó y registró una clave SSH dedicada local para ejecutar dentro de la
+  red privada de Railway; la primera huella se fijó con `accept-new`, no se
+  desactivó la verificación de host.
+
+**Problemas encontrados y resueltos:** Railway CLI no estaba instalado. Luego,
+`railway run` intentó usar `postgres.railway.internal` desde Windows y falló por
+DNS. El proxy público permitió limpiar, pero cortó dos intentos de recreación;
+ambos quedaron completamente revertidos por las transacciones (0 demos antes
+del intento final). El SSH oficial se bloqueaba por la confirmación invisible
+de la primera huella; tras fijarla, el seed interno terminó en 4 segundos.
+
+**Verificación final:** 2/2 demos activos, 10 alertas abiertas, 36 detecciones;
+web + cron en `SUCCESS`; HTTPS 200; sin errores de aplicación recientes y
+`manage.py check --deploy` remoto sin issues.
+
+**Pendiente inmediato:** crear la cuenta staff real de privilegio mínimo y
+configurar `MEDICO_CONTACTO_USERNAME`; crear el cron de reintentos cada 5
+minutos y continuar el Loop 4 (dependencias, IP real, correo ALTA, CSP y
+Chart.js local). Los demos siguen asignados a `SeñorAL` hasta entonces.
