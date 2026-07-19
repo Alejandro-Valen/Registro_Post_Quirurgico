@@ -2,7 +2,7 @@
 <div class="pt-wrap">
 
   <div class="pt-head">
-    <h1>Lo que necesita atención hoy</h1>
+    <h1>Seguimiento que requiere atención</h1>
     <span class="pt-date">{{ hoy|date:"l j \d\e F, Y" }}{% if not es_super %} · tus pacientes{% endif %}</span>
   </div>
 
@@ -31,7 +31,13 @@
 
   <div class="pt-grid">
     <div class="pt-card">
-      <div class="pt-hd"><h2>Necesita atención ahora</h2><span class="pt-count">Ordenado por gravedad</span></div>
+      <div class="pt-hd">
+        <h2>Alertas sin resolver</h2>
+        <div class="pt-hd-actions">
+          <span class="pt-count">{{ total_atencion }} pendiente{{ total_atencion|pluralize }}</span>
+          <a class="pt-all" href="{% url 'admin:signos_sintomas_alerta_changelist' %}?resuelta__exact=0">Ver todas</a>
+        </div>
+      </div>
 
       {% for a in atencion %}
       <div class="pt-arow">
@@ -45,7 +51,7 @@
             <a class="pt-btn" href="{% url 'admin:signos_sintomas_alerta_change' a.alerta_id %}">Ver alerta</a>
           </div>
         </div>
-        <div class="pt-when">hace {{ a.fecha|timesince }}</div>
+        <div class="pt-when" title="Última detección">{{ a.fecha|date:"d/m H:i" }}<small>hace {{ a.fecha|timesince }}</small></div>
         <div class="pt-right"><span class="pt-pill {{ a.sev }}">{{ a.sev_label }}</span></div>
       </div>
       {% empty %}
@@ -76,6 +82,25 @@
         </a>
         {% empty %}
         <div class="pt-empty small"><p>Nadie sin responder hoy.</p></div>
+        {% endfor %}
+      </div>
+
+      <div class="pt-card pt-side">
+        <div class="pt-hd">
+          <h2>Mensajes de contacto</h2>
+          <div class="pt-hd-actions">
+            <span class="pt-count">{{ total_mensajes_contacto }} pendiente{{ total_mensajes_contacto|pluralize }}</span>
+            <a class="pt-all" href="{% url 'admin:home_mensajecontacto_changelist' %}?revisado__exact=0">Ver todos</a>
+          </div>
+        </div>
+        {% for contacto in contactos %}
+        <a class="pt-srow" href="{% url 'admin:home_mensajecontacto_change' contacto.id %}">
+          <span class="pt-av" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z"/><path d="m4 6 8 6 8-6"/></svg></span>
+          <span class="pt-srow-main"><span class="pt-nm">{{ contacto.nombre }}</span><span class="pt-mt">{{ contacto.telefono }} · {{ contacto.fecha|date:"d/m H:i" }}</span></span>
+          <span class="pt-pill contact">Pendiente</span>
+        </a>
+        {% empty %}
+        <div class="pt-empty small"><p>No hay mensajes pendientes.</p></div>
         {% endfor %}
       </div>
     </div>

@@ -116,6 +116,11 @@ TWILIO_VALIDATE_SIGNATURE = config('TWILIO_VALIDATE_SIGNATURE', default=True, ca
 # real se maneja con error claro en el webhook (nunca falla abierto).
 TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
 
+# Cuenta staff que recibe los mensajes del formulario público de contacto.
+# Si queda vacía o no existe, los mensajes se conservan sin asignar y solo
+# son visibles para el superusuario (fail-closed para datos personales).
+MEDICO_CONTACTO_USERNAME = config('MEDICO_CONTACTO_USERNAME', default='')
+
 # Detrás de un túnel/proxy (ngrok): que build_absolute_uri() reconstruya la URL
 # pública https que Twilio firmó (imprescindible para validar X-Twilio-Signature).
 USE_X_FORWARDED_HOST = True

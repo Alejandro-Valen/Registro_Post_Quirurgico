@@ -4,7 +4,7 @@ from decimal import Decimal
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
-from .models import Alerta, RegistroDiario
+from .models import Alerta, DeteccionAlerta, RegistroDiario
 
 
 TEMPERATURA_ALTA = Decimal('37.9')           # Outersterp 2025
@@ -62,6 +62,7 @@ def _obtener_o_crear_alerta_abierta(
     severidad,
     mensaje,
     registro_origen=None,
+    fecha_deteccion=None,
 ):
     abierta = (
         Alerta.objects.select_for_update()
@@ -83,7 +84,7 @@ def _obtener_o_crear_alerta_abierta(
                 severidad=severidad,
                 mensaje=mensaje,
                 veces=1,
-                fecha_ultima_deteccion=timezone.now(),
+                fecha_ultima_deteccion=fecha_deteccion or timezone.now(),
             )
         return alerta, True
     except IntegrityError as error:
@@ -95,6 +96,39 @@ def _obtener_o_crear_alerta_abierta(
         except Alerta.DoesNotExist:
             raise error
         return alerta, False
+
+
+def _registrar_detalle_deteccion(
+    alerta,
+    severidad,
+    mensaje,
+    fecha_deteccion,
+    *,
+    registro=None,
+    checkin=None,
+):
+    """Crea una evidencia idempotente por fuente y conserva su máximo nivel."""
+    if (registro is None) == (checkin is None):
+        raise ValueError('La detección requiere exactamente una fuente.')
+
+    fuente = {'registro': registro} if registro is not None else {'checkin': checkin}
+    detalle, creado = DeteccionAlerta.objects.get_or_create(
+        alerta=alerta,
+        **fuente,
+        defaults={
+            'severidad_detectada': severidad,
+            'mensaje_detectado': mensaje,
+            'fecha_deteccion': fecha_deteccion,
+        },
+    )
+    if not creado and (
+        ORDEN_SEVERIDAD[severidad]
+        > ORDEN_SEVERIDAD[detalle.severidad_detectada]
+    ):
+        detalle.severidad_detectada = severidad
+        detalle.mensaje_detectado = mensaje
+        detalle.save(update_fields=['severidad_detectada', 'mensaje_detectado'])
+    return detalle, creado
 
 
 @transaction.atomic
@@ -119,17 +153,28 @@ def _registrar_alerta(registro, tipo, severidad, mensaje):
     sumo UNA alerta abierta por (paciente, tipo). NO cambia ninguna regla ni
     umbral clínico — solo cómo se almacenan las detecciones."""
     paciente = registro.paciente
+    fecha_deteccion = registro.fecha_registro
     abierta, creada = _obtener_o_crear_alerta_abierta(
         paciente,
         tipo,
         severidad,
         mensaje,
         registro_origen=registro,
+        fecha_deteccion=fecha_deteccion,
+    )
+    _, detalle_creado = _registrar_detalle_deteccion(
+        abierta,
+        severidad,
+        mensaje,
+        fecha_deteccion,
+        registro=registro,
     )
     if creada:
         return abierta
 
-    primera_vez_este_checkin = (abierta.registro_origen_id != registro.id)
+    primera_vez_este_checkin = (
+        detalle_creado and abierta.registro_origen_id != registro.id
+    )
     orden_previa = ORDEN_SEVERIDAD[abierta.severidad]
 
     # Severidad = máxima alcanzada; el mensaje refleja ese nivel más grave.
@@ -141,7 +186,7 @@ def _registrar_alerta(registro, tipo, severidad, mensaje):
     # una vez por check-in (así dos reglas del mismo check-in no cuentan doble).
     if primera_vez_este_checkin:
         abierta.veces += 1
-        abierta.fecha_ultima_deteccion = timezone.now()
+        abierta.fecha_ultima_deteccion = fecha_deteccion
         abierta.registro_origen = registro
 
     # Bandera para signals.py: el correo de alerta ALTA se envía solo cuando la
@@ -157,11 +202,20 @@ def _registrar_alerta(registro, tipo, severidad, mensaje):
 @transaction.atomic
 def registrar_alerta_silencio(checkin, severidad, mensaje):
     """Agrupa una detección de silencio sin crear alertas abiertas duplicadas."""
+    fecha_deteccion = timezone.now()
     abierta, creada = _obtener_o_crear_alerta_abierta(
         checkin.paciente,
         'SILENCIO',
         severidad,
         mensaje,
+        fecha_deteccion=fecha_deteccion,
+    )
+    _, detalle_creado = _registrar_detalle_deteccion(
+        abierta,
+        severidad,
+        mensaje,
+        fecha_deteccion,
+        checkin=checkin,
     )
     if creada:
         return abierta
@@ -171,8 +225,9 @@ def registrar_alerta_silencio(checkin, severidad, mensaje):
         abierta.severidad = severidad
         abierta.mensaje = mensaje
 
-    abierta.veces += 1
-    abierta.fecha_ultima_deteccion = timezone.now()
+    if detalle_creado:
+        abierta.veces += 1
+        abierta.fecha_ultima_deteccion = fecha_deteccion
     abierta._escalo_a_alta = (
         abierta.severidad == 'ALTA'
         and orden_previa < ORDEN_SEVERIDAD['ALTA']

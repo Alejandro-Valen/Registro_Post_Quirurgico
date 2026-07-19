@@ -11,6 +11,7 @@ from django.utils.html import format_html, mark_safe
 from .models import (
     Alerta,
     CheckInProgramado,
+    DeteccionAlerta,
     Paciente,
     RecepcionWebhookTwilio,
     RegistroDiario,
@@ -53,20 +54,20 @@ def _solo_propios(request):
 
 
 DIAS_HISTORIAL_DEFAULT = 7
-DIAS_HISTORIAL_OPCIONES = [7, 14, 30]
+DIAS_HISTORIAL_OPCIONES = [3, 7, 10]
 
 
 def _clamp_dias_historial(valor):
-    """Convierte el parámetro ?dias= de la URL a un entero seguro (1-90)."""
+    """Acepta solo los periodos definidos para el seguimiento de 10 días."""
     try:
         dias = int(valor)
     except (TypeError, ValueError):
         return DIAS_HISTORIAL_DEFAULT
-    return max(1, min(dias, 90))
+    return dias if dias in DIAS_HISTORIAL_OPCIONES else DIAS_HISTORIAL_DEFAULT
 
 
 def _selector_dias_historial(dias_actual):
-    """Enlaces '7 días / 14 días / 30 días' — P-8: historial configurable por el médico."""
+    """Enlaces 3/7/10 días, alineados con la ventana de seguimiento."""
     enlaces = []
     for dias in DIAS_HISTORIAL_OPCIONES:
         if dias == dias_actual:
@@ -108,7 +109,7 @@ def _turnos_por_registro(registros):
 def _historial_paciente(paciente, dias=DIAS_HISTORIAL_DEFAULT):
     """Devuelve HTML con selector de rango + tabla de registros del paciente."""
     selector = _selector_dias_historial(dias)
-    desde = timezone.localdate() - timedelta(days=dias)
+    desde = timezone.localdate() - timedelta(days=dias - 1)
     registros = list(
         RegistroDiario.objects
         .filter(paciente=paciente, fecha_registro__date__gte=desde)
@@ -148,7 +149,7 @@ def _historial_paciente(paciente, dias=DIAS_HISTORIAL_DEFAULT):
     return selector + tabla
 
 
-DIAS_GRAFICA_OPCIONES = [7, 14, 30]
+DIAS_GRAFICA_OPCIONES = [3, 7, 10]
 
 
 def _datos_grafica(paciente, dias):
@@ -157,7 +158,7 @@ def _datos_grafica(paciente, dias):
     últimos `dias` días de un paciente. Todo lo que va a JSON pasa por
     json.dumps() en el llamador — nunca se interpola directo en el HTML.
     """
-    desde = timezone.localdate() - timedelta(days=dias)
+    desde = timezone.localdate() - timedelta(days=dias - 1)
     registros = list(
         RegistroDiario.objects
         .filter(paciente=paciente, fecha_registro__date__gte=desde)
@@ -191,12 +192,12 @@ _JS_GRAFICAS_TEMPLATE = """
 <div id="graficas-__PID__" style="margin-top:8px;">
   <div style="margin-bottom:12px;font-size:0.85em;">
     Ver:
+    <a href="#" onclick="cambiarPeriodo___PID__(3,this);return false;"
+       style="color:#6b7280;">3 días</a> ·
     <a href="#" onclick="cambiarPeriodo___PID__(7,this);return false;"
        style="font-weight:600;color:#374151;">7 días</a> ·
-    <a href="#" onclick="cambiarPeriodo___PID__(14,this);return false;"
-       style="color:#6b7280;">14 días</a> ·
-    <a href="#" onclick="cambiarPeriodo___PID__(30,this);return false;"
-       style="color:#6b7280;">30 días</a>
+    <a href="#" onclick="cambiarPeriodo___PID__(10,this);return false;"
+       style="color:#6b7280;">10 días</a>
   </div>
 
   <div style="margin-bottom:4px;font-size:0.8em;color:#6b7280;display:flex;justify-content:space-between;">
@@ -358,7 +359,7 @@ _JS_GRAFICAS_TEMPLATE = """
 def _grafica_signos_vitales(paciente):
     """
     Devuelve HTML con 3 gráficas Chart.js (temperatura, dolor EVA, FC) con
-    selector de período 7/14/30 días que cambia en el navegador sin
+    selector de período 3/7/10 días que cambia en el navegador sin
     recargar la página (P-9, rediseño 01/07/2026).
 
     Los 3 períodos se precalculan en Python y se serializan una sola vez
@@ -437,6 +438,21 @@ class PacienteAdmin(admin.ModelAdmin):
         elif not obj.consentimiento_informado and obj.fecha_consentimiento:
             obj.fecha_consentimiento = None
         super().save_model(request, obj, form, change)
+
+    def construct_change_message(self, request, form, formsets, add=False):
+        """Nombra explícitamente el cambio de estado en el historial Admin."""
+        if not add and 'activo' in form.changed_data:
+            estado = 'activado' if form.cleaned_data.get('activo') else 'desactivado'
+            otros = [
+                str(form.fields[campo].label)
+                for campo in form.changed_data
+                if campo != 'activo' and campo in form.fields
+            ]
+            mensaje = f'Seguimiento {estado}.'
+            if otros:
+                mensaje += f' Otros campos modificados: {", ".join(otros)}.'
+            return mensaje
+        return super().construct_change_message(request, form, formsets, add)
 
     @admin.display(description='Evolución signos vitales')
     def grafica_signos_vitales(self, obj):
@@ -552,6 +568,44 @@ _COLORES_SEVERIDAD = {
 }
 
 
+class DeteccionAlertaInline(admin.TabularInline):
+    model = DeteccionAlerta
+    fields = (
+        'fecha_deteccion',
+        'severidad_detectada',
+        'fuente_deteccion',
+        'mensaje_detectado',
+    )
+    readonly_fields = fields
+    extra = 0
+    can_delete = False
+
+    @admin.display(description='Fuente')
+    def fuente_deteccion(self, obj):
+        if obj.registro_id:
+            return f'Registro diario #{obj.registro_id}'
+        return f'Check-in #{obj.checkin_id}'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('registro', 'checkin')
+
+    def has_view_permission(self, request, obj=None):
+        if not request.user.is_active or not request.user.is_staff:
+            return False
+        if obj is not None and not request.user.is_superuser:
+            return obj.paciente.medico_responsable_id == request.user.id
+        return True
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Alerta)
 class AlertaAdmin(admin.ModelAdmin):
     list_display = ['paciente', 'tipo', 'severidad_badge', 'recurrencia',
@@ -559,7 +613,11 @@ class AlertaAdmin(admin.ModelAdmin):
     list_filter = ['tipo', 'severidad', 'resuelta']
     search_fields = ['paciente__nombre_completo']
     actions = ['marcar_resuelta']
-    readonly_fields = [campo.name for campo in Alerta._meta.fields]
+    readonly_fields = [
+        *[campo.name for campo in Alerta._meta.fields],
+        'cobertura_detecciones',
+    ]
+    inlines = [DeteccionAlertaInline]
 
     def has_add_permission(self, request):
         # Las alertas son resultados del motor clínico, no entradas manuales.
@@ -579,6 +637,33 @@ class AlertaAdmin(admin.ModelAdmin):
             'background:{fondo};color:{texto};padding:2px 8px;border-radius:4px;'
             'font-weight:bold;font-size:0.85em;">×{n}</span>',
             n=obj.veces, fondo=fondo, texto=texto,
+        )
+
+    @admin.display(description='Cobertura del desglose')
+    def cobertura_detecciones(self, obj):
+        detalladas = obj.detecciones.count()
+        anteriores = max(obj.veces - detalladas, 0)
+        if anteriores:
+            etiqueta_anteriores = (
+                'detección anterior' if anteriores == 1
+                else 'detecciones anteriores'
+            )
+            etiqueta_detalladas = (
+                'detección' if detalladas == 1 else 'detecciones'
+            )
+            return format_html(
+                'El contador conserva <strong>{}</strong> {} sin desglose '
+                'individual. El desglose empieza desde esta versión e incluye '
+                '<strong>{}</strong> {}.',
+                anteriores,
+                etiqueta_anteriores,
+                detalladas,
+                etiqueta_detalladas,
+            )
+        return format_html(
+            '<strong>{}</strong> de <strong>{}</strong> detecciones tienen detalle.',
+            detalladas,
+            obj.veces,
         )
 
     @admin.display(description='Severidad', ordering='severidad')

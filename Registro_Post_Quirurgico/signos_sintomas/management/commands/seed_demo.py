@@ -132,12 +132,14 @@ class Command(BaseCommand):
         fecha_cirugia = hoy - timedelta(days=10)
         paciente = Paciente.objects.create(
             nombre_completo='Camilo Andrés Rueda Vargas',
+            cedula='DEMO-LOCAL-001',
             telefono_whatsapp=TELEFONO_DEMO,
             fecha_cirugia=fecha_cirugia,
             tipo_cirugia='colectomia_electiva',
             medico_responsable=medico,
             activo=True,
             consentimiento_informado=True,
+            fecha_consentimiento=timezone.now(),
         )
         self.stdout.write(f'  Paciente demo creado: {paciente.nombre_completo}')
 

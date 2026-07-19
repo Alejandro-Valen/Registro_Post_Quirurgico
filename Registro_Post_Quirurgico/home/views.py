@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.shortcuts import render
 
@@ -27,6 +29,18 @@ def _rate_limit_contacto_excedido(ip):
         cache.set(clave, 1, 3600)
         conteo = 1
     return conteo > _LIMITE_CONTACTO_HORA
+
+
+def _medico_destinatario_contacto():
+    """Resuelve el médico configurado sin fallar abierto ante una mala config."""
+    username = settings.MEDICO_CONTACTO_USERNAME.strip()
+    if not username:
+        return None
+    return (
+        get_user_model().objects
+        .filter(username=username, is_active=True, is_staff=True)
+        .first()
+    )
 
 
 # Mientras el médico no entregue sus datos reales, la landing muestra
@@ -60,6 +74,7 @@ def contacto(request):
                     nombre=nombre,
                     telefono=telefono,
                     mensaje=mensaje,
+                    medico_destinatario=_medico_destinatario_contacto(),
                 )
                 mensaje_enviado = True
 

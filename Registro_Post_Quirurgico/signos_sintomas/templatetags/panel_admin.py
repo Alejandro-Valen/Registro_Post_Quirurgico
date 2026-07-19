@@ -11,6 +11,7 @@ from django import template
 from django.db.models import Count, Q
 from django.utils import timezone
 
+from home.models import MensajeContacto
 from signos_sintomas.models import Alerta, CheckInProgramado, Paciente
 
 register = template.Library()
@@ -44,12 +45,14 @@ def panel_triage(context):
     pacientes = Paciente.objects.all()
     alertas = Alerta.objects.all()
     checkins = CheckInProgramado.objects.filter(fecha_dia=hoy)
+    mensajes_contacto = MensajeContacto.objects.filter(revisado=False)
 
     # Scoping por médico: el no-superusuario solo ve lo suyo.
     if not user.is_superuser:
         pacientes = pacientes.filter(medico_responsable=user)
         alertas = alertas.filter(paciente__medico_responsable=user)
         checkins = checkins.filter(paciente__medico_responsable=user)
+        mensajes_contacto = mensajes_contacto.filter(medico_destinatario=user)
 
     activos = pacientes.filter(activo=True)
     pendientes = alertas.filter(resuelta=False)
@@ -66,13 +69,17 @@ def panel_triage(context):
         'pct':         int(round(100 * respondidos / total_checkins)) if total_checkins else 0,
     }
 
-    # Triage: alertas sin resolver (menos SILENCIO), por gravedad y recientes.
+    # Triage acumulado: toda alerta sin resolver (menos SILENCIO), aunque se
+    # haya originado en un día anterior.
     pend = list(
         pendientes.exclude(tipo='SILENCIO')
         .select_related('paciente', 'registro_origen')
-        .order_by('-fecha_alerta')
     )
-    pend.sort(key=lambda a: _RANK_SEV.get(a.severidad, 3))  # sort estable
+    pend.sort(key=lambda a: (
+        _RANK_SEV.get(a.severidad, 3),
+        -a.veces,
+        -(a.fecha_ultima_deteccion or a.fecha_alerta).timestamp(),
+    ))
     atencion = []
     for a in pend[:10]:
         if a.registro_origen_id:
@@ -104,6 +111,17 @@ def panel_triage(context):
                   .select_related('paciente')[:8])
     ]
 
+    total_mensajes_contacto = mensajes_contacto.count()
+    contactos = [
+        {
+            'id': mensaje.id,
+            'nombre': mensaje.nombre,
+            'telefono': mensaje.telefono,
+            'fecha': mensaje.fecha_creacion,
+        }
+        for mensaje in mensajes_contacto[:6]
+    ]
+
     # Pacientes en seguimiento (activos), con conteo de alertas activas.
     tabla = (
         activos.annotate(
@@ -128,7 +146,10 @@ def panel_triage(context):
     return {
         'kpi': kpi,
         'atencion': atencion,
+        'total_atencion': len(pend),
         'silencios': silencios,
+        'contactos': contactos,
+        'total_mensajes_contacto': total_mensajes_contacto,
         'pacientes': pacientes_tabla,
         'hoy': hoy,
         'es_super': user.is_superuser,

@@ -493,6 +493,82 @@ class Alerta(models.Model):
         return f"[{estado}] {self.get_tipo_display()} — {self.paciente.nombre_completo}"
 
 
+class DeteccionAlerta(models.Model):
+    """Evidencia de cada detección futura agrupada dentro de una alerta."""
+
+    alerta = models.ForeignKey(
+        Alerta,
+        on_delete=models.CASCADE,
+        related_name='detecciones',
+    )
+    registro = models.ForeignKey(
+        RegistroDiario,
+        on_delete=models.PROTECT,
+        related_name='detecciones_alerta',
+        null=True,
+        blank=True,
+        help_text='Registro clínico que produjo la detección.',
+    )
+    checkin = models.ForeignKey(
+        'CheckInProgramado',
+        on_delete=models.PROTECT,
+        related_name='detecciones_alerta',
+        null=True,
+        blank=True,
+        help_text='Check-in no respondido que produjo una alerta de silencio.',
+    )
+    severidad_detectada = models.CharField(
+        max_length=10,
+        choices=Alerta.SEVERIDAD_CHOICES,
+    )
+    mensaje_detectado = models.TextField(
+        help_text='Copia del mensaje clínico generado para esta detección.',
+    )
+    fecha_deteccion = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        verbose_name='Fecha de detección',
+    )
+
+    class Meta:
+        verbose_name = 'Detección de alerta'
+        verbose_name_plural = 'Detecciones registradas desde Loop 3'
+        ordering = ['-fecha_deteccion', '-pk']
+        indexes = [
+            models.Index(
+                fields=['alerta', '-fecha_deteccion'],
+                name='deteccion_alerta_fecha_idx',
+            ),
+        ]
+        constraints = [
+            CheckConstraint(
+                condition=(
+                    Q(registro__isnull=False, checkin__isnull=True)
+                    | Q(registro__isnull=True, checkin__isnull=False)
+                ),
+                name='deteccion_fuente_unica',
+            ),
+            CheckConstraint(
+                condition=Q(severidad_detectada__in=['ALTA', 'MEDIA', 'BAJA']),
+                name='deteccion_severidad_valida',
+            ),
+            models.UniqueConstraint(
+                fields=['alerta', 'registro'],
+                condition=Q(registro__isnull=False),
+                name='unique_det_alerta_registro',
+            ),
+            models.UniqueConstraint(
+                fields=['alerta', 'checkin'],
+                condition=Q(checkin__isnull=False),
+                name='unique_det_alerta_checkin',
+            ),
+        ]
+
+    def __str__(self):
+        fuente = f'registro {self.registro_id}' if self.registro_id else f'check-in {self.checkin_id}'
+        return f'{self.alerta} — {fuente}'
+
+
 class ConversacionWhatsApp(models.Model):
     """
     Mantiene el estado de la conversación diaria del bot con un paciente.

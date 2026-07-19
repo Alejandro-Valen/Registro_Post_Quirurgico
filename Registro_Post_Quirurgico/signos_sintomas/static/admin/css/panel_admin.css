@@ -52,10 +52,20 @@ html[data-theme="light"] {
   --selected-row: #EBF0EC; --selected-bg: #DBEEE7;
 }
 
+#branding #site-name a:link,
+#branding #site-name a:visited { color: var(--header-branding-color); }
+
 /* Enmarcado del índice: centrar el contenido con ancho máximo, para que en
    pantallas anchas quede equilibrado (aire parejo a ambos lados) y en móvil
    ocupe todo el ancho. Solo afecta la página de inicio (body.dashboard). */
-body.dashboard #content { max-width: 1280px; margin-inline: auto; }
+body.dashboard #content { max-width: 980px; }
+@media (min-width:1025px) {
+  body.dashboard #content {
+    width: calc(100% - 460px);
+    margin-left: max(0px, calc((100% - 1280px) / 2));
+    margin-right: 0;
+  }
+}
 
 /* ==========================================================================
    Tablero de triage (Panel del médico) — componentes propios, con prefijo pt-
@@ -100,26 +110,29 @@ html[data-theme="dark"] .pt-wrap {
 .pt-wrap h1, .pt-wrap h2 { margin: 0; }
 
 .pt-head { display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
-.pt-head h1 { font-family:var(--pt-display); font-size:27px; font-weight:600; letter-spacing:-.01em; color:var(--pt-ink); }
+.pt-head h1 { font-family:var(--pt-display); font-size:27px; font-weight:600; letter-spacing:0; color:var(--pt-ink); }
 .pt-date { color:var(--pt-faint); font-size:13.5px; text-transform:capitalize; }
 
 .pt-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:13px; margin-bottom:20px; }
-.pt-kpi { background:var(--pt-surface); border:1px solid var(--pt-line); border-radius:14px; padding:15px 17px; }
-.pt-kpi .pt-k { font-size:12px; color:var(--pt-faint); font-weight:600; text-transform:uppercase; letter-spacing:.03em; display:flex; align-items:center; gap:7px; }
-.pt-kpi .pt-v { font-size:32px; font-weight:700; letter-spacing:-.02em; margin-top:8px; line-height:1; color:var(--pt-ink); }
+.pt-kpi { background:var(--pt-surface); border:1px solid var(--pt-line); border-radius:8px; padding:15px 17px; }
+.pt-kpi .pt-k { font-size:12px; color:var(--pt-faint); font-weight:600; text-transform:uppercase; letter-spacing:0; display:flex; align-items:center; gap:7px; }
+.pt-kpi .pt-v { font-size:32px; font-weight:700; letter-spacing:0; margin-top:8px; line-height:1; color:var(--pt-ink); }
 .pt-kpi .pt-v .pt-of { font-size:17px; color:var(--pt-faint); font-weight:500; }
 .pt-kpi .pt-sub { font-size:12px; color:var(--pt-soft); margin-top:6px; }
 .pt-kpi.crit { background:var(--pt-alta-soft); border-color:color-mix(in srgb,var(--pt-alta) 35%,var(--pt-line)); }
 .pt-kpi.crit .pt-v, .pt-kpi.crit .pt-k { color:var(--pt-alta); }
 .pt-dotk { width:9px; height:9px; border-radius:50%; flex:none; }
 
-.pt-grid { display:grid; grid-template-columns:1.55fr 1fr; gap:16px; align-items:start; }
-.pt-card { background:var(--pt-surface); border:1px solid var(--pt-line); border-radius:15px; overflow:hidden; }
+.pt-grid { display:grid; grid-template-columns:minmax(0,1.8fr) minmax(270px,.8fr); gap:16px; align-items:start; }
+.pt-card { background:var(--pt-surface); border:1px solid var(--pt-line); border-radius:8px; overflow:hidden; }
 .pt-card .pt-hd { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 17px; border-bottom:1px solid var(--pt-line); }
-.pt-card .pt-hd h2 { font-size:14px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--pt-soft); }
+.pt-card .pt-hd h2 { font-size:14px; font-weight:700; text-transform:uppercase; letter-spacing:0; color:var(--pt-soft); }
 .pt-card .pt-count { font-size:12px; color:var(--pt-faint); font-weight:600; }
+.pt-hd-actions { display:flex; align-items:center; gap:10px; }
+.pt-all { color:var(--pt-primary); font-size:12px; font-weight:700; text-decoration:none; white-space:nowrap; }
+.pt-all:hover { color:var(--pt-primary-deep); text-decoration:underline; }
 
-.pt-arow { display:grid; grid-template-columns:auto 1fr auto auto; gap:13px; align-items:center; padding:12px 17px; border-bottom:1px solid var(--pt-line); }
+.pt-arow { display:grid; grid-template-columns:4px minmax(0,1fr) minmax(92px,auto) auto; gap:13px; align-items:center; padding:12px 17px; border-bottom:1px solid var(--pt-line); }
 .pt-arow:last-child { border-bottom:0; }
 .pt-stripe { width:4px; align-self:stretch; min-height:40px; border-radius:4px; }
 .pt-stripe.alta{background:var(--pt-alta);} .pt-stripe.media{background:var(--pt-media);} .pt-stripe.baja{background:var(--pt-baja);}
@@ -130,14 +143,16 @@ html[data-theme="dark"] .pt-wrap {
 .pt-main .pt-diag { font-size:13px; color:var(--pt-soft); margin-top:2px; }
 .pt-main .pt-meta { font-size:12px; color:var(--pt-faint); margin-top:3px; font-family:var(--pt-mono); }
 .pt-actions { display:flex; gap:7px; margin-top:8px; }
-.pt-btn { font-size:12px; font-weight:600; padding:5px 11px; border-radius:8px; border:1px solid var(--pt-line); background:var(--pt-surface); color:var(--pt-ink); text-decoration:none; display:inline-block; }
+.pt-btn { font-size:12px; font-weight:600; padding:5px 11px; border-radius:6px; border:1px solid var(--pt-line); background:var(--pt-surface); color:var(--pt-ink); text-decoration:none; display:inline-block; }
 .pt-btn:hover { background:var(--pt-surface-2); color:var(--pt-ink); }
 .pt-btn.solid { background:var(--pt-primary); color:#fff; border-color:var(--pt-primary); }
 .pt-btn.solid:hover { background:var(--pt-primary-deep); color:#fff; }
-.pt-when { font-size:12px; color:var(--pt-faint); white-space:nowrap; text-align:right; }
-.pt-pill { font-size:10.5px; font-weight:700; letter-spacing:.04em; padding:4px 9px; border-radius:999px; white-space:nowrap; text-transform:uppercase; }
+.pt-when { font-size:12px; color:var(--pt-soft); white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums; }
+.pt-when small { display:block; color:var(--pt-faint); font-size:11px; }
+.pt-pill { font-size:10.5px; font-weight:700; letter-spacing:0; padding:4px 9px; border-radius:999px; white-space:nowrap; text-transform:uppercase; }
 .pt-pill.alta{color:var(--pt-alta); background:var(--pt-alta-soft);} .pt-pill.media{color:var(--pt-media); background:var(--pt-media-soft);} .pt-pill.baja{color:var(--pt-baja); background:var(--pt-baja-soft);}
 .pt-pill.sil{color:var(--pt-soft); background:var(--pt-surface-2);}
+.pt-pill.contact{color:var(--pt-primary-deep); background:var(--pt-baja-soft);}
 
 .pt-empty { display:flex; flex-direction:column; align-items:center; gap:8px; padding:34px 18px; color:var(--pt-baja); text-align:center; }
 .pt-empty.small { padding:20px; color:var(--pt-faint); }
@@ -145,7 +160,7 @@ html[data-theme="dark"] .pt-wrap {
 
 .pt-side + .pt-side { margin-top:16px; }
 .pt-checkins { padding:17px; }
-.pt-prog { font-size:28px; font-weight:700; letter-spacing:-.02em; color:var(--pt-ink); }
+.pt-prog { font-size:28px; font-weight:700; letter-spacing:0; color:var(--pt-ink); }
 .pt-prog small { font-size:14px; color:var(--pt-faint); font-weight:500; }
 .pt-bar { height:9px; border-radius:999px; background:var(--pt-surface-2); overflow:hidden; margin:12px 0 6px; }
 .pt-bar > i { display:block; height:100%; background:var(--pt-primary); border-radius:999px; }
@@ -162,7 +177,7 @@ html[data-theme="dark"] .pt-wrap {
 .pt-section-title { font-family:var(--pt-display); font-size:19px; font-weight:600; color:var(--pt-ink); margin:24px 0 12px; }
 .pt-tablewrap { overflow-x:auto; }
 .pt-table { width:100%; border-collapse:collapse; }
-.pt-table th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--pt-faint); font-weight:600; padding:11px 17px; border-bottom:1px solid var(--pt-line); white-space:nowrap; }
+.pt-table th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0; color:var(--pt-faint); font-weight:600; padding:11px 17px; border-bottom:1px solid var(--pt-line); white-space:nowrap; }
 .pt-table td { padding:11px 17px; border-bottom:1px solid var(--pt-line); font-size:13.5px; color:var(--pt-ink); }
 .pt-table tr:last-child td { border-bottom:0; }
 .pt-table tr:hover td { background:var(--pt-surface-2); }
@@ -177,5 +192,10 @@ html[data-theme="dark"] .pt-wrap {
   .pt-kpis{grid-template-columns:1fr;}
   .pt-arow{grid-template-columns:auto 1fr;}
   .pt-when,.pt-right{grid-column:2; text-align:left;}
+  .pt-when small{display:inline;margin-left:6px;}
+  .pt-card .pt-hd{align-items:flex-start;}
+  .pt-hd-actions{align-items:flex-end;flex-direction:column;gap:3px;}
   .pt-hide-sm{display:none;}
+  #site-name{font-size:18px;}
+  #user-tools{font-size:11px;line-height:1.5;}
 }

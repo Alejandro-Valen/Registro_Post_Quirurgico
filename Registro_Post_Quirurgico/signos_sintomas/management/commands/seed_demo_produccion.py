@@ -222,6 +222,7 @@ class Command(BaseCommand):
             medico_responsable=medico,
             activo=True,
             consentimiento_informado=True,
+            fecha_consentimiento=timezone.now(),
         )
         self.stdout.write(f'  Paciente de ejemplo creado: {paciente.nombre_completo}')
 

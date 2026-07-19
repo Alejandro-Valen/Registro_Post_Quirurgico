@@ -15,6 +15,7 @@ from .models import (
     Alerta,
     CheckInProgramado,
     ConversacionWhatsApp,
+    DeteccionAlerta,
     Paciente,
     RecepcionWebhookTwilio,
     RegistroDiario,
@@ -42,6 +43,10 @@ class AlertEngineTests(TestCase):
         self.assertEqual(Alerta.objects.count(), 1)
         self.assertEqual(alertas[0].tipo, "SEPSIS")
         self.assertEqual(alertas[0].severidad, "ALTA")
+        deteccion = DeteccionAlerta.objects.get(alerta=alertas[0])
+        self.assertEqual(deteccion.registro, registro)
+        self.assertIsNone(deteccion.checkin)
+        self.assertEqual(deteccion.severidad_detectada, 'ALTA')
 
     def test_drenaje_purulento_crea_alerta_fuga_anastomotica(self):
         paciente = Paciente.objects.create(
@@ -2212,6 +2217,18 @@ class AdminScopingTests(TestCase):
             registro_origen=self.registro_b,
             tipo='SEPSIS', severidad='BAJA', mensaje='Alerta B',
         )
+        self.deteccion_a = DeteccionAlerta.objects.create(
+            alerta=self.alerta_a,
+            registro=self.registro_a,
+            severidad_detectada='BAJA',
+            mensaje_detectado='Detalle clínico A',
+        )
+        self.deteccion_b = DeteccionAlerta.objects.create(
+            alerta=self.alerta_b,
+            registro=self.registro_b,
+            severidad_detectada='BAJA',
+            mensaje_detectado='Detalle clínico B',
+        )
         self.checkin_a = CheckInProgramado.objects.create(
             paciente=self.paciente_a,
             fecha_dia=timezone.localdate(),
@@ -2367,6 +2384,19 @@ class AdminScopingTests(TestCase):
         self.alerta_a.refresh_from_db()
         self.assertFalse(self.alerta_a.resuelta)
 
+    def test_detalle_detecciones_es_solo_lectura_y_respeta_scoping(self):
+        self._login(self.medico_a)
+
+        resp = self.client.get(
+            f'/admin/signos_sintomas/alerta/{self.alerta_a.pk}/change/'
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'Detecciones registradas desde Loop 3')
+        self.assertContains(resp, 'Detalle clínico A')
+        self.assertNotContains(resp, 'Detalle clínico B')
+        self.assertNotContains(resp, 'name="detecciones-0-mensaje_detectado"')
+
     def test_medico_ve_checkin_propio_pero_no_puede_modificarlo(self):
         self._login(self.medico_a)
         url = f'/admin/signos_sintomas/checkinprogramado/{self.checkin_a.pk}/change/'
@@ -2504,6 +2534,10 @@ class AlertaMotivoResolucionTests(TestCase):
         resp = self._post_accion({})
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'motivo de resolución')
+        self.assertEqual(
+            resp.content.decode().count('<h1>Selecciona el motivo de resolución</h1>'),
+            1,
+        )
         self.alerta.refresh_from_db()
         self.assertFalse(self.alerta.resuelta)
 
@@ -2912,6 +2946,7 @@ class AlertDeduplicacionTests(TestCase):
         self.assertEqual(len(taqui2), 1)
         self.assertEqual(Alerta.objects.filter(tipo="TAQUICARDIA").count(), 1)
         self.assertEqual(taqui2[0].veces, 2)
+        self.assertEqual(taqui2[0].detecciones.count(), 2)
 
     def test_escalamiento_intradiario_actualiza_misma_alerta(self):
         """Mañana BAJA → tarde MEDIA (mismo día): la alerta abierta sube a
@@ -3000,6 +3035,42 @@ class AlertDeduplicacionTests(TestCase):
         self.assertEqual(ileo[0].severidad, "ALTA")
         self.assertEqual(ileo[0].veces, 1)
         self.assertEqual(Alerta.objects.filter(tipo="ILEO_PARALITICO").count(), 1)
+        detalle = ileo[0].detecciones.get()
+        self.assertEqual(detalle.registro, registro)
+        self.assertEqual(detalle.severidad_detectada, 'ALTA')
+
+    def test_reintentar_mismo_registro_no_duplica_detalle_ni_contador(self):
+        paciente = self._paciente("+573008881008")
+        registro = self._reg_fc(paciente, 150)
+
+        primera = evaluar_registro(registro)
+        segunda = evaluar_registro(registro)
+
+        alerta = [a for a in segunda if a.tipo == 'TAQUICARDIA'][0]
+        self.assertEqual([a for a in primera if a.tipo == 'TAQUICARDIA'][0].pk, alerta.pk)
+        self.assertEqual(alerta.veces, 1)
+        self.assertEqual(alerta.detecciones.count(), 1)
+
+    def test_alerta_legacy_conserva_contador_y_desglosa_solo_lo_nuevo(self):
+        paciente = self._paciente("+573008881009")
+        registro_anterior = self._reg_fc(paciente, 150)
+        alerta = Alerta.objects.create(
+            paciente=paciente,
+            registro_origen=registro_anterior,
+            tipo='TAQUICARDIA',
+            severidad='ALTA',
+            mensaje='Contador previo sin desglose',
+            veces=4,
+            fecha_ultima_deteccion=registro_anterior.fecha_registro,
+        )
+
+        registro_nuevo = self._reg_fc(paciente, 152)
+        resultado = evaluar_registro(registro_nuevo)
+
+        alerta = [a for a in resultado if a.tipo == 'TAQUICARDIA'][0]
+        self.assertEqual(alerta.veces, 5)
+        self.assertEqual(alerta.detecciones.count(), 1)
+        self.assertEqual(alerta.detecciones.get().registro, registro_nuevo)
 
     def test_resolver_y_recurrencia_crea_alerta_nueva(self):
         """Si el médico resuelve la alerta y el problema reaparece después,
@@ -3097,6 +3168,73 @@ class AlertDeduplicacionConcurrenteTests(TransactionTestCase):
         )
         self.assertEqual(alertas.count(), 1)
         self.assertEqual(alertas.get().veces, 2)
+
+
+class DeteccionAlertaConstraintTests(TestCase):
+    def setUp(self):
+        self.paciente = Paciente.objects.create(
+            nombre_completo='Paciente Evidencia',
+            telefono_whatsapp='+573008881198',
+            fecha_cirugia=timezone.localdate(),
+        )
+        self.registro = RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('37.0'),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        self.checkin = CheckInProgramado.objects.create(
+            paciente=self.paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now(),
+        )
+        self.alerta = Alerta.objects.create(
+            paciente=self.paciente,
+            registro_origen=self.registro,
+            tipo='SEPSIS',
+            severidad='ALTA',
+            mensaje='Prueba de evidencia',
+        )
+
+    def test_bd_exige_exactamente_una_fuente(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                DeteccionAlerta.objects.create(
+                    alerta=self.alerta,
+                    severidad_detectada='ALTA',
+                    mensaje_detectado='Sin fuente',
+                )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                DeteccionAlerta.objects.create(
+                    alerta=self.alerta,
+                    registro=self.registro,
+                    checkin=self.checkin,
+                    severidad_detectada='ALTA',
+                    mensaje_detectado='Dos fuentes',
+                )
+
+    def test_bd_impide_repetir_fuente_en_la_misma_alerta(self):
+        DeteccionAlerta.objects.create(
+            alerta=self.alerta,
+            registro=self.registro,
+            severidad_detectada='ALTA',
+            mensaje_detectado='Primera',
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                DeteccionAlerta.objects.create(
+                    alerta=self.alerta,
+                    registro=self.registro,
+                    severidad_detectada='ALTA',
+                    mensaje_detectado='Duplicada',
+                )
 
 
 class SchedulerTests(TestCase):
@@ -3230,6 +3368,11 @@ class SchedulerTests(TestCase):
         self.assertEqual(segundo.estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
         self.assertFalse(alerta.resuelta)
         self.assertEqual(alerta.veces, 2)
+        self.assertEqual(alerta.detecciones.count(), 2)
+        self.assertSetEqual(
+            set(alerta.detecciones.values_list('checkin_id', flat=True)),
+            {primero.pk, segundo.pk},
+        )
 
     def test_checkin_vencido_se_cierra_y_crea_alerta_silencio_baja(self):
         """1 check-in sin respuesta → racha 1 → SILENCIO BAJA."""
@@ -3242,6 +3385,26 @@ class SchedulerTests(TestCase):
         alerta = Alerta.objects.get(tipo='SILENCIO')
         self.assertEqual(alerta.severidad, 'BAJA')
         self.assertIsNone(alerta.registro_origen)
+        self.assertEqual(alerta.detecciones.get().checkin, checkin)
+
+    def test_mismo_checkin_silencio_no_duplica_deteccion(self):
+        from .alert_engine import registrar_alerta_silencio
+
+        paciente = self._paciente('+573009990099')
+        checkin = self._checkin(paciente, horas_atras=11)
+
+        primera = registrar_alerta_silencio(checkin, 'BAJA', 'Sin respuesta')
+        segunda = registrar_alerta_silencio(checkin, 'MEDIA', 'Persiste sin respuesta')
+
+        segunda.refresh_from_db()
+        self.assertEqual(primera.pk, segunda.pk)
+        self.assertEqual(segunda.veces, 1)
+        self.assertEqual(segunda.severidad, 'MEDIA')
+        self.assertEqual(segunda.detecciones.count(), 1)
+        self.assertEqual(
+            segunda.detecciones.get().severidad_detectada,
+            'MEDIA',
+        )
 
     def test_dos_checkins_consecutivos_dan_silencio_media(self):
         """2 check-ins NO_RESPONDIDO consecutivos → racha 2 → SILENCIO MEDIA."""
@@ -3592,6 +3755,10 @@ class SeedDemoTests(TestCase):
         self.assertTrue(medico.groups.filter(name='Médicos').exists())
         self.assertTrue(medico.has_perm('signos_sintomas.view_registrodiario'))
         self.assertFalse(medico.has_perm('signos_sintomas.change_registrodiario'))
+        paciente = Paciente.objects.get(telefono_whatsapp='+573001234567')
+        self.assertEqual(paciente.cedula, 'DEMO-LOCAL-001')
+        self.assertTrue(paciente.consentimiento_informado)
+        self.assertIsNotNone(paciente.fecha_consentimiento)
         self.assertEqual(
             list(RegistroDiario.objects.order_by('fecha_registro').values_list(
                 'dia_postoperatorio', flat=True,
@@ -3797,18 +3964,204 @@ class PacienteAdminFiltrosHistorialTests(TestCase):
         self.assertContains(resp, '<strong>7 días</strong>', html=False)
 
     def test_historial_respeta_parametro_dias_de_la_url(self):
-        resp = self.client.get(self._url_change(self.paciente_con_alerta) + '?dias=30')
-        self.assertContains(resp, '<strong>30 días</strong>', html=False)
+        resp = self.client.get(self._url_change(self.paciente_con_alerta) + '?dias=10')
+        self.assertContains(resp, '<strong>10 días</strong>', html=False)
 
     def test_historial_valor_invalido_usa_default(self):
         resp = self.client.get(self._url_change(self.paciente_con_alerta) + '?dias=abc')
         self.assertContains(resp, '<strong>7 días</strong>', html=False)
 
+    def test_historial_rechaza_periodo_fuera_de_las_opciones(self):
+        resp = self.client.get(self._url_change(self.paciente_con_alerta) + '?dias=30')
+        self.assertContains(resp, '<strong>7 días</strong>', html=False)
+
+    def test_historial_de_3_dias_no_incluye_un_cuarto_dia(self):
+        for desplazamiento in (1, 2, 3):
+            registro = RegistroDiario.objects.create(
+                paciente=self.paciente_con_alerta,
+                temperatura=Decimal('37.0'),
+                dolor_eva=2,
+                aspecto_drenaje='sin_drenaje',
+                presencia_gases=True,
+                episodios_nauseas=0,
+            )
+            fecha = timezone.datetime.combine(
+                timezone.localdate() - timedelta(days=desplazamiento),
+                timezone.datetime.min.time(),
+                tzinfo=timezone.get_current_timezone(),
+            ) + timedelta(hours=8)
+            RegistroDiario.objects.filter(pk=registro.pk).update(fecha_registro=fecha)
+
+        from .admin import _historial_paciente
+
+        contenido = _historial_paciente(self.paciente_con_alerta, dias=3)
+        fecha_incluida = (timezone.localdate() - timedelta(days=2)).strftime('%d/%m')
+        fecha_excluida = (timezone.localdate() - timedelta(days=3)).strftime('%d/%m')
+        self.assertIn(fecha_incluida, contenido)
+        self.assertNotIn(fecha_excluida, contenido)
+
+
+class PanelTriageExperienciaTests(TestCase):
+    """Loop 3: pendientes acumulados, prioridad y scoping en el tablero."""
+
+    def setUp(self):
+        from django.contrib.auth.models import Group
+        from django.core.management import call_command
+
+        call_command('crear_medico', verbosity=0)
+        User = get_user_model()
+        self.medico = User.objects.create_user(
+            username='dr_panel', password='pass', is_staff=True,
+        )
+        self.otro_medico = User.objects.create_user(
+            username='dr_panel_otro', password='pass', is_staff=True,
+        )
+        grupo = Group.objects.get(name='Médicos')
+        self.medico.groups.add(grupo)
+        self.otro_medico.groups.add(grupo)
+        self.client.force_login(self.medico)
+
+    def _paciente(self, nombre, telefono, cedula, medico=None):
+        return Paciente.objects.create(
+            nombre_completo=nombre,
+            cedula=cedula,
+            telefono_whatsapp=telefono,
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),
+            medico_responsable=medico or self.medico,
+        )
+
+    def _alerta(self, paciente, veces, fecha, severidad='ALTA'):
+        return Alerta.objects.create(
+            paciente=paciente,
+            tipo='SEPSIS',
+            severidad=severidad,
+            mensaje='Alerta de prueba',
+            veces=veces,
+            fecha_ultima_deteccion=fecha,
+        )
+
+    def test_muestra_alerta_antigua_mientras_siga_sin_resolver(self):
+        propio = self._paciente(
+            'Paciente pendiente anterior', '+573040000001', 'PANEL-001',
+        )
+        ajeno = self._paciente(
+            'Paciente ajeno invisible', '+573040000002', 'PANEL-002',
+            medico=self.otro_medico,
+        )
+        self._alerta(propio, 1, timezone.now() - timedelta(days=3))
+        self._alerta(ajeno, 1, timezone.now())
+
+        resp = self.client.get('/admin/')
+
+        self.assertContains(resp, 'Seguimiento que requiere atención')
+        self.assertContains(resp, 'Paciente pendiente anterior')
+        self.assertNotContains(resp, 'Paciente ajeno invisible')
+        self.assertContains(resp, '1 pendiente')
+
+    def test_prioriza_recurrencia_dentro_de_la_misma_severidad(self):
+        menos = self._paciente(
+            'Paciente recurrencia menor', '+573040000003', 'PANEL-003',
+        )
+        mas = self._paciente(
+            'Paciente recurrencia mayor', '+573040000004', 'PANEL-004',
+        )
+        self._alerta(menos, 2, timezone.now())
+        self._alerta(mas, 5, timezone.now() - timedelta(days=1))
+
+        contenido = self.client.get('/admin/').content.decode()
+
+        self.assertLess(
+            contenido.index('Paciente recurrencia mayor'),
+            contenido.index('Paciente recurrencia menor'),
+        )
+
+    def test_panel_muestra_solo_mensajes_de_contacto_asignados_al_medico(self):
+        from home.models import MensajeContacto
+
+        MensajeContacto.objects.create(
+            nombre='Contacto propio visible',
+            telefono='+573040000010',
+            mensaje='Contenido sensible que no va en el tablero',
+            medico_destinatario=self.medico,
+        )
+        MensajeContacto.objects.create(
+            nombre='Contacto ajeno invisible',
+            telefono='+573040000011',
+            mensaje='Otro contenido',
+            medico_destinatario=self.otro_medico,
+        )
+        MensajeContacto.objects.create(
+            nombre='Contacto sin asignar invisible',
+            telefono='+573040000012',
+            mensaje='Pendiente del superusuario',
+        )
+
+        resp = self.client.get('/admin/')
+
+        self.assertContains(resp, 'Mensajes de contacto')
+        self.assertContains(resp, 'Contacto propio visible')
+        self.assertNotContains(resp, 'Contacto ajeno invisible')
+        self.assertNotContains(resp, 'Contacto sin asignar invisible')
+        self.assertNotContains(resp, 'Contenido sensible que no va en el tablero')
+
+
+class PacienteAdminHistorialCambiosTests(TestCase):
+    """Loop 3: el historial distingue activación y desactivación."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.medico = User.objects.create_superuser(
+            username='dr_historial_estado', password='pass',
+        )
+        self.paciente = Paciente.objects.create(
+            nombre_completo='Paciente Historial Estado',
+            cedula='HIST-ESTADO-001',
+            telefono_whatsapp='+573040000005',
+            fecha_cirugia=timezone.localdate(),
+            tipo_cirugia='otra',
+            medico_responsable=self.medico,
+            activo=True,
+        )
+        self.client.force_login(self.medico)
+
+    def _guardar(self, activo):
+        datos = {
+            'nombre_completo': self.paciente.nombre_completo,
+            'cedula': self.paciente.cedula,
+            'telefono_whatsapp': self.paciente.telefono_whatsapp,
+            'fecha_cirugia': self.paciente.fecha_cirugia.isoformat(),
+            'tipo_cirugia': self.paciente.tipo_cirugia,
+            'medico_responsable': str(self.medico.pk),
+            '_save': 'Grabar',
+        }
+        if activo:
+            datos['activo'] = 'on'
+        return self.client.post(
+            f'/admin/signos_sintomas/paciente/{self.paciente.pk}/change/',
+            datos,
+        )
+
+    def _ultimo_mensaje(self):
+        from django.contrib.admin.models import LogEntry
+        return LogEntry.objects.filter(
+            object_id=str(self.paciente.pk),
+        ).latest('action_time').get_change_message()
+
+    def test_historial_indica_seguimiento_desactivado(self):
+        self.assertEqual(self._guardar(activo=False).status_code, 302)
+        self.assertEqual(self._ultimo_mensaje(), 'Seguimiento desactivado.')
+
+    def test_historial_indica_seguimiento_activado(self):
+        Paciente.objects.filter(pk=self.paciente.pk).update(activo=False)
+        self.paciente.refresh_from_db()
+        self.assertEqual(self._guardar(activo=True).status_code, 302)
+        self.assertEqual(self._ultimo_mensaje(), 'Seguimiento activado.')
+
 
 class GraficaSignosVitalesTests(TestCase):
     """
     Sprint 5, Bloque 4 (rediseño 01/07/2026) — gráficas Chart.js con
-    selector de período 7/14/30 días independiente del historial en
+    selector de período 3/7/10 días independiente del historial en
     tabla, turno M/T por CheckInProgramado real, y puntos de alerta.
     """
 
@@ -3861,8 +4214,8 @@ class GraficaSignosVitalesTests(TestCase):
         )
         resp = self.client.get(self._url_change())
         datos = self._extraer_datos(resp.content.decode())
-        self.assertEqual(set(datos.keys()), {'7', '14', '30'})
-        for periodo in ('7', '14', '30'):
+        self.assertEqual(set(datos.keys()), {'3', '7', '10'})
+        for periodo in ('3', '7', '10'):
             self.assertEqual(datos[periodo]['temps'], [37.0])
 
     def test_turno_usa_etiqueta_del_checkin_no_la_hora_de_respuesta(self):
@@ -3956,7 +4309,7 @@ class GraficaSignosVitalesTests(TestCase):
             temperatura=Decimal('37.0'), dolor_eva=2,
             aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
         )
-        resp = self.client.get(self._url_change() + '?dias=30')
-        self.assertContains(resp, '<strong>30 días</strong>', html=False)
+        resp = self.client.get(self._url_change() + '?dias=10')
+        self.assertContains(resp, '<strong>10 días</strong>', html=False)
         datos = self._extraer_datos(resp.content.decode())
-        self.assertEqual(set(datos.keys()), {'7', '14', '30'})
+        self.assertEqual(set(datos.keys()), {'3', '7', '10'})
