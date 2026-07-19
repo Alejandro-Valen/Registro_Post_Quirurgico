@@ -456,10 +456,14 @@ dos loops. URL:
   `--medico` o al primer superusuario), pacientes marcados `DEMO — ` /
   cédula `DEMO-000X` / teléfono ficticio, y **reversible** con
   `--limpiar --confirmar`. Crea 2 pacientes de ejemplo con registros y alertas.
-**Próximo paso exacto (al retomar):** revisar/pushear el commit del Loop 2 y
-desplegar Loops 1-2 a Railway. El arranque aplicará las migraciones 0019-0021;
-después crear el servicio cron `reintentar_evaluaciones_alertas` cada 5 minutos
-y ejecutar un smoke test real de SID duplicado + check-in completo. Después:
+**Próximo paso exacto (al retomar):** los Loops 1-2 ya están pusheados hasta
+`442ccc2`. Iniciar el **Loop 3 de experiencia médica** con una auditoría visual
+y funcional del Admin usando una cuenta médica de privilegio mínimo; revisar
+primero tablero de atención, semántica de pendientes, historial, recurrencias y
+mensajes de contacto antes de implementar cambios. En el Loop 4 de producción,
+desplegar Loops 1-3 a Railway; el arranque aplicará las migraciones 0019-0021,
+crear el servicio cron `reintentar_evaluaciones_alertas` cada 5 minutos y
+ejecutar un smoke test real de SID duplicado + check-in completo. Después:
 **datos reales del médico** (reemplazar
 `[corchetes]`, subir logo/colores, `MOSTRAR_AVISO_BOCETO=False`) y los
 requisitos del piloto real en `ROADMAP_MONITOREO_POSQUIRURGICO.md`, sección

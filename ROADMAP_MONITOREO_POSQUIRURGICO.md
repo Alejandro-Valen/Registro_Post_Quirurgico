@@ -881,7 +881,8 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   persistente por `MessageSid` en PostgreSQL (sin teléfono ni Body), reintento
   después de error, estado PENDIENTE/COMPLETADA/ERROR por `RegistroDiario`,
   comando `reintentar_evaluaciones_alertas`, unicidad de alerta abierta bajo
-  concurrencia y vínculo de la conversación al check-in exacto.
+  concurrencia y vínculo de la conversación al check-in exacto. Punto de
+  restauración publicado en `sprint-5-produccion` hasta `442ccc2` (18/07/2026).
 - [ ] Crear y verificar en Railway el servicio cron frecuente
   `reintentar_evaluaciones_alertas` (`*/5 * * * *`) después del merge/deploy.
 - [ ] Provisionar y verificar en Railway la cuenta real del médico

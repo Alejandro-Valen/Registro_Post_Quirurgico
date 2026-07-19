@@ -2852,6 +2852,17 @@ para representar un estado posible del sistema y la suite volvió a verde.
 workers para alertas y bot-vs-cron; `manage.py check`, `check --deploy`,
 `makemigrations --check` y `git diff --check` limpios.
 
-**Pendiente inmediato:** desplegar migraciones 0019-0021 en Railway, crear el
-tercer servicio cron `reintentar_evaluaciones_alertas` cada 5 minutos y hacer
-un smoke test real de SID duplicado + check-in completo antes del Loop 3.
+**Punto de restauración remoto (18/07/2026):** los commits del Loop 1
+(`49596e8`) y Loop 2 (`442ccc2`) se publicaron en `sprint-5-produccion`. La
+rama local y `origin/sprint-5-produccion` quedaron sincronizadas exactamente en
+`442ccc2`; el formato de consentimiento local sin seguimiento no se incluyó.
+No se modificó código ni se repitió la suite en este cierre documental: se
+conserva como evidencia la verificación de **234 tests OK** del Loop 2.
+
+**Pendiente inmediato al retomar:** iniciar el **Loop 3 de experiencia
+médica** con una auditoría visual y funcional usando una cuenta médica de
+privilegio mínimo. Primero se validará el comportamiento actual del tablero,
+las alertas pendientes, el historial y los mensajes de contacto; solo después
+se implementarán cambios aprobados. El despliegue de las migraciones 0019-0021,
+el cron frecuente y el smoke test real quedan agrupados en el Loop 4 de
+producción.
