@@ -229,6 +229,15 @@ Registro_Post_Quirurgico/                    ← raíz del repositorio
 
 Restricción: como máximo una alerta abierta por `(paciente, tipo)`.
 
+### DeteccionAlerta
+- Modelo hijo de solo lectura creado en el Loop 3 (migración 0022).
+- Cada fila conserva exactamente una fuente: `RegistroDiario` para una
+  detección clínica o `CheckInProgramado` para SILENCIO.
+- Guarda fecha, severidad y mensaje de esa detección; las restricciones de BD
+  impiden duplicar la misma fuente dentro de una alerta.
+- Empieza a registrar desde esta versión. El contador histórico `veces` se
+  conserva, pero no se reconstruyen eventos que nunca fueron almacenados.
+
 ### ConversacionWhatsApp / RecepcionWebhookTwilio
 - `ConversacionWhatsApp.checkin_actual` fija el evento exacto que el paciente
   está respondiendo y permite coordinar el bot con el cron.
@@ -698,11 +707,12 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   del modelo, que es `alertas`, no `alerta` como en el borrador original).
 - [x] **Bloque 3B (01/07/2026):** Historial configurable por días (P-8).
   `_historial_7_dias` renombrada a `_historial_paciente(paciente, dias=7)`.
-  Selector de rango (7/14/30 días) como enlaces `?dias=N` en el propio
+  Selector de rango (3/7/10 días desde Loop 3, 19/07/2026) como enlaces
+  `?dias=N` en el propio
   HTML del campo — el médico cambia el rango recargando la misma página
   de detalle. `PacienteAdmin.get_readonly_fields()` captura `?dias=` de la
-  URL (clamp 1-90) porque los `readonly_fields` solo reciben `obj`, no
-  `request`. 6 tests nuevos (filtro de alertas + selector de historial).
+  URL y acepta solo 3/7/10 porque los `readonly_fields` solo reciben `obj`, no
+  `request`. 8 tests (filtro de alertas + selector e inclusión exacta).
   **150 tests OK.**
 - [x] **Bloque 4 (01/07/2026, con rediseño post-revisión visual):** Gráficas
   Chart.js en la ficha del paciente (P-9) — 3 gráficas separadas
@@ -710,7 +720,8 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   líneas punteadas de umbral 101/110 lpm), cada una con su propio
   `new Chart()`, no una sola gráfica multi-eje.
   - **Selector de período independiente del historial:** los 3 rangos
-    (7/14/30 días) se precalculan en el servidor y se embeben una sola
+    (3/7/10 días desde Loop 3, 19/07/2026) se precalculan en el servidor y
+    se embeben una sola
     vez como JSON; el médico cambia de rango en el navegador sin recargar
     la página. El selector del historial en tabla (Bloque 3B, `?dias=`)
     sigue siendo aparte, con recarga de página.
@@ -743,7 +754,7 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
     correcta para datos legado; punto de alerta ALTA marcado/no marcado;
     versión fija del CDN; selector de gráfica independiente del
     historial. **159 tests OK.** `manage.py check` limpio.
-  - **Verificado con datos reales del seed_demo:** con la ventana de 7
+  - **Evidencia histórica de la versión 01/07/2026:** con la ventana de 7
     días solo se ven 3 de los 10 registros del paciente demo — no es un
     bug, es correcto: `seed_demo` fija fechas del 17-26 de junio de 2026,
     y con la fecha real del sistema (01/07/2026) esos registros quedan
@@ -883,6 +894,22 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   comando `reintentar_evaluaciones_alertas`, unicidad de alerta abierta bajo
   concurrencia y vínculo de la conversación al check-in exacto. Punto de
   restauración publicado en `sprint-5-produccion` hasta `442ccc2` (18/07/2026).
+- [x] **Loop 3 — experiencia médica (cerrado 19/07/2026):** auditoría real con cuenta
+  médica, navegación y revisión responsiva del Admin.
+  - [x] Primera iteración segura: contraste y ancho del tablero, pendientes
+    acumulados, prioridad por gravedad/recurrencia/última detección, periodos
+    exactos 3/7/10, historial activado/desactivado, seed demo íntegro y flujo
+    de resolución sin encabezado duplicado.
+  - [x] Propiedad por médico de `MensajeContacto`: destinatario configurable
+    por `MEDICO_CONTACTO_USERNAME`, scoping en Admin/tablero y mensajes
+    anteriores sin asignar visibles solo para superusuario (`home.0002`).
+  - [x] Trazabilidad de cada detección nueva que compone ×N mediante
+    `DeteccionAlerta`; fuente única e idempotente por registro/check-in,
+    inline de solo lectura y resumen explícito del contador histórico sin
+    backfill ficticio (`signos_sintomas.0022`).
+  - [x] Panel de mensajes de contacto debajo de Silencios y filtro de fecha
+    renombrado a "Todas las fechas". Revisión visual escritorio/móvil sin
+    desbordamientos. **252 tests OK.** Commit de código: `5ad1b71`.
 - [ ] Crear y verificar en Railway el servicio cron frecuente
   `reintentar_evaluaciones_alertas` (`*/5 * * * *`) después del merge/deploy.
 - [ ] Provisionar y verificar en Railway la cuenta real del médico

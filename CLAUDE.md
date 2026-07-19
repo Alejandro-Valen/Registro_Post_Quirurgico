@@ -252,7 +252,9 @@ la máxima; nunca baja sola). Dentro de un mismo check-in, dos reglas del mismo
 tipo cuentan como **una** detección. Si el médico **resuelve** la alerta y el
 problema **reaparece** después, se abre una **nueva** (evento nuevo). **Ninguna
 regla ni umbral clínico cambió** — solo cómo se almacenan las detecciones. El
-Admin muestra un badge de recurrencia "×N"; el tablero de triage también.
+Admin muestra un badge de recurrencia "×N"; el tablero de triage también. Desde
+el Loop 3, `DeteccionAlerta` conserva la fuente, fecha, severidad y mensaje de
+cada detección nueva. No se fabrican filas para el contador histórico previo.
 
 **Correo de alerta ALTA (actualizado 10/07/2026):** `signals.py` envía el email
 al médico solo cuando la alerta **alcanza ALTA por primera vez** (creación ALTA
@@ -417,13 +419,13 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B, **app en Railway + cron** (bot end-to-end), **landing del médico (P-12)**, **panel/branding**, **alertas agrupadas**, **Loop 1 de integridad/permisos** y **Loop 2 de entrega confiable** (**234 tests OK**). Railway sigue desplegado hasta el estado del 10/07; falta desplegar Loops 1-2, crear el cron frecuente de reintentos, resolver correo ALTA, datos/cuenta real del médico y requisitos de piloto. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B, **app en Railway + cron** (bot end-to-end), **landing del médico (P-12)**, **panel/branding**, **alertas agrupadas** y **Loops 1-3 cerrados** (**252 tests OK**). Railway sigue desplegado hasta el estado del 10/07; falta desplegar Loops 1-3, crear el cron frecuente de reintentos, resolver correo ALTA, datos/cuenta real del médico y requisitos de piloto. Rama `sprint-5-produccion` |
 
-**Punto actual (18/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
+**Punto actual (19/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
 desplegada en Railway y el cron base funcionando. Localmente quedaron cerrados
-el **Loop 1 de integridad clínica/permisos** y el **Loop 2 de confiabilidad del
-webhook y entrega de alertas** (**234 tests OK**). Railway aún no contiene estos
-dos loops. URL:
+el **Loop 1 de integridad clínica/permisos**, el **Loop 2 de confiabilidad del
+webhook y entrega de alertas** y el **Loop 3 de experiencia médica**. Los tres
+están validados localmente (**252 tests OK**); Railway aún no los contiene. URL:
 `registropostquirurgico-production-1f96.up.railway.app`.
 - **Panel del médico (Admin):** `/admin/` con branding "calma clínica"
   (override de `admin/base_site.html` + `signos_sintomas/static/admin/css/panel_admin.css`
@@ -441,6 +443,17 @@ dos loops. URL:
   command `reintentar_evaluaciones_alertas` recupera PENDIENTE/ERROR. La BD
   garantiza una sola alerta abierta por paciente/tipo y la conversación queda
   ligada al check-in exacto para coordinarse con el cron.
+- **Loop 3 de experiencia médica (cerrado):** validado con
+  una cuenta staff de médico de privilegio mínimo (demo local). El tablero muestra pendientes
+  acumulados hasta su resolución, prioriza gravedad/recurrencia/última detección,
+  amplió su ancho y corrigió el contraste de la marca. Historial y gráficas
+  usan periodos exactos 3/7/10; el historial Admin distingue seguimiento
+  activado/desactivado. `MensajeContacto.medico_destinatario` limita cada
+  mensaje al médico asignado; los mensajes sin asignar son solo para
+  superusuario y el tablero muestra los pendientes propios sin exponer el
+  cuerpo. `DeteccionAlerta` desglosa las detecciones nuevas de cada ×N por
+  registro/check-in y conserva el contador anterior sin backfill ficticio.
+  El filtro de fecha ahora dice "Todas las fechas". **252 tests OK.**
 - **Landing (P-12):** la página `/` (app `home`) se convirtió en la presentación
   del médico + sistema, con un **sistema de diseño compartido**
   (`home/static/home/css/site.css` + `home/static/home/js/pulse.js` +
@@ -448,7 +461,8 @@ dos loops. URL:
   Nav conectado a `/contacto/` y al Admin (enlace "Acceso médico" →
   `{% url 'admin:index' %}`). Contenido del médico en marcadores `[entre
   corchetes]` + flag `MOSTRAR_AVISO_BOCETO` en `home/views.py` (aviso de boceto
-  que se apaga con los datos reales). 6 smoke tests en `home/tests.py`.
+  que se apaga con los datos reales). 13 pruebas en `home/tests.py`, incluidas
+  asignación y aislamiento de mensajes de contacto.
 - **Demo del dashboard:** comando
   `signos_sintomas/management/commands/seed_demo_produccion.py` — idempotente y
   **seguro para producción** (a diferencia de `seed_demo`, bloqueado por A-3):
@@ -456,13 +470,13 @@ dos loops. URL:
   `--medico` o al primer superusuario), pacientes marcados `DEMO — ` /
   cédula `DEMO-000X` / teléfono ficticio, y **reversible** con
   `--limpiar --confirmar`. Crea 2 pacientes de ejemplo con registros y alertas.
-**Próximo paso exacto (al retomar):** los Loops 1-2 ya están pusheados hasta
-`442ccc2`. Iniciar el **Loop 3 de experiencia médica** con una auditoría visual
-y funcional del Admin usando una cuenta médica de privilegio mínimo; revisar
-primero tablero de atención, semántica de pendientes, historial, recurrencias y
-mensajes de contacto antes de implementar cambios. En el Loop 4 de producción,
-desplegar Loops 1-3 a Railway; el arranque aplicará las migraciones 0019-0021,
-crear el servicio cron `reintentar_evaluaciones_alertas` cada 5 minutos y
+**Próximo paso exacto (al retomar):** iniciar el **Loop 4 de producción** y
+cerrar su hardening pendiente: actualizar Django/dependencias fijadas, validar
+IP real detrás del proxy, desacoplar el correo ALTA con timeout/servicio HTTP,
+activar CSP y servir Chart.js localmente. Luego configurar
+`MEDICO_CONTACTO_USERNAME` con la cuenta staff real y desplegar Loops 1-4 a
+Railway; el arranque aplicará las migraciones clínicas 0019-0022 y `home.0002`.
+Crear el servicio cron `reintentar_evaluaciones_alertas` cada 5 minutos y
 ejecutar un smoke test real de SID duplicado + check-in completo. Después:
 **datos reales del médico** (reemplazar
 `[corchetes]`, subir logo/colores, `MOSTRAR_AVISO_BOCETO=False`) y los
@@ -502,9 +516,10 @@ Resumen de lo resuelto en `sprint-5-produccion` (Bloques 1-6):
 - Bloque 2: emojis eliminados de todos los mensajes de `bot.py` (P-11).
 - Bloque 3: `TieneAlertaActivaFilter` en `PacienteAdmin` (usa
   `alertas__resuelta`, el `related_name` real) + historial configurable
-  por días (`_historial_paciente`, selector `?dias=7/14/30`). 6 tests.
+  por días (`_historial_paciente`, selector `?dias=3/7/10`, actualizado en
+  Loop 3). 8 tests.
 - Bloque 4: gráficas Chart.js (temperatura/dolor/FC) en la ficha del
-  paciente, con selector 7/14/30 días sin recarga de página, turno M/T
+  paciente, con selector 3/7/10 días sin recarga de página, turno M/T
   por `CheckInProgramado.etiqueta` real (no por hora — decisión D2), y
   puntos rojos para alertas ALTA sin resolver. 9 tests.
 - Bloque 5: SMTP real (`EMAIL_*` en `settings_production.py` existente)

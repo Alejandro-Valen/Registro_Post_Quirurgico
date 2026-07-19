@@ -2866,3 +2866,56 @@ las alertas pendientes, el historial y los mensajes de contacto; solo después
 se implementarán cambios aprobados. El despliegue de las migraciones 0019-0021,
 el cron frecuente y el smoke test real quedan agrupados en el Loop 4 de
 producción.
+
+---
+
+## 19/07/2026 — Loop 3: experiencia médica y trazabilidad de detecciones
+
+Se cerró el tercer loop con auditoría funcional usando la cuenta médica demo,
+sin modificar reglas ni umbrales clínicos:
+
+- **Tablero de triage:** contraste de marca corregido, ancho ampliado y diseño
+  responsivo. Muestra todas las alertas sin resolver, aunque sean de días
+  anteriores, y las ordena por severidad, recurrencia y última detección.
+  Incluye fecha/hora exacta, tiempo relativo y acceso a la alerta/paciente.
+- **Ventana coherente de seguimiento:** historial y gráficas usan 3/7/10 días
+  con inclusión exacta. El historial del Admin diferencia "Seguimiento
+  activado" y "Seguimiento desactivado". Se corrigió también el filtro oculto
+  de fecha de mensajes de "Cualquier fecha" a "Todas las fechas".
+- **Resolución y demos:** se verificó que resolver una alerta exige motivo y
+  detalle para "Otro". Se quitó el encabezado duplicado; ambos seeds crean
+  cédula y consentimiento válidos sin relajar integridad.
+- **Mensajes de contacto aislados:** `MensajeContacto.medico_destinatario`
+  asigna los nuevos mensajes a la cuenta staff indicada por
+  `MEDICO_CONTACTO_USERNAME`. Cada médico solo ve/modifica los propios; los
+  mensajes existentes o mal configurados quedan sin asignar y son visibles
+  exclusivamente para superusuario. El tablero muestra nombre, teléfono y
+  fecha de los pendientes propios, pero no el cuerpo del mensaje.
+- **Detalle real de ×N:** el nuevo modelo `DeteccionAlerta` conserva para cada
+  detección futura su registro o check-in, fecha, severidad y mensaje. Las
+  restricciones de BD exigen exactamente una fuente e impiden duplicarla por
+  alerta. El motor usa esa evidencia para hacer idempotentes tanto las alertas
+  clínicas como SILENCIO y mantiene la severidad máxima.
+- **Histórico conservador:** no se fabricó ningún evento anterior. En alertas
+  existentes, `veces` sigue siendo la fuente del contador y el Admin explica
+  cuántas detecciones previas no tienen desglose. Solo lo ocurrido desde esta
+  versión crea filas hijas.
+
+**Migraciones locales aplicadas:** `home.0002` y `signos_sintomas.0022`, ambas
+aditivas y sin backfill sensible.
+
+**Verificación:** **252 tests OK** en PostgreSQL; `manage.py check`,
+`check --deploy --settings=Registro_Post_Quirurgico.settings_production`,
+`makemigrations --check --dry-run` y `git diff --check` limpios. Revisión visual
+en escritorio y 390 px sin desbordamiento, con consola del navegador limpia.
+
+**Commit de código:** `5ad1b71` (`feat: cerrar experiencia medica del loop 3`).
+El archivo local `FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` permaneció fuera de
+Git y no fue modificado.
+
+**Pendiente inmediato:** iniciar el **Loop 4 de producción**. Primero cerrar
+actualización/fijación de dependencias, IP real tras proxy, correo ALTA
+desacoplado con timeout o API HTTP, CSP y Chart.js local. Luego configurar la
+cuenta real y `MEDICO_CONTACTO_USERNAME`, desplegar migraciones 0019-0022 y
+`home.0002`, crear el cron de reintento cada 5 minutos y ejecutar smoke tests
+reales en Railway.
