@@ -2392,7 +2392,7 @@ class AdminScopingTests(TestCase):
         )
 
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, 'Detecciones registradas desde Loop 3')
+        self.assertContains(resp, 'Detecciones de la alerta')
         self.assertContains(resp, 'Detalle clínico A')
         self.assertNotContains(resp, 'Detalle clínico B')
         self.assertNotContains(resp, 'name="detecciones-0-mensaje_detectado"')
@@ -2412,6 +2412,12 @@ class AdminScopingTests(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 302)
         self.assertRegex(resp.url, r'^/admin/')
+
+    def test_filtro_fecha_checkin_usa_etiqueta_precisa(self):
+        self._login(self.medico_a)
+        resp = self.client.get('/admin/signos_sintomas/checkinprogramado/')
+        self.assertContains(resp, 'Todas las fechas')
+        self.assertNotContains(resp, 'Cualquier fecha')
 
 
 class AlertaAdminAccionesTests(TestCase):
@@ -3765,6 +3771,80 @@ class SeedDemoTests(TestCase):
             )),
             list(range(1, 11)),
         )
+
+    def test_seed_demo_borrar_recrea_relaciones_protegidas(self):
+        from django.core.management import call_command
+
+        with override_settings(DEBUG=True):
+            call_command('seed_demo', verbosity=0)
+            paciente_anterior = Paciente.objects.get(
+                telefono_whatsapp='+573001234567'
+            )
+            self.assertGreater(
+                DeteccionAlerta.objects.filter(
+                    alerta__paciente=paciente_anterior,
+                ).count(),
+                0,
+            )
+
+            call_command('seed_demo', '--borrar', verbosity=0)
+
+        paciente_nuevo = Paciente.objects.get(
+            telefono_whatsapp='+573001234567'
+        )
+        self.assertNotEqual(paciente_nuevo.pk, paciente_anterior.pk)
+        self.assertEqual(paciente_nuevo.registros.count(), 10)
+        self.assertGreater(
+            DeteccionAlerta.objects.filter(
+                alerta__paciente=paciente_nuevo,
+            ).count(),
+            0,
+        )
+
+    def test_seed_demo_limpiar_borra_sin_recrear(self):
+        from django.core.management import call_command
+
+        with override_settings(DEBUG=True):
+            call_command('seed_demo', verbosity=0)
+            call_command('seed_demo', '--limpiar', verbosity=0)
+
+        self.assertFalse(
+            Paciente.objects.filter(telefono_whatsapp='+573001234567').exists()
+        )
+        self.assertTrue(
+            get_user_model().objects.filter(username='demo_medico').exists()
+        )
+
+    def test_seed_produccion_limpia_solo_sus_demos_con_detecciones(self):
+        from django.core.management import call_command
+
+        medico = get_user_model().objects.create_user(
+            username='medico_seed_prod',
+            password='pass',
+            is_staff=True,
+        )
+        call_command(
+            'seed_demo_produccion',
+            '--confirmar',
+            '--medico',
+            medico.username,
+            verbosity=0,
+        )
+        demos = Paciente.objects.filter(cedula__in=['DEMO-0001', 'DEMO-0002'])
+        self.assertEqual(demos.count(), 2)
+        self.assertGreater(
+            DeteccionAlerta.objects.filter(alerta__paciente__in=demos).count(),
+            0,
+        )
+
+        call_command(
+            'seed_demo_produccion',
+            '--limpiar',
+            '--confirmar',
+            verbosity=0,
+        )
+
+        self.assertFalse(demos.exists())
 
 
 class DesactivarPacientesVencidosTests(TestCase):

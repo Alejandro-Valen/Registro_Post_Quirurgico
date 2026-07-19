@@ -53,6 +53,14 @@ def _solo_propios(request):
     return not request.user.is_superuser
 
 
+class TodasLasFechasListFilter(admin.DateFieldListFilter):
+    def choices(self, changelist):
+        for indice, choice in enumerate(super().choices(changelist)):
+            if indice == 0:
+                choice = {**choice, 'display': 'Todas las fechas'}
+            yield choice
+
+
 DIAS_HISTORIAL_DEFAULT = 7
 DIAS_HISTORIAL_OPCIONES = [3, 7, 10]
 
@@ -570,6 +578,7 @@ _COLORES_SEVERIDAD = {
 
 class DeteccionAlertaInline(admin.TabularInline):
     model = DeteccionAlerta
+    verbose_name_plural = 'Detecciones de la alerta'
     fields = (
         'fecha_deteccion',
         'severidad_detectada',
@@ -753,7 +762,11 @@ class AlertaAdmin(admin.ModelAdmin):
 class CheckInProgramadoAdmin(admin.ModelAdmin):
     list_display  = ['paciente', 'fecha_dia', 'etiqueta', 'orden',
                      'estado', 'hora_programada', 'fecha_respuesta']
-    list_filter   = ['estado', 'etiqueta', 'fecha_dia']
+    list_filter   = [
+        'estado',
+        'etiqueta',
+        ('fecha_dia', TodasLasFechasListFilter),
+    ]
     search_fields = ['paciente__nombre_completo']
     readonly_fields = ['hora_programada', 'fecha_respuesta', 'fecha_dia',
                        'orden', 'etiqueta', 'registro']

@@ -15,6 +15,7 @@ conocida, por lo que en producción el comando aborta sin hacer nada.
 Uso:
     python manage.py seed_demo
     python manage.py seed_demo --borrar   # elimina y recrea todo
+    python manage.py seed_demo --limpiar  # elimina el paciente y se detiene
 """
 
 import logging
@@ -25,6 +26,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.utils import timezone
 
 from signos_sintomas.evaluacion_alertas import evaluar_registro_con_estado
@@ -33,7 +35,11 @@ from signos_sintomas.management.commands.crear_medico import (
     obtener_permisos_medico,
 )
 from signos_sintomas.models import (
-    Alerta, CheckInProgramado, Paciente, RegistroDiario
+    Alerta,
+    CheckInProgramado,
+    ConversacionWhatsApp,
+    Paciente,
+    RegistroDiario,
 )
 
 logger = logging.getLogger(__name__)
@@ -72,10 +78,16 @@ class Command(BaseCommand):
     help = "Crea datos de demostración para el dashboard médico."
 
     def add_arguments(self, parser):
-        parser.add_argument(
+        grupo = parser.add_mutually_exclusive_group()
+        grupo.add_argument(
             '--borrar',
             action='store_true',
             help='Elimina el paciente demo y todos sus datos antes de recrear.',
+        )
+        grupo.add_argument(
+            '--limpiar',
+            action='store_true',
+            help='Elimina el paciente demo y todos sus datos sin recrearlo.',
         )
 
     def handle(self, *args, **options):
@@ -91,8 +103,13 @@ class Command(BaseCommand):
 
         User = get_user_model()
 
+        if options['limpiar']:
+            self._borrar_datos_demo()
+            self.stdout.write(self.style.SUCCESS('Datos demo locales eliminados.'))
+            return
+
         if options['borrar']:
-            Paciente.objects.filter(telefono_whatsapp=TELEFONO_DEMO).delete()
+            self._borrar_datos_demo()
             self.stdout.write(self.style.WARNING('Datos demo anteriores eliminados.'))
 
         # Usuario demo — is_staff sin is_superuser, para representar la
@@ -193,3 +210,18 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'\nSeed demo completo. Accede al admin con: {USERNAME_DEMO} / demo1234'
         ))
+
+    @transaction.atomic
+    def _borrar_datos_demo(self):
+        pacientes = Paciente.objects.filter(telefono_whatsapp=TELEFONO_DEMO)
+        pids = list(pacientes.values_list('pk', flat=True))
+        if not pids:
+            return
+
+        # Las relaciones clínicas usan PROTECT. Se eliminan de hijo a padre;
+        # borrar Alerta primero también retira sus DeteccionAlerta por CASCADE.
+        Alerta.objects.filter(paciente_id__in=pids).delete()
+        CheckInProgramado.objects.filter(paciente_id__in=pids).delete()
+        RegistroDiario.objects.filter(paciente_id__in=pids).delete()
+        ConversacionWhatsApp.objects.filter(paciente_id__in=pids).delete()
+        pacientes.delete()

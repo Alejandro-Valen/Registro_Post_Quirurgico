@@ -532,7 +532,7 @@ class DeteccionAlerta(models.Model):
 
     class Meta:
         verbose_name = 'Detección de alerta'
-        verbose_name_plural = 'Detecciones registradas desde Loop 3'
+        verbose_name_plural = 'Detecciones de alerta'
         ordering = ['-fecha_deteccion', '-pk']
         indexes = [
             models.Index(
@@ -566,7 +566,7 @@ class DeteccionAlerta(models.Model):
 
     def __str__(self):
         fuente = f'registro {self.registro_id}' if self.registro_id else f'check-in {self.checkin_id}'
-        return f'{self.alerta} — {fuente}'
+        return f'Detección #{self.pk} — {fuente}'
 
 
 class ConversacionWhatsApp(models.Model):

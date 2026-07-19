@@ -148,11 +148,17 @@ class Command(BaseCommand):
         pids = list(pacientes.values_list('pk', flat=True))
         # Orden obligatorio por las FKs PROTECT:
         # Alerta → CheckInProgramado → RegistroDiario → ConversacionWhatsApp → Paciente
-        n_alertas = Alerta.objects.filter(paciente_id__in=pids).delete()[0]
-        n_checkins = CheckInProgramado.objects.filter(paciente_id__in=pids).delete()[0]
-        n_registros = RegistroDiario.objects.filter(paciente_id__in=pids).delete()[0]
-        n_conv = ConversacionWhatsApp.objects.filter(paciente_id__in=pids).delete()[0]
-        n_pac = pacientes.delete()[0]
+        n_alertas = Alerta.objects.filter(paciente_id__in=pids).count()
+        n_checkins = CheckInProgramado.objects.filter(paciente_id__in=pids).count()
+        n_registros = RegistroDiario.objects.filter(paciente_id__in=pids).count()
+        n_conv = ConversacionWhatsApp.objects.filter(paciente_id__in=pids).count()
+        n_pac = pacientes.count()
+        with transaction.atomic():
+            Alerta.objects.filter(paciente_id__in=pids).delete()
+            CheckInProgramado.objects.filter(paciente_id__in=pids).delete()
+            RegistroDiario.objects.filter(paciente_id__in=pids).delete()
+            ConversacionWhatsApp.objects.filter(paciente_id__in=pids).delete()
+            pacientes.delete()
 
         self.stdout.write(self.style.SUCCESS(
             f'Pacientes de ejemplo eliminados: {n_pac} pacientes, '
