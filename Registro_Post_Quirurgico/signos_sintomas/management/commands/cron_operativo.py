@@ -6,12 +6,16 @@ from django.core.management.base import BaseCommand
 
 TAREAS_OPERATIVAS = [
     'cerrar_checkins_vencidos',
+    'reintentar_evaluaciones_alertas',
     'procesar_notificaciones_email',
 ]
 
 
 class Command(BaseCommand):
-    help = 'Cierra check-ins vencidos y procesa notificaciones pendientes.'
+    help = (
+        'Cierra check-ins vencidos, reintenta evaluaciones y procesa '
+        'notificaciones pendientes.'
+    )
 
     def handle(self, *args, **options):
         for tarea in TAREAS_OPERATIVAS:

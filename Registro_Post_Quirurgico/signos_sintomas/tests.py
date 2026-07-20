@@ -3716,7 +3716,7 @@ class CronMatutinoCommandTests(TestCase):
 
 
 class CronOperativoCommandTests(TestCase):
-    """Cron frecuente: vencimientos idempotentes y bandeja de correo."""
+    """Cron frecuente: vencimientos, motor recuperable y bandeja de correo."""
 
     def test_llama_las_tareas_en_orden(self):
         from unittest.mock import patch
@@ -3729,7 +3729,11 @@ class CronOperativoCommandTests(TestCase):
 
         self.assertEqual(
             [llamada.args[0] for llamada in mock_call.call_args_list],
-            ['cerrar_checkins_vencidos', 'procesar_notificaciones_email'],
+            [
+                'cerrar_checkins_vencidos',
+                'reintentar_evaluaciones_alertas',
+                'procesar_notificaciones_email',
+            ],
         )
 
     def test_corre_sin_error_con_bd_vacia(self):
