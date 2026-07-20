@@ -3690,7 +3690,7 @@ class PacienteCedulaTests(TestCase):
 
 
 class CronMatutinoCommandTests(TestCase):
-    """Comando cron_matutino — corre las 5 tareas de la mañana en orden."""
+    """Comando cron_matutino — corre las tareas de la mañana en orden."""
 
     def test_llama_las_cinco_tareas_en_orden(self):
         from unittest.mock import patch
@@ -3706,12 +3706,36 @@ class CronMatutinoCommandTests(TestCase):
             'cerrar_checkins_vencidos',
             'enviar_recordatorios',
             'reintentar_evaluaciones_alertas',
+            'procesar_notificaciones_email',
         ])
 
     def test_corre_sin_error_con_bd_vacia(self):
         from django.core.management import call_command
-        # Con 0 pacientes las 5 tareas deben correr sin lanzar excepción.
+        # Con 0 pacientes las tareas deben correr sin lanzar excepción.
         call_command('cron_matutino', verbosity=0)
+
+
+class CronOperativoCommandTests(TestCase):
+    """Cron frecuente: vencimientos idempotentes y bandeja de correo."""
+
+    def test_llama_las_tareas_en_orden(self):
+        from unittest.mock import patch
+        from django.core.management import call_command
+
+        with patch(
+            'signos_sintomas.management.commands.cron_operativo.call_command'
+        ) as mock_call:
+            call_command('cron_operativo', verbosity=0)
+
+        self.assertEqual(
+            [llamada.args[0] for llamada in mock_call.call_args_list],
+            ['cerrar_checkins_vencidos', 'procesar_notificaciones_email'],
+        )
+
+    def test_corre_sin_error_con_bd_vacia(self):
+        from django.core.management import call_command
+
+        call_command('cron_operativo', verbosity=0)
 
 
 class CrearAdminCommandTests(TestCase):

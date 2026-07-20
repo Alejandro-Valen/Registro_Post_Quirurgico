@@ -23,6 +23,7 @@ TAREAS_MATUTINAS = [
     'cerrar_checkins_vencidos',
     'enviar_recordatorios',
     'reintentar_evaluaciones_alertas',
+    'procesar_notificaciones_email',
 ]
 
 
