@@ -12,6 +12,7 @@ from .models import (
     Alerta,
     CheckInProgramado,
     DeteccionAlerta,
+    NotificacionAlerta,
     Paciente,
     RecepcionWebhookTwilio,
     RegistroDiario,
@@ -196,171 +197,38 @@ def _datos_grafica(paciente, dias):
     return {'labels': labels, 'temps': temps, 'evas': evas, 'fcs': fcs, 'alertas_idx': alertas_idx}
 
 
-_JS_GRAFICAS_TEMPLATE = """
-<div id="graficas-__PID__" style="margin-top:8px;">
+_HTML_GRAFICAS_TEMPLATE = """
+<div class="js-graficas-signos" data-paciente="{paciente_id}"
+     data-graficas="{datos}" style="margin-top:8px;">
   <div style="margin-bottom:12px;font-size:0.85em;">
     Ver:
-    <a href="#" onclick="cambiarPeriodo___PID__(3,this);return false;"
-       style="color:#6b7280;">3 días</a> ·
-    <a href="#" onclick="cambiarPeriodo___PID__(7,this);return false;"
-       style="font-weight:600;color:#374151;">7 días</a> ·
-    <a href="#" onclick="cambiarPeriodo___PID__(10,this);return false;"
-       style="color:#6b7280;">10 días</a>
+    <button type="button" class="js-grafica-periodo" data-dias="3"
+            aria-pressed="false" style="border:0;background:none;padding:0;color:#6b7280;cursor:pointer;">3 días</button> ·
+    <button type="button" class="js-grafica-periodo" data-dias="7"
+            aria-pressed="true" style="border:0;background:none;padding:0;font-weight:600;color:#374151;cursor:pointer;">7 días</button> ·
+    <button type="button" class="js-grafica-periodo" data-dias="10"
+            aria-pressed="false" style="border:0;background:none;padding:0;color:#6b7280;cursor:pointer;">10 días</button>
   </div>
 
   <div style="margin-bottom:4px;font-size:0.8em;color:#6b7280;display:flex;justify-content:space-between;">
     <span>Temperatura (°C)</span>
     <span style="color:#fca5a5;">- - umbral fiebre: 37.9°C</span>
   </div>
-  <canvas id="temp-__PID__" height="90" style="width:100%;margin-bottom:16px;"></canvas>
+  <canvas data-serie="temperatura" height="90" style="width:100%;margin-bottom:16px;"></canvas>
 
   <div style="margin-bottom:4px;font-size:0.8em;color:#6b7280;">Dolor EVA (1-10)</div>
-  <canvas id="eva-__PID__" height="90" style="width:100%;margin-bottom:16px;"></canvas>
+  <canvas data-serie="dolor" height="90" style="width:100%;margin-bottom:16px;"></canvas>
 
   <div style="margin-bottom:4px;font-size:0.8em;color:#6b7280;display:flex;justify-content:space-between;">
     <span>Frecuencia cardíaca (lpm)</span>
     <span style="color:#6b7280;">- - 101 lpm  · - - 110 lpm</span>
   </div>
-  <canvas id="fc-__PID__" height="90" style="width:100%;margin-bottom:8px;"></canvas>
+  <canvas data-serie="frecuencia" height="90" style="width:100%;margin-bottom:8px;"></canvas>
   <p style="font-size:0.75em;color:#9ca3af;margin:4px 0 0;">
     Puntos rojos = alerta ALTA sin resolver ese registro. Huecos en la
     línea = el paciente no midió ese dato ese día (no es un valor de 0).
   </p>
 </div>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script>
-(function() {
-  var DATOS = __CTX__;
-  var pid = "__PID__";
-  var charts = {};
-
-  function puntoColor(idx, alertasIdx) {
-    return alertasIdx.indexOf(idx) !== -1 ? '#dc2626' : 'transparent';
-  }
-  function puntoRadio(idx, alertasIdx, valor) {
-    if (valor === null || valor === undefined) return 0;
-    return alertasIdx.indexOf(idx) !== -1 ? 5 : 3;
-  }
-
-  var optsBase = {
-    responsive: true,
-    animation: false,
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { grid: { color: '#f3f4f6' }, ticks: { font: { size: 10 }, maxRotation: 45 } },
-      y: { grid: { color: '#f3f4f6' }, ticks: { font: { size: 10 } } }
-    }
-  };
-
-  function init() {
-    var d = DATOS['7'];
-
-    charts.temp = new Chart(document.getElementById('temp-' + pid), {
-      type: 'line',
-      data: {
-        labels: d.labels,
-        datasets: [
-          {
-            label: 'Temperatura', data: d.temps, borderColor: '#dc2626', borderWidth: 2,
-            pointBackgroundColor: d.temps.map(function(v, i) { return puntoColor(i, d.alertas_idx); }),
-            pointRadius: d.temps.map(function(v, i) { return puntoRadio(i, d.alertas_idx, v); }),
-            tension: 0.3, spanGaps: false
-          },
-          {
-            label: 'Umbral fiebre', data: d.labels.map(function() { return 37.9; }),
-            borderColor: '#fca5a5', borderWidth: 1, borderDash: [4, 4], pointRadius: 0, tension: 0
-          }
-        ]
-      },
-      options: Object.assign({}, optsBase, {
-        scales: Object.assign({}, optsBase.scales, {
-          y: Object.assign({}, optsBase.scales.y, { min: 35, max: 40, ticks: { stepSize: 0.5, font: { size: 10 } } })
-        })
-      })
-    });
-
-    charts.eva = new Chart(document.getElementById('eva-' + pid), {
-      type: 'line',
-      data: {
-        labels: d.labels,
-        datasets: [{
-          label: 'Dolor EVA', data: d.evas, borderColor: '#f59e0b', borderWidth: 2,
-          pointBackgroundColor: d.evas.map(function(v, i) { return puntoColor(i, d.alertas_idx); }),
-          pointRadius: d.evas.map(function(v, i) { return puntoRadio(i, d.alertas_idx, v); }),
-          tension: 0.3, spanGaps: false
-        }]
-      },
-      options: Object.assign({}, optsBase, {
-        scales: Object.assign({}, optsBase.scales, {
-          y: Object.assign({}, optsBase.scales.y, { min: 0, max: 10, ticks: { stepSize: 2, font: { size: 10 } } })
-        })
-      })
-    });
-
-    charts.fc = new Chart(document.getElementById('fc-' + pid), {
-      type: 'line',
-      data: {
-        labels: d.labels,
-        datasets: [
-          {
-            label: 'FC', data: d.fcs, borderColor: '#3b82f6', borderWidth: 2,
-            pointBackgroundColor: d.fcs.map(function(v, i) { return puntoColor(i, d.alertas_idx); }),
-            pointRadius: d.fcs.map(function(v, i) { return puntoRadio(i, d.alertas_idx, v); }),
-            tension: 0.3, spanGaps: false
-          },
-          {
-            label: 'Taquicardia leve', data: d.labels.map(function() { return 101; }),
-            borderColor: '#fcd34d', borderWidth: 1, borderDash: [3, 3], pointRadius: 0
-          },
-          {
-            label: 'Taquicardia', data: d.labels.map(function() { return 110; }),
-            borderColor: '#f87171', borderWidth: 1, borderDash: [3, 3], pointRadius: 0
-          }
-        ]
-      },
-      options: optsBase
-    });
-  }
-
-  window.cambiarPeriodo___PID__ = function(dias, link) {
-    document.querySelectorAll('#graficas-' + pid + ' a').forEach(function(a) {
-      a.style.fontWeight = '';
-      a.style.color = '#6b7280';
-    });
-    link.style.fontWeight = '600';
-    link.style.color = '#374151';
-
-    var d = DATOS[String(dias)];
-    if (!d) { return; }
-
-    ['temp', 'eva', 'fc'].forEach(function(tipo) {
-      var chart = charts[tipo];
-      if (!chart) { return; }
-      var dataMap = { temp: d.temps, eva: d.evas, fc: d.fcs };
-      chart.data.labels = d.labels;
-      chart.data.datasets[0].data = dataMap[tipo];
-      chart.data.datasets[0].pointBackgroundColor = dataMap[tipo].map(
-        function(v, i) { return puntoColor(i, d.alertas_idx); }
-      );
-      chart.data.datasets[0].pointRadius = dataMap[tipo].map(
-        function(v, i) { return puntoRadio(i, d.alertas_idx, v); }
-      );
-      for (var j = 1; j < chart.data.datasets.length; j++) {
-        var val = chart.data.datasets[j].data[0];
-        chart.data.datasets[j].data = d.labels.map(function() { return val; });
-      }
-      chart.update();
-    });
-  };
-
-  if (typeof Chart !== 'undefined') {
-    init();
-  } else {
-    document.currentScript.previousElementSibling.addEventListener('load', init);
-  }
-})();
-</script>
 """
 
 
@@ -379,12 +247,10 @@ def _grafica_signos_vitales(paciente):
         return '<p style="color:#6b7280;">Sin datos para graficar todavía.</p>'
 
     datos = {str(dias): _datos_grafica(paciente, dias) for dias in DIAS_GRAFICA_OPCIONES}
-    ctx = json.dumps(datos)
-
-    return (
-        _JS_GRAFICAS_TEMPLATE
-        .replace('__CTX__', ctx)
-        .replace('__PID__', str(paciente.pk))
+    return format_html(
+        _HTML_GRAFICAS_TEMPLATE,
+        datos=json.dumps(datos, separators=(',', ':')),
+        paciente_id=paciente.pk,
     )
 
 
@@ -417,6 +283,12 @@ class PacienteAdmin(admin.ModelAdmin):
                      'medico_responsable__last_name',
                      'medico_responsable__username']
     readonly_fields = ['fecha_consentimiento', 'grafica_signos_vitales', 'historial_paciente']
+
+    class Media:
+        js = (
+            'admin/js/vendor/chart.umd.min.js',
+            'admin/js/graficas_signos_vitales.js',
+        )
 
     def get_readonly_fields(self, request, obj=None):
         # Captura ?dias= de la URL para que historial_paciente() lo use al
@@ -466,7 +338,7 @@ class PacienteAdmin(admin.ModelAdmin):
     def grafica_signos_vitales(self, obj):
         if obj.pk is None:
             return '—'
-        return mark_safe(_grafica_signos_vitales(obj))
+        return _grafica_signos_vitales(obj)
 
     @admin.display(description='Historial del paciente')
     def historial_paciente(self, obj):
@@ -552,6 +424,34 @@ class RecepcionWebhookTwilioAdmin(admin.ModelAdmin):
     list_filter = ['estado']
     search_fields = ['message_sid']
     readonly_fields = [campo.name for campo in RecepcionWebhookTwilio._meta.fields]
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(NotificacionAlerta)
+class NotificacionAlertaAdmin(admin.ModelAdmin):
+    list_display = [
+        'alerta_id',
+        'estado',
+        'intentos',
+        'proximo_intento',
+        'fecha_envio',
+    ]
+    list_filter = ['estado']
+    readonly_fields = [campo.name for campo in NotificacionAlerta._meta.fields]
 
     def has_module_permission(self, request):
         return request.user.is_superuser

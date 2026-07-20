@@ -38,7 +38,6 @@ import logging
 from datetime import timedelta
 from decimal import Decimal
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -46,7 +45,8 @@ from django.utils import timezone
 
 from signos_sintomas.evaluacion_alertas import evaluar_registro_con_estado
 from signos_sintomas.models import (
-    Alerta, CheckInProgramado, ConversacionWhatsApp, Paciente, RegistroDiario,
+    Alerta, CheckInProgramado, ConversacionWhatsApp, NotificacionAlerta,
+    Paciente, RegistroDiario,
 )
 
 logger = logging.getLogger(__name__)
@@ -154,6 +154,9 @@ class Command(BaseCommand):
         n_conv = ConversacionWhatsApp.objects.filter(paciente_id__in=pids).count()
         n_pac = pacientes.count()
         with transaction.atomic():
+            NotificacionAlerta.objects.filter(
+                alerta__paciente_id__in=pids,
+            ).delete()
             Alerta.objects.filter(paciente_id__in=pids).delete()
             CheckInProgramado.objects.filter(paciente_id__in=pids).delete()
             RegistroDiario.objects.filter(paciente_id__in=pids).delete()
@@ -191,19 +194,9 @@ class Command(BaseCommand):
                     'quedarán sin médico asignado. Usa --medico <username> para asignarlos.'
                 ))
 
-        # Silencia el envío de correos de alerta mientras se crean los datos de
-        # ejemplo. Las alertas ALTA disparan send_mail SÍNCRONO (SMTP) vía la
-        # señal de Alerta; en algunos entornos (p. ej. Railway bloquea el puerto
-        # SMTP saliente) esa conexión se cuelga y cortaría el seed a medias. Los
-        # pacientes y sus alertas se crean igual — solo no se manda el correo.
-        backend_original = settings.EMAIL_BACKEND
-        settings.EMAIL_BACKEND = 'django.core.mail.backends.dummy.EmailBackend'
-        try:
-            total_alertas = 0
-            for demo in DEMOS:
-                total_alertas += self._crear_paciente(demo, medico)
-        finally:
-            settings.EMAIL_BACKEND = backend_original
+        total_alertas = 0
+        for demo in DEMOS:
+            total_alertas += self._crear_paciente(demo, medico)
 
         etiqueta_medico = medico.username if medico else '(sin médico)'
         self.stdout.write(self.style.SUCCESS(

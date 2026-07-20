@@ -493,6 +493,68 @@ class Alerta(models.Model):
         return f"[{estado}] {self.get_tipo_display()} — {self.paciente.nombre_completo}"
 
 
+class NotificacionAlerta(models.Model):
+    """Bandeja transaccional para el correo de una alerta ALTA.
+
+    Solo conserva la referencia a la alerta y el email destinatario. El cuerpo
+    se construye al enviar y no replica cédula, teléfono, síntomas ni el
+    mensaje clínico en esta tabla.
+    """
+
+    ESTADO_PENDIENTE = 'PENDIENTE'
+    ESTADO_ENVIADA = 'ENVIADA'
+    ESTADO_CHOICES = [
+        (ESTADO_PENDIENTE, 'Pendiente'),
+        (ESTADO_ENVIADA, 'Enviada'),
+    ]
+
+    alerta = models.OneToOneField(
+        Alerta,
+        on_delete=models.PROTECT,
+        related_name='notificacion_email',
+    )
+    destinatario = models.EmailField(blank=True, default='')
+    estado = models.CharField(
+        max_length=10,
+        choices=ESTADO_CHOICES,
+        default=ESTADO_PENDIENTE,
+        db_index=True,
+    )
+    intentos = models.PositiveSmallIntegerField(default=0)
+    proximo_intento = models.DateTimeField(default=timezone.now, db_index=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_ultimo_intento = models.DateTimeField(null=True, blank=True)
+    fecha_envio = models.DateTimeField(null=True, blank=True)
+    ultimo_error = models.CharField(max_length=100, blank=True, default='')
+
+    class Meta:
+        verbose_name = 'Notificación de alerta'
+        verbose_name_plural = 'Notificaciones de alertas'
+        ordering = ['proximo_intento', 'pk']
+        indexes = [
+            models.Index(
+                fields=['estado', 'proximo_intento'],
+                name='notif_estado_proximo_idx',
+            ),
+        ]
+        constraints = [
+            CheckConstraint(
+                condition=Q(estado__in=['PENDIENTE', 'ENVIADA']),
+                name='notificacion_alerta_estado_valido',
+            ),
+            CheckConstraint(
+                condition=(
+                    Q(estado='PENDIENTE', fecha_envio__isnull=True)
+                    | Q(estado='ENVIADA', fecha_envio__isnull=False)
+                ),
+                name='notificacion_alerta_envio_coherente',
+            ),
+        ]
+
+    def __str__(self):
+        return f'Notificación alerta #{self.alerta_id} — {self.estado}'
+
+
 class DeteccionAlerta(models.Model):
     """Evidencia de cada detección futura agrupada dentro de una alerta."""
 

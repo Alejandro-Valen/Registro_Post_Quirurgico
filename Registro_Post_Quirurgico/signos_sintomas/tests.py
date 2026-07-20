@@ -16,6 +16,7 @@ from .models import (
     CheckInProgramado,
     ConversacionWhatsApp,
     DeteccionAlerta,
+    NotificacionAlerta,
     Paciente,
     RecepcionWebhookTwilio,
     RegistroDiario,
@@ -2176,7 +2177,13 @@ class AdminScopingTests(TestCase):
         # Los usuarios staff necesitan permisos explícitos de modelo para
         # acceder al admin — sin esto los 403 vendrían de falta de permiso
         # general, no del scoping por médico (falso positivo en tests).
-        for model in (Paciente, RegistroDiario, Alerta, CheckInProgramado):
+        for model in (
+            Paciente,
+            RegistroDiario,
+            Alerta,
+            CheckInProgramado,
+            NotificacionAlerta,
+        ):
             ct = ContentType.objects.get_for_model(model)
             perms = Permission.objects.filter(content_type=ct)
             self.medico_a.user_permissions.add(*perms)
@@ -2216,6 +2223,10 @@ class AdminScopingTests(TestCase):
             paciente=self.paciente_b,
             registro_origen=self.registro_b,
             tipo='SEPSIS', severidad='BAJA', mensaje='Alerta B',
+        )
+        self.notificacion_a = NotificacionAlerta.objects.create(
+            alerta=self.alerta_a,
+            destinatario='operaciones@test.com',
         )
         self.deteccion_a = DeteccionAlerta.objects.create(
             alerta=self.alerta_a,
@@ -2419,6 +2430,21 @@ class AdminScopingTests(TestCase):
         self.assertContains(resp, 'Todas las fechas')
         self.assertNotContains(resp, 'Cualquier fecha')
 
+    def test_medico_no_puede_ver_bandeja_tecnica_de_notificaciones(self):
+        self._login(self.medico_a)
+        lista = self.client.get('/admin/signos_sintomas/notificacionalerta/')
+        detalle = self.client.get(
+            f'/admin/signos_sintomas/notificacionalerta/{self.notificacion_a.pk}/change/'
+        )
+        self.assertEqual(lista.status_code, 403)
+        self.assertEqual(detalle.status_code, 403)
+
+    def test_superuser_puede_auditar_bandeja_de_notificaciones(self):
+        self._login(self.superuser)
+        resp = self.client.get('/admin/signos_sintomas/notificacionalerta/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, self.notificacion_a.alerta_id)
+
 
 class AlertaAdminAccionesTests(TestCase):
     """Bloque 5A — Colores severidad + acción marcar_resuelta en AlertaAdmin."""
@@ -2544,6 +2570,8 @@ class AlertaMotivoResolucionTests(TestCase):
             resp.content.decode().count('<h1>Selecciona el motivo de resolución</h1>'),
             1,
         )
+        self.assertContains(resp, 'admin/js/motivo_resolucion.js')
+        self.assertNotContains(resp, 'DOMContentLoaded')
         self.alerta.refresh_from_db()
         self.assertFalse(self.alerta.resuelta)
 
@@ -2597,7 +2625,7 @@ class AlertaMotivoResolucionTests(TestCase):
 
 
 class AlertaEmailNotificacionTests(TestCase):
-    """Bloque 5C — Email al médico cuando se crea alerta ALTA."""
+    """Bandeja durable para avisar al médico por una alerta ALTA."""
 
     def setUp(self):
         User = get_user_model()
@@ -2617,83 +2645,114 @@ class AlertaEmailNotificacionTests(TestCase):
             aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
         )
 
-    def test_alerta_alta_envia_email(self):
-        """Al crear alerta ALTA con médico+email, se envía un email vía on_commit."""
-        from django.core import mail
-        with self.captureOnCommitCallbacks(execute=True):
-            Alerta.objects.create(
-                paciente=self.paciente,
-                registro_origen=self.registro,
-                tipo='SEPSIS',
-                severidad='ALTA',
-                mensaje='Fiebre alta de prueba.',
-            )
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('ALERTA ALTA', mail.outbox[0].subject)
-        self.assertIn('dr@test.com', mail.outbox[0].to)
-
-    def test_alerta_alta_email_incluye_telefono_cedula_y_hora_local(self):
-        """A-4: el cuerpo del email trae teléfono, cédula y hora en zona Bogotá."""
-        from django.core import mail
-        with self.captureOnCommitCallbacks(execute=True):
-            alerta = Alerta.objects.create(
-                paciente=self.paciente,
-                registro_origen=self.registro,
-                tipo='SEPSIS',
-                severidad='ALTA',
-                mensaje='Fiebre alta de prueba.',
-            )
-        cuerpo = mail.outbox[0].body
-        self.assertIn(self.paciente.telefono_whatsapp, cuerpo)
-        self.assertIn(self.paciente.cedula, cuerpo)
-        self.assertIn(
-            timezone.localtime(alerta.fecha_alerta).strftime('%d/%m/%Y %H:%M'),
-            cuerpo,
+    def _crear_alerta_alta(self):
+        return Alerta.objects.create(
+            paciente=self.paciente,
+            registro_origen=self.registro,
+            tipo='SEPSIS',
+            severidad='ALTA',
+            mensaje='Fiebre alta de prueba.',
         )
-        self.assertIn('─', cuerpo)
 
-    def test_alerta_alta_email_sin_cedula_muestra_no_registrada(self):
-        """Paciente legado sin cédula: el email no debe fallar ni mostrar 'None'."""
+    def test_alerta_alta_se_encola_sin_conexion_de_red(self):
         from django.core import mail
-        paciente_sin_cedula = Paciente.objects.create(
-            nombre_completo="Sin Cedula",
-            telefono_whatsapp="+573019990004",
-            fecha_cirugia=timezone.localdate(),
-            medico_responsable=self.medico,
-        )
-        registro = RegistroDiario.objects.create(
-            paciente=paciente_sin_cedula,
-            temperatura=Decimal('37.0'), dolor_eva=2,
-            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
-        )
-        with self.captureOnCommitCallbacks(execute=True):
-            Alerta.objects.create(
-                paciente=paciente_sin_cedula,
-                registro_origen=registro,
-                tipo='SEPSIS',
-                severidad='ALTA',
-                mensaje='Fiebre alta de prueba.',
-            )
-        cuerpo = mail.outbox[0].body
-        self.assertIn('No registrada', cuerpo)
-        self.assertNotIn('Cédula:   None', cuerpo)
+        alerta = self._crear_alerta_alta()
 
-    def test_alerta_media_no_envia_email(self):
-        """Solo las alertas ALTA envían email — MEDIA y BAJA no."""
-        from django.core import mail
-        with self.captureOnCommitCallbacks(execute=True):
-            Alerta.objects.create(
-                paciente=self.paciente,
-                registro_origen=self.registro,
-                tipo='SEPSIS',
-                severidad='MEDIA',
-                mensaje='Subfebrícula.',
-            )
+        notificacion = NotificacionAlerta.objects.get(alerta=alerta)
+        self.assertEqual(notificacion.destinatario, self.medico.email)
+        self.assertEqual(notificacion.estado, NotificacionAlerta.ESTADO_PENDIENTE)
+        self.assertEqual(notificacion.intentos, 0)
         self.assertEqual(len(mail.outbox), 0)
 
-    def test_alerta_alta_sin_medico_no_falla(self):
-        """Alerta ALTA en paciente sin médico responsable no lanza excepción."""
+    @override_settings(PANEL_MEDICO_URL='https://ejemplo.test/acceso-seguro/')
+    def test_procesador_envia_aviso_sin_datos_medicos(self):
         from django.core import mail
+        from django.core.management import call_command
+
+        alerta = self._crear_alerta_alta()
+        call_command('procesar_notificaciones_email', verbosity=0)
+
+        self.assertEqual(len(mail.outbox), 1)
+        correo = mail.outbox[0]
+        self.assertEqual(correo.to, [self.medico.email])
+        self.assertIn('Alerta clínica alta', correo.subject)
+        self.assertIn(f'alerta #{alerta.pk}', correo.body)
+        self.assertIn('https://ejemplo.test/acceso-seguro/', correo.body)
+        self.assertNotIn(self.paciente.nombre_completo, correo.body)
+        self.assertNotIn(self.paciente.telefono_whatsapp, correo.body)
+        self.assertNotIn(self.paciente.cedula, correo.body)
+        self.assertNotIn(alerta.mensaje, correo.body)
+
+        notificacion = NotificacionAlerta.objects.get(alerta=alerta)
+        self.assertEqual(notificacion.estado, NotificacionAlerta.ESTADO_ENVIADA)
+        self.assertEqual(notificacion.intentos, 1)
+        self.assertIsNotNone(notificacion.fecha_envio)
+
+    def test_procesador_es_idempotente_para_notificacion_enviada(self):
+        from django.core import mail
+        from django.core.management import call_command
+
+        self._crear_alerta_alta()
+        call_command('procesar_notificaciones_email', verbosity=0)
+        call_command('procesar_notificaciones_email', verbosity=0)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_fallo_externo_programa_reintento_sin_perder_la_fila(self):
+        from unittest.mock import patch
+        from django.core.management import CommandError, call_command
+
+        alerta = self._crear_alerta_alta()
+        with patch(
+            'signos_sintomas.notificaciones.send_mail',
+            side_effect=TimeoutError('detalle que no debe persistirse'),
+        ):
+            with self.assertRaises(CommandError):
+                call_command('procesar_notificaciones_email', verbosity=0)
+
+        notificacion = NotificacionAlerta.objects.get(alerta=alerta)
+        self.assertEqual(notificacion.estado, NotificacionAlerta.ESTADO_PENDIENTE)
+        self.assertEqual(notificacion.intentos, 1)
+        self.assertEqual(notificacion.ultimo_error, 'TimeoutError')
+        self.assertGreater(notificacion.proximo_intento, timezone.now())
+        self.assertNotIn('detalle', notificacion.ultimo_error)
+
+    def test_notificacion_pendiente_se_puede_reintentar(self):
+        from django.core import mail
+        from django.core.management import call_command
+
+        alerta = self._crear_alerta_alta()
+        notificacion = NotificacionAlerta.objects.get(alerta=alerta)
+        NotificacionAlerta.objects.filter(pk=notificacion.pk).update(
+            intentos=2,
+            proximo_intento=timezone.now() - timedelta(seconds=1),
+        )
+
+        call_command('procesar_notificaciones_email', verbosity=0)
+
+        notificacion.refresh_from_db()
+        self.assertEqual(notificacion.estado, NotificacionAlerta.ESTADO_ENVIADA)
+        self.assertEqual(notificacion.intentos, 3)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_limite_invalido_es_rechazado(self):
+        from django.core.management import CommandError, call_command
+
+        with self.assertRaises(CommandError):
+            call_command('procesar_notificaciones_email', limite=0, verbosity=0)
+
+    def test_alerta_media_no_se_encola(self):
+        Alerta.objects.create(
+            paciente=self.paciente,
+            registro_origen=self.registro,
+            tipo='SEPSIS',
+            severidad='MEDIA',
+            mensaje='Subfebrícula.',
+        )
+        self.assertEqual(NotificacionAlerta.objects.count(), 0)
+
+    def test_alerta_alta_sin_medico_queda_pendiente_hasta_configurarlo(self):
+        from django.core.management import CommandError, call_command
+
         paciente_sin_medico = Paciente.objects.create(
             nombre_completo="Sin Médico",
             telefono_whatsapp="+573019990003",
@@ -2705,21 +2764,37 @@ class AlertaEmailNotificacionTests(TestCase):
             temperatura=Decimal('37.0'), dolor_eva=2,
             aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
         )
-        with self.captureOnCommitCallbacks(execute=True):
-            Alerta.objects.create(
-                paciente=paciente_sin_medico,
-                registro_origen=registro,
-                tipo='SEPSIS',
-                severidad='ALTA',
-                mensaje='Sin medico.',
-            )
-        self.assertEqual(len(mail.outbox), 0)
+        Alerta.objects.create(
+            paciente=paciente_sin_medico,
+            registro_origen=registro,
+            tipo='SEPSIS',
+            severidad='ALTA',
+            mensaje='Sin medico.',
+        )
+        notificacion = NotificacionAlerta.objects.get()
+        self.assertEqual(notificacion.destinatario, '')
 
-    def test_email_solo_al_alcanzar_alta_no_en_recurrencia(self):
-        """El correo se envía cuando la alerta ALCANZA ALTA (creación o
-        escalada), NO en cada recurrencia diaria del mismo problema."""
-        from django.core import mail
+        with self.assertRaises(CommandError):
+            call_command('procesar_notificaciones_email', verbosity=0)
 
+        notificacion.refresh_from_db()
+        self.assertEqual(notificacion.estado, NotificacionAlerta.ESTADO_PENDIENTE)
+        self.assertEqual(notificacion.ultimo_error, 'DestinatarioNoConfigurado')
+
+    def test_backend_sin_entrega_confirmada_programa_reintento(self):
+        from unittest.mock import patch
+        from django.core.management import CommandError, call_command
+
+        alerta = self._crear_alerta_alta()
+        with patch('signos_sintomas.notificaciones.send_mail', return_value=0):
+            with self.assertRaises(CommandError):
+                call_command('procesar_notificaciones_email', verbosity=0)
+
+        notificacion = NotificacionAlerta.objects.get(alerta=alerta)
+        self.assertEqual(notificacion.estado, NotificacionAlerta.ESTADO_PENDIENTE)
+        self.assertEqual(notificacion.ultimo_error, 'EntregaEmailNoConfirmada')
+
+    def test_notificacion_solo_al_alcanzar_alta_no_en_recurrencia(self):
         def _reg(fc):
             return RegistroDiario.objects.create(
                 paciente=self.paciente,
@@ -2728,20 +2803,14 @@ class AlertaEmailNotificacionTests(TestCase):
                 episodios_nauseas=0, frecuencia_cardiaca=fc,
             )
 
-        # MEDIA (taquicardia 120): no envía.
-        with self.captureOnCommitCallbacks(execute=True):
-            evaluar_registro(_reg(120))
-        self.assertEqual(len(mail.outbox), 0)
+        evaluar_registro(_reg(120))
+        self.assertEqual(NotificacionAlerta.objects.count(), 0)
 
-        # Escala a ALTA (150): envía 1.
-        with self.captureOnCommitCallbacks(execute=True):
-            evaluar_registro(_reg(150))
-        self.assertEqual(len(mail.outbox), 1)
+        evaluar_registro(_reg(150))
+        self.assertEqual(NotificacionAlerta.objects.count(), 1)
 
-        # Recurrencia a ALTA (155): NO reenvía.
-        with self.captureOnCommitCallbacks(execute=True):
-            evaluar_registro(_reg(155))
-        self.assertEqual(len(mail.outbox), 1)
+        evaluar_registro(_reg(155))
+        self.assertEqual(NotificacionAlerta.objects.count(), 1)
         self.assertEqual(Alerta.objects.filter(tipo='TAQUICARDIA').count(), 1)
 
 
@@ -2757,6 +2826,26 @@ class CacheProductionConfigTests(TestCase):
                 "settings_production.py usa RedisCache y requiere redis>=5. "
                 "Instalar con: pip install 'redis>=5'"
             )
+
+    def test_django_tiene_parche_de_seguridad_6_0_7(self):
+        import django
+
+        self.assertGreaterEqual(django.VERSION[:3], (6, 0, 7))
+
+    def test_produccion_aplica_csp_sin_scripts_inline(self):
+        from django.utils.csp import CSP
+        from Registro_Post_Quirurgico import settings_production
+
+        self.assertIn(
+            'django.middleware.csp.ContentSecurityPolicyMiddleware',
+            settings_production.MIDDLEWARE,
+        )
+        self.assertEqual(settings_production.SECURE_CSP['script-src'], [CSP.SELF])
+        self.assertNotIn(
+            CSP.UNSAFE_INLINE,
+            settings_production.SECURE_CSP['script-src'],
+        )
+        self.assertEqual(settings_production.EMAIL_TIMEOUT, 10)
 
 
 class CheckInProgramadoModelTests(TestCase):
@@ -3763,6 +3852,9 @@ class SeedDemoTests(TestCase):
         self.assertFalse(medico.has_perm('signos_sintomas.change_registrodiario'))
         paciente = Paciente.objects.get(telefono_whatsapp='+573001234567')
         self.assertEqual(paciente.cedula, 'DEMO-LOCAL-001')
+        self.assertFalse(
+            NotificacionAlerta.objects.filter(alerta__paciente=paciente).exists()
+        )
         self.assertTrue(paciente.consentimiento_informado)
         self.assertIsNotNone(paciente.fecha_consentimiento)
         self.assertEqual(
@@ -3834,6 +3926,10 @@ class SeedDemoTests(TestCase):
         self.assertEqual(demos.count(), 2)
         self.assertGreater(
             DeteccionAlerta.objects.filter(alerta__paciente__in=demos).count(),
+            0,
+        )
+        self.assertEqual(
+            NotificacionAlerta.objects.filter(alerta__paciente__in=demos).count(),
             0,
         )
 
@@ -4260,13 +4356,14 @@ class GraficaSignosVitalesTests(TestCase):
         return f'/admin/signos_sintomas/paciente/{self.paciente.pk}/change/'
 
     def _extraer_datos(self, contenido):
+        import html
         import json
         import re
-        match = re.search(r'var DATOS = (.+?);\s*var pid', contenido)
-        self.assertIsNotNone(match, "No se encontró el objeto DATOS embebido en el HTML")
-        return json.loads(match.group(1))
+        match = re.search(r'data-graficas="([^"]+)"', contenido)
+        self.assertIsNotNone(match, "No se encontró el JSON de las gráficas")
+        return json.loads(html.unescape(match.group(1)))
 
-    def test_sin_registros_no_carga_chartjs(self):
+    def test_sin_registros_no_carga_chartjs_desde_cdn(self):
         resp = self.client.get(self._url_change())
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Sin datos para graficar")
@@ -4371,14 +4468,23 @@ class GraficaSignosVitalesTests(TestCase):
         datos = self._extraer_datos(resp.content.decode())
         self.assertEqual(datos['7']['alertas_idx'], [])
 
-    def test_carga_version_fija_de_chartjs(self):
+    def test_carga_chartjs_y_logica_desde_estaticos_locales(self):
         RegistroDiario.objects.create(
             paciente=self.paciente,
             temperatura=Decimal('37.0'), dolor_eva=2,
             aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
         )
         resp = self.client.get(self._url_change())
-        self.assertContains(resp, "chart.js@4.4.0")
+        self.assertContains(resp, 'admin/js/vendor/chart.umd.min.js')
+        self.assertContains(resp, 'admin/js/graficas_signos_vitales.js')
+        self.assertNotContains(resp, 'cdn.jsdelivr.net')
+        self.assertNotContains(resp, 'onclick=')
+
+    def test_distribucion_y_licencia_chartjs_existen_en_staticfiles(self):
+        from django.contrib.staticfiles import finders
+
+        self.assertIsNotNone(finders.find('admin/js/vendor/chart.umd.min.js'))
+        self.assertIsNotNone(finders.find('admin/js/vendor/Chart.js-LICENSE.md'))
 
     def test_selector_de_grafica_es_independiente_del_historial(self):
         """El ?dias= de la URL controla el historial en tabla (Bloque 3B);

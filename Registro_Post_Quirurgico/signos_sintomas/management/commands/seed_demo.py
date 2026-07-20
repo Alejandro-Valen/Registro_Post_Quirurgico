@@ -38,6 +38,7 @@ from signos_sintomas.models import (
     Alerta,
     CheckInProgramado,
     ConversacionWhatsApp,
+    NotificacionAlerta,
     Paciente,
     RegistroDiario,
 )
@@ -219,7 +220,8 @@ class Command(BaseCommand):
             return
 
         # Las relaciones clínicas usan PROTECT. Se eliminan de hijo a padre;
-        # borrar Alerta primero también retira sus DeteccionAlerta por CASCADE.
+        # borrar Alerta también retira sus DeteccionAlerta por CASCADE.
+        NotificacionAlerta.objects.filter(alerta__paciente_id__in=pids).delete()
         Alerta.objects.filter(paciente_id__in=pids).delete()
         CheckInProgramado.objects.filter(paciente_id__in=pids).delete()
         RegistroDiario.objects.filter(paciente_id__in=pids).delete()

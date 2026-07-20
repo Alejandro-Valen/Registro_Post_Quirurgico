@@ -1,4 +1,5 @@
 {% extends "admin/base_site.html" %}
+{% load static %}
 {% block content %}
 <p>Se resolverán <strong>{{ alertas.count }}</strong> alerta(s):</p>
 <ul>
@@ -19,18 +20,5 @@
   <a href="../" class="button">Cancelar</a>
 </form>
 
-<script>
-// Mostrar/ocultar el campo de detalle según el motivo seleccionado.
-document.addEventListener('DOMContentLoaded', function() {
-    var select = document.querySelector('[name="motivo_resolucion"]');
-    var campoDetalle = document.querySelector('[name="motivo_resolucion_detalle"]');
-    if (!select || !campoDetalle) { return; }
-    var contenedor = campoDetalle.closest('p') || campoDetalle.parentNode;
-    function toggle() {
-        contenedor.style.display = select.value === 'OTRO' ? '' : 'none';
-    }
-    select.addEventListener('change', toggle);
-    toggle();
-});
-</script>
+<script src="{% static 'admin/js/motivo_resolucion.js' %}" defer></script>
 {% endblock %}

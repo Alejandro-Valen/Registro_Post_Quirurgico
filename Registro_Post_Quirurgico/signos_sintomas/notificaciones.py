@@ -1,0 +1,136 @@
+"""Procesamiento durable de notificaciones clínicas por correo."""
+
+from datetime import timedelta
+
+from django.conf import settings
+from django.core.mail import send_mail
+from django.db import transaction
+from django.utils import timezone
+
+from .models import NotificacionAlerta
+
+
+class DestinatarioNoConfigurado(Exception):
+    pass
+
+
+class EntregaEmailNoConfirmada(Exception):
+    pass
+
+
+def _contenido_seguro(notificacion):
+    """Construye un aviso sin datos identificables ni detalle clínico."""
+    asunto = 'Alerta clínica alta pendiente de atención'
+    lineas = [
+        'Se registró una alerta clínica de severidad alta que requiere revisión.',
+        '',
+        f'Referencia interna: alerta #{notificacion.alerta_id}',
+        'Acceda al panel médico con sus credenciales para consultar el caso.',
+    ]
+    panel_url = getattr(settings, 'PANEL_MEDICO_URL', '').strip()
+    if panel_url:
+        lineas.extend(['', panel_url])
+    lineas.extend([
+        '',
+        'Este es un mensaje automático. No responda a este correo.',
+    ])
+    return asunto, '\n'.join(lineas)
+
+
+def _minutos_reintento(intentos):
+    """Backoff 5, 15, 45, 135 y luego máximo cada 6 horas."""
+    return min(5 * (3 ** max(intentos - 1, 0)), 360)
+
+
+def _enviar(notificacion):
+    if not notificacion.destinatario:
+        medico = notificacion.alerta.paciente.medico_responsable
+        if medico and medico.email:
+            notificacion.destinatario = medico.email
+            notificacion.save(update_fields=['destinatario'])
+        else:
+            raise DestinatarioNoConfigurado
+
+    asunto, cuerpo = _contenido_seguro(notificacion)
+    enviados = send_mail(
+        subject=asunto,
+        message=cuerpo,
+        from_email=None,
+        recipient_list=[notificacion.destinatario],
+        fail_silently=False,
+    )
+    if enviados != 1:
+        raise EntregaEmailNoConfirmada
+
+
+def procesar_notificaciones_pendientes(limite=50):
+    """Envía hasta ``limite`` filas vencidas y devuelve un resumen.
+
+    Cada envío mantiene bloqueada exclusivamente su fila. Si el proceso muere
+    durante la llamada externa, la transacción revierte y la fila sigue
+    pendiente. ``skip_locked`` evita duplicados si dos workers coinciden.
+    """
+    ahora = timezone.now()
+    candidatos = list(
+        NotificacionAlerta.objects.filter(
+            estado=NotificacionAlerta.ESTADO_PENDIENTE,
+            proximo_intento__lte=ahora,
+        )
+        .order_by('proximo_intento', 'pk')
+        .values_list('pk', flat=True)[:limite]
+    )
+
+    enviadas = 0
+    errores = 0
+    for notificacion_pk in candidatos:
+        with transaction.atomic():
+            notificacion = (
+                NotificacionAlerta.objects.select_for_update(skip_locked=True)
+                # medico_responsable es nullable. Incluirlo en select_related
+                # produciría un LEFT JOIN que PostgreSQL no permite bloquear
+                # con FOR UPDATE.
+                .select_related('alerta__paciente')
+                .filter(
+                    pk=notificacion_pk,
+                    estado=NotificacionAlerta.ESTADO_PENDIENTE,
+                    proximo_intento__lte=timezone.now(),
+                )
+                .first()
+            )
+            if notificacion is None:
+                continue
+
+            notificacion.intentos += 1
+            notificacion.fecha_ultimo_intento = timezone.now()
+            try:
+                _enviar(notificacion)
+            except Exception as exc:
+                errores += 1
+                notificacion.ultimo_error = type(exc).__name__[:100]
+                notificacion.proximo_intento = timezone.now() + timedelta(
+                    minutes=_minutos_reintento(notificacion.intentos)
+                )
+                notificacion.save(update_fields=[
+                    'intentos',
+                    'fecha_ultimo_intento',
+                    'ultimo_error',
+                    'proximo_intento',
+                ])
+            else:
+                enviadas += 1
+                notificacion.estado = NotificacionAlerta.ESTADO_ENVIADA
+                notificacion.fecha_envio = timezone.now()
+                notificacion.ultimo_error = ''
+                notificacion.save(update_fields=[
+                    'estado',
+                    'intentos',
+                    'fecha_ultimo_intento',
+                    'fecha_envio',
+                    'ultimo_error',
+                ])
+
+    return {
+        'candidatas': len(candidatos),
+        'enviadas': enviadas,
+        'errores': errores,
+    }

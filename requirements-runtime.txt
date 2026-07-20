@@ -1,12 +1,12 @@
-# Dependencias directas de runtime — instalar en producción (Railway usa este
-# archivo vía nixpacks.toml, NO requirements.txt, que es el pip freeze completo
-# de desarrollo con paquetes solo-Windows que romperían el build en Linux).
-Django==6.0.6
-psycopg2-binary>=2.9
-python-decouple>=3.8
-twilio>=9.10
+# Dependencias directas de runtime fijadas para builds reproducibles. El
+# Dockerfile instala este archivo; requirements.txt es el entorno de desarrollo
+# de Windows y no se usa en Railway.
+Django==6.0.7
+psycopg2-binary==2.9.12
+python-decouple==3.8
+twilio==9.10.9
 django-axes==7.0.1
-redis>=5
+redis==8.0.1
 # Servidor WSGI de producción y servidor de estáticos (despliegue, 04/07/2026)
-gunicorn>=23.0
-whitenoise>=6.7
+gunicorn==26.0.0
+whitenoise==6.12.0

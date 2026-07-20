@@ -20,6 +20,7 @@ A6: DEBUG hardcodeado a False — nunca True en producción.
 """
 from .settings import *  # noqa: F401, F403
 from decouple import config, Csv
+from django.utils.csp import CSP
 
 # A6: DEBUG=False siempre en producción. Stacktrace nunca llega al cliente.
 DEBUG = False
@@ -32,6 +33,7 @@ DEBUG = False
 MIDDLEWARE = [
     MIDDLEWARE[0],  # django.middleware.security.SecurityMiddleware
     'whitenoise.middleware.WhiteNoiseMiddleware',
+    'django.middleware.csp.ContentSecurityPolicyMiddleware',
     *MIDDLEWARE[1:],
 ]
 STORAGES = {
@@ -55,6 +57,22 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD     = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS         = 'DENY'
+
+# CSP de producción: los scripts solo pueden salir de nuestros estáticos.
+# El Admin y el tablero todavía usan algunos atributos style="...", por eso
+# style-src conserva unsafe-inline de forma acotada; script-src no lo permite.
+SECURE_CSP = {
+    'default-src': [CSP.SELF],
+    'script-src': [CSP.SELF],
+    'style-src': [CSP.SELF, CSP.UNSAFE_INLINE],
+    'img-src': [CSP.SELF, 'data:'],
+    'font-src': [CSP.SELF],
+    'connect-src': [CSP.SELF],
+    'object-src': [CSP.NONE],
+    'base-uri': [CSP.SELF],
+    'form-action': [CSP.SELF],
+    'frame-ancestors': [CSP.NONE],
+}
 
 # B1: CSRF origins explícitos (Twilio + dominio propio).
 # Ejemplo en .env de producción: CSRF_TRUSTED_ORIGINS=https://midominio.com
@@ -88,3 +106,5 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER)
+EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=10, cast=int)
+PANEL_MEDICO_URL = config('PANEL_MEDICO_URL', default='')

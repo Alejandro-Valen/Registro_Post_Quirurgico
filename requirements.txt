@@ -33,7 +33,7 @@ debugpy==1.8.13
 decorator==5.2.1
 defusedxml==0.7.1
 dill==0.4.0
-Django==6.0.6
+Django==6.0.7
 django-axes==7.0.1
 esptool==5.1.0
 et_xmlfile==2.0.0
