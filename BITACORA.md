@@ -2996,3 +2996,49 @@ web + cron en `SUCCESS`; HTTPS 200; sin errores de aplicación recientes y
 configurar `MEDICO_CONTACTO_USERNAME`; crear el cron de reintentos cada 5
 minutos y continuar el Loop 4 (dependencias, IP real, correo ALTA, CSP y
 Chart.js local). Los demos siguen asignados a `SeñorAL` hasta entonces.
+
+---
+
+## 19/07/2026 — Loop 4 desplegado y decisión temporal de cron Railway
+
+Se cerró el bloque de hardening de producción con tres commits de código:
+
+- `fc21e43`: Django 6.0.7 y dependencias directas fijadas; CSP; Chart.js 4.5.1
+  local; scripts del Admin extraídos del HTML; outbox transaccional
+  `NotificacionAlerta` (migración 0024), correo genérico sin PHI/PII, timeout y
+  reintentos con espera creciente fuera del webhook.
+- `b48d603`: `cron_operativo` para cierre de check-ins y procesamiento de la
+  bandeja; `cron_matutino` conserva un respaldo diario.
+- `7cb4380`: se agregó al cron operativo el reintento del motor de alertas, que
+  no debe esperar hasta la mañana siguiente.
+
+**Verificación local:** suite final completa, **267 tests OK**, incluidas las
+pruebas de `cron_operativo` y `cron_matutino`. `check --deploy`,
+`makemigrations --check --dry-run` y `git diff --check` limpios.
+
+**Despliegue Railway:** web, `cron-manana` y `cron-tarde` quedaron en `SUCCESS`
+sobre `7cb4380`. `check --deploy` remoto sin issues, Django 6.0.7, HTTPS 200,
+CSP activo, Chart.js local 200, `/admin/` 404 y la ruta privada del Admin 302 al
+login. El cron frecuente ejecutó en vivo a las 02:00 UTC las tres tareas en
+orden: cierre, reintento del motor y notificaciones. La outbox estaba vacía y
+los 2 pacientes demo seguían activos; el seed demo no genera correo.
+
+**Decisión temporal por límite del plan:** crear un servicio adicional
+`cron-notificaciones` falló con `Free plan resource provision limit exceeded`.
+Con autorización del Arquitecto, `cron-tarde` se reutilizó temporalmente para
+ejecutar `cron_operativo` cada 5 minutos. **Deuda documentada:** cuando se
+mejore el plan Railway, crear un servicio `cron-operativo` independiente y
+restaurar `cron-tarde` a `cerrar_checkins_vencidos` a las 23:00 UTC como
+respaldo idempotente. Esta reutilización no debe quedar como arquitectura final.
+
+**Pendientes que bloquean un piloto real, no las pruebas con demos:**
+
+1. La conexión acotada a `smtp.gmail.com:587` desde Railway volvió a fallar.
+   La outbox evita perder alertas y ya no bloquea WhatsApp, pero falta una API
+   HTTPS de correo (o salida SMTP compatible) y una entrega real verificada.
+2. `medico_piloto` existe como staff no-superuser con privilegio mínimo, pero
+   no tiene email configurado. Debe completarse y comprobarse antes de asignar
+   pacientes reales.
+3. Se conserva `REMOTE_ADDR` para no confiar en un `X-Forwarded-For`
+   spoofeable. Falta definir una fuente de IP verificable en Railway; el rate
+   limit actual puede agrupar clientes detrás del proxy.

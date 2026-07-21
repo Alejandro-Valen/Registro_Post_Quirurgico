@@ -5,8 +5,8 @@
 > fijas las decisiones, las variables de entorno exactas y el orden correcto,
 > para no depender de la memoria de nadie.
 >
-> Estado: repo **preparado para deploy** (04/07/2026). Falta ejecutar los pasos
-> de Railway (parte de infraestructura).
+> Estado: **desplegado en Railway**. Web, PostgreSQL, Redis y dos servicios
+> cron operativos verificados el 19/07/2026.
 
 ---
 
@@ -35,6 +35,14 @@
 2. **PostgreSQL** (plugin de Railway).
 3. **Redis** (plugin de Railway) — obligatorio: el cache compartido sostiene el
    rate limiting entre workers. La idempotencia del webhook vive en PostgreSQL.
+4. **`cron-manana`** — ejecuta `cron_matutino` una vez al día.
+5. **`cron-tarde`** — reutilizado temporalmente como `cron_operativo` cada
+   5 minutos por el límite de recursos del plan actual.
+
+**Mejora de infraestructura pendiente:** al ampliar el plan de Railway, crear
+un servicio `cron-operativo` independiente y devolver `cron-tarde` a su horario
+de las 6:00 PM Bogotá. Esta separación está documentada en
+`docs/cron_setup.md` y no debe olvidarse al habilitar más recursos.
 
 ---
 
@@ -58,6 +66,8 @@
 | `REDIS_URL` | Referencia al Redis de Railway: `${{Redis.REDIS_URL}}` |
 | `EMAIL_HOST_USER` | Cuenta Gmail del proyecto (Bloque 5) |
 | `EMAIL_HOST_PASSWORD` | **Contraseña de aplicación** de esa cuenta (16 caracteres, NUNCA la normal) |
+| `EMAIL_TIMEOUT` | `10` segundos. Impide esperas SMTP indefinidas. |
+| `PANEL_MEDICO_URL` | URL HTTPS completa de la ruta privada del Admin; se usa en el correo sin incluir datos del paciente. |
 | `ADMIN_URL` | *(recomendado)* slug no trivial con `/` final, ej. `gestion-clinica-x7k2/`. Cambia la URL del Admin para reducir ataques. Si se omite, queda `admin/`. |
 | `TWILIO_AUTH_TOKEN` | Auth Token **primario** de Twilio (no el de Test) |
 | `TWILIO_VALIDATE_SIGNATURE` | `True` (o omitir — el default ya es `True`) |
@@ -83,11 +93,10 @@
    grupo `Médicos`, crea las cuentas cuyas variables existan y levanta Gunicorn.
 5. Verificar el acceso de ambas cuentas y retirar de Railway las variables
    `*_USERNAME` y `*_PASSWORD` de bootstrap para que no se restablezcan.
-6. Configurar los **cron jobs** (ver `docs/cron_setup.md`): 5 comandos, con
-   `desactivar_pacientes_vencidos` **antes** de `crear_checkins_diarios`. En
-   Railway se hacen como servicios "Cron" separados que corren el mismo repo con
-   el comando correspondiente. `reintentar_evaluaciones_alertas` debe correr
-   cada 5 minutos; no procesa mensajes ni modifica los horarios clínicos.
+6. Configurar los **cron jobs** (ver `docs/cron_setup.md`). En el plan actual,
+   `cron-manana` ejecuta el orden clínico diario y `cron-tarde` ejecuta
+   temporalmente `cron_operativo` cada 5 minutos: cierre idempotente, reintento
+   del motor y entrega de la bandeja de correo.
 7. Actualizar el **webhook de Twilio** para que apunte a
    `https://<dominio-railway>/<ruta-del-webhook>` (recordar: Auth Token primario).
 
@@ -106,9 +115,17 @@
 - **`ALLOWED_HOSTS` mal escrito** → Django responde `400 Bad Request` a todo.
   El valor es el host sin esquema; la variable se llama `ALLOWED_HOSTS`.
 - **Rate limit / IP real** → pendiente de Sprint 3-Hardening: el proxy debe
-  pasar la IP real (`REMOTE_ADDR`). En Railway se resuelve con la cabecera de
-  proxy correcta; `settings.py` ya tiene `USE_X_FORWARDED_HOST` y
-  `SECURE_PROXY_SSL_HEADER`.
+  pasar una IP de cliente verificable a `REMOTE_ADDR`. No se adopta
+  `X-Forwarded-For` sin una garantía documentada del proxy porque es
+  spoofeable; hasta cerrar esa configuración, el rate limit puede agrupar
+  clientes detrás del proxy.
+- **Gmail SMTP inaccesible desde Railway** → el 19/07/2026 una conexión
+  acotada al puerto 587 falló. La bandeja persistente evita perder alertas y
+  desacopla el webhook, pero antes del piloto real hay que migrar a una API
+  HTTPS de correo o habilitar una salida SMTP compatible y probar una entrega.
+- **Límite de recursos del plan** → crear un tercer cron fue rechazado por
+  Railway. `cron-tarde` está reutilizado cada 5 minutos solo hasta mejorar el
+  plan y separar `cron-operativo`.
 - **Antes del primer paciente real:** completar los `[corchetes]` de
   `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` y hacer la prueba manual del bot
   por WhatsApp (tono MEDIA/ALTA y flujo de consentimiento).

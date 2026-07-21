@@ -5,7 +5,7 @@
 > el destino de despliegue es Railway o Render (ambos Linux), no la
 > máquina de Alejandro. Ver ROADMAP_MONITOREO_POSQUIRURGICO.md, FASE 5.
 
-## Los 5 management commands que deben programarse
+## Los 6 management commands que deben programarse
 
 | Command | Qué hace | Hora local (Bogotá) |
 |---------|----------|----------------------|
@@ -14,6 +14,7 @@
 | `enviar_recordatorios` | Envía el recordatorio matutino de WhatsApp (stub hasta integrar Twilio saliente) | 7:00 AM |
 | `cerrar_checkins_vencidos` | Cierra check-ins PENDIENTE vencidos (10h de gracia) → NO_RESPONDIDO + alerta SILENCIO | 6:00 AM y 6:00 PM |
 | `reintentar_evaluaciones_alertas` | Recupera registros cuya evaluación clínica quedó pendiente o falló | Cada 5 minutos |
+| `procesar_notificaciones_email` | Procesa la bandeja persistente de alertas ALTA y conserva los fallos para reintento | Cada 5 minutos |
 
 **Orden obligatorio a las 5:55-6:00 AM:** `desactivar_pacientes_vencidos`
 **siempre antes** de `crear_checkins_diarios`. Si se invierte el orden, un
@@ -33,6 +34,12 @@ mañana.
 al paciente. Procesa como máximo 100 registros por corrida, bloquea cada fila
 y continúa con las demás si una evaluación vuelve a fallar. El cron matutino
 también lo ejecuta como respaldo, pero no reemplaza la corrida frecuente.
+
+`procesar_notificaciones_email` tampoco corre dentro del webhook. Consume la
+bandeja `NotificacionAlerta`, limita cada corrida a 50 candidatas y aplica
+reintentos con espera creciente. El comando `cron_operativo` agrupa, en este
+orden, `cerrar_checkins_vencidos`, `reintentar_evaluaciones_alertas` y
+`procesar_notificaciones_email` para plataformas con pocos servicios.
 
 ## Crontab (producción Linux — Railway/Render con worker o VPS)
 
@@ -60,6 +67,9 @@ SHELL=/bin/bash
 
 # Recuperar evaluaciones de alertas pendientes o fallidas
 */5 * * * * cd /app && python manage.py reintentar_evaluaciones_alertas >> /var/log/monitoreo/reintentos-alertas.log 2>&1
+
+# Entregar correos pendientes sin bloquear el webhook
+*/5 * * * * cd /app && python manage.py procesar_notificaciones_email >> /var/log/monitoreo/notificaciones.log 2>&1
 ```
 
 **`MAILTO`:** con esta línea al inicio del crontab, cualquier error en la
@@ -74,15 +84,21 @@ Por eso `desactivar_pacientes_vencidos` va 5 minutos antes (10:55 UTC),
 no en el mismo minuto — así se garantiza que termina antes de que
 empiece `crear_checkins_diarios`.
 
-## Si se migra a Railway con su servicio nativo de Cron Jobs
+## Configuración actual en Railway
 
-Railway permite declarar cron jobs como su propio tipo de servicio (sin
-necesidad de un crontab de sistema operativo dentro del contenedor). La
-lógica es la misma: un servicio de Cron Job por cada línea de la tabla de
-arriba, con el mismo comando (`python manage.py <command>`) y la misma
-expresión cron (en UTC). Ventaja: Railway reintenta automáticamente si el
-comando falla, sin depender de `MAILTO`/crontab tradicional — evaluar si
-esto reemplaza o complementa el `MAILTO` de arriba al momento del deploy.
+Desde el 19/07/2026 hay dos servicios cron:
+
+- `cron-manana`: `cron_matutino`, a las `0 11 * * *` UTC.
+- `cron-tarde`: **reutilizado temporalmente** con `cron_operativo`, cada
+  `*/5 * * * *`.
+
+Esta reutilización fue necesaria porque Railway rechazó un servicio adicional
+con `Free plan resource provision limit exceeded`. No es la arquitectura final:
+al mejorar el plan de Railway se debe crear un servicio independiente
+`cron-operativo` cada 5 minutos y restaurar `cron-tarde` a
+`cerrar_checkins_vencidos` a las `0 23 * * *` UTC como respaldo idempotente.
+Así el ciclo operativo frecuente no depende de un servicio cuyo nombre y
+responsabilidad original eran el cierre de la tarde.
 
 ## Verificación post-despliegue (primer día en producción)
 
@@ -92,8 +108,10 @@ esto reemplaza o complementa el `MAILTO` de arriba al momento del deploy.
 - [ ] `enviar_recordatorios` corrió sin error (aunque el envío real de
   WhatsApp saliente siga en stub — ver Sprint 5, tareas diferidas)
 - [ ] `cerrar_checkins_vencidos` corrió en sus dos horarios sin error
-- [ ] `reintentar_evaluaciones_alertas` corre cada 5 minutos y deja en cero
-  los registros PENDIENTE/ERROR tras una prueba de recuperación
+- [x] `cron_operativo` corre cada 5 minutos y ejecuta cierre, reintento del
+  motor y bandeja de notificaciones en ese orden
+- [ ] Una alerta ALTA ficticia crea una notificación y el proveedor de correo
+  la entrega; Gmail SMTP sigue inaccesible desde Railway
 - [ ] Un fallo forzado (ej. detener la BD un momento) efectivamente
   genera un email a `MAILTO`
 
@@ -101,5 +119,7 @@ esto reemplaza o complementa el `MAILTO` de arriba al momento del deploy.
 
 - Migración a Celery beat si el volumen supera lo razonable para el cron
   frecuente — la lógica ya está encapsulada en los management commands.
+- Mejorar el plan de Railway y separar `cron-operativo` de `cron-tarde`, como
+  se describe arriba. La reutilización actual es una medida temporal.
 - Integración real de Twilio saliente en `enviar_recordatorios` (hoy es
   un stub que solo loguea).

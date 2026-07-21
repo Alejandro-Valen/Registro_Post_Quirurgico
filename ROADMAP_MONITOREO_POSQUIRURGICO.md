@@ -16,7 +16,7 @@ exclusivamente por WhatsApp. Un bot le hace preguntas diarias de telemetría. El
 sistema clasifica los datos, detecta alertas rojas automáticas y notifica al
 médico a través de un dashboard en Django Admin.
 
-**Stack:** Django 6.0.5 + PostgreSQL 18 + WhatsApp Bot (Twilio) + Python 3.13
+**Stack:** Django 6.0.7 + PostgreSQL 18 + WhatsApp Bot (Twilio) + Python 3.13
 **OS de desarrollo:** Windows 11
 **Ruta del proyecto en máquina de León:**
 `C:\Users\león\Documents\ProyectoLeonAlejo\Registro_Post_Quirurgico`
@@ -885,8 +885,14 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   como índice (sin forkear el admin; se conservan listas/filtros/gráficas)
 - [x] Agrupación de alertas por problema: una alerta abierta por (paciente,tipo)
   con contador `veces` (badge ×N); correo ALTA solo al escalar (migración 0018)
-- [ ] Correo de alerta ALTA en producción — SMTP saliente bloqueado en Railway
-  (migrar a API HTTP de correo o habilitar SMTP; enviar con timeout/no bloqueante)
+- [x] **Loop 4 — entrega durable de alertas ALTA:** outbox
+  `NotificacionAlerta`, timeout, reintentos crecientes y procesamiento fuera
+  del webhook. Correo genérico sin datos del paciente (migración 0024).
+- [ ] **Canal real de correo en Railway:** el puerto SMTP 587 continúa
+  inaccesible. Migrar a API HTTPS o habilitar una salida compatible, configurar
+  el email del médico y verificar una entrega real antes del piloto.
+- [x] **Loop 4 — hardening web/dependencias:** Django 6.0.7, dependencias
+  directas fijadas y auditadas, CSP activo y Chart.js 4.5.1 servido localmente.
 - [x] Comando idempotente `crear_medico` + grupo "Médicos" de privilegio mínimo
 - [x] **Hardening Loop 2 — confiabilidad del webhook y alertas:** recibo
   persistente por `MessageSid` en PostgreSQL (sin teléfono ni Body), reintento
@@ -919,8 +925,11 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   `signos_sintomas.0023` + `home.0002`, web y dos cron en `SUCCESS`, HTTPS 200
   y `check --deploy` limpio. Demos remotos renovados (2 activos, 10 alertas
   abiertas, 36 detecciones). `SECRET_KEY` remoto rotado (19/07/2026).
-- [ ] Crear y verificar en Railway el servicio cron frecuente
-  `reintentar_evaluaciones_alertas` (`*/5 * * * *`) después del merge/deploy.
+- [x] Cron frecuente verificado en Railway (`*/5 * * * *`):
+  `cron_operativo` ejecuta cierre idempotente, reintento del motor y bandeja de
+  notificaciones. Temporalmente reutiliza `cron-tarde` por el límite del plan.
+- [ ] Al mejorar el plan de Railway, crear un servicio `cron-operativo`
+  independiente y restaurar `cron-tarde` a su horario original de las 6 PM.
 - [ ] Provisionar y verificar en Railway la cuenta real del médico
 - [ ] Entrega final al equipo médico
 
@@ -938,18 +947,16 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
 > "pacientes reales". Ninguno bloquea seguir probando el sistema con el Sandbox.
 
 **Infraestructura / operación (con costo):**
-- [ ] **Plan de pago en Railway.** Railway cobra por uso mensual (web + Postgres
-  + Redis 24/7). Sin plan/pago activo, el servicio se suspende y el bot deja de
-  responder.
-- [x] **Bloque 6 — Cron jobs base en Railway (08/07/2026): HECHO.** Dos servicios
-  cron funcionando: **`cron-manana`** (`0 11 * * *` UTC = 6 AM Bogotá) corre el
-  comando único `cron_matutino` (las tareas matutinas en orden), y
-  **`cron-tarde`** (`0 23 * * *` UTC = 6 PM Bogotá) corre
-  `cerrar_checkins_vencidos`. Se creó `cron_matutino` porque encadenar con `&&`
-  en el Custom Start Command de Railway solo corría el primer comando. Ambos
-  verificados en vivo. Detalle en BITACORA 08/07/2026.
-- [ ] **Cron de recuperación Loop 2:** crear en Railway un tercer servicio que
-  ejecute `python manage.py reintentar_evaluaciones_alertas` cada 5 minutos.
+- [ ] **Plan de pago en Railway.** Además de sostener web + Postgres + Redis,
+  debe permitir separar el cron operativo frecuente. El plan actual rechazó
+  un tercer cron por límite de recursos.
+- [x] **Cron jobs en Railway:** `cron-manana` (`0 11 * * *` UTC) ejecuta
+  `cron_matutino`; `cron-tarde` está reutilizado temporalmente cada 5 minutos
+  para `cron_operativo` (cierre + reintento + notificaciones). Verificado en
+  vivo el 19/07/2026.
+- [ ] **Después del upgrade del plan:** crear `cron-operativo` como servicio
+  dedicado cada 5 minutos y devolver `cron-tarde` a `0 23 * * *` UTC como
+  respaldo de cierre.
 
 **Canal de WhatsApp (con costo y aprobación):**
 - [ ] **Pasar del Sandbox de Twilio a la API de WhatsApp Business.** El Sandbox
