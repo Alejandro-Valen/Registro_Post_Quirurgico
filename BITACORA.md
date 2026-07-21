@@ -3073,8 +3073,17 @@ afectado. Commit `5d6b379` desplegado con web y ambos cron en `SUCCESS`.
 Smoke interno: inicio 200, `/admin/` 404, Admin privado 302 al login, CSP/HSTS/
 nosniff presentes y confianza Railway activa.
 
-**Pendiente exacto:** crear la API key de Resend con la cuenta del proyecto,
-cargar `EMAIL_DELIVERY_PROVIDER=resend`, `RESEND_API_KEY` y
-`RESEND_FROM_EMAIL` en el servicio web, ejecutar un aviso ficticio controlado y
-confirmar su recepción en Gmail. Solo entonces marcar el canal real y el Loop 4
-como cerrados.
+**Cierre funcional del Loop 4:** se cargaron en Railway
+`EMAIL_DELIVERY_PROVIDER=resend`, la API key sellada y el remitente de prueba.
+El contenedor confirmó proveedor activo, destinatario correcto, cero pendientes
+y cero pacientes no-demo. Se creó exactamente una notificación sobre la alerta
+ALTA demo #90: Resend devolvió confirmación, la outbox quedó `ENVIADA` en un
+intento y sin error. El Arquitecto encontró el correo en spam y verificó que el
+cuerpo solo contiene severidad general, referencia opaca y enlace al panel.
+
+El formato SMTP antiguo con nombre del paciente, tipo y detalle clínico no se
+restaura: fue sustituido deliberadamente durante el hardening para mantener PHI/
+PII dentro del panel autenticado. La llegada a spam se atribuye al remitente de
+pruebas `onboarding@resend.dev`; se registra como requisito del piloto verificar
+un dominio propio con SPF/DKIM/DMARC. **Loop 4 cerrado. Siguiente: Loop 5 de
+validación (concurrencia, permisos, fallo del motor, carga y WhatsApp completo).**

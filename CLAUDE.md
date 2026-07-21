@@ -419,7 +419,7 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B y **Loops 1-4 desplegados en Railway**. Django 6.0.7, CSP, Chart.js local, outbox de notificaciones, Resend por HTTPS y cron operativo cada 5 minutos; **274 tests OK**. Railway ejecuta `5d6b379` con migraciones hasta `signos_sintomas.0024` y `home.0002`. Cuenta `medico_piloto` e IP real tras el proxy verificadas; falta cargar la clave Resend y comprobar una entrega real antes de cerrar el Loop 4. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B y **Loops 1-4 cerrados y desplegados en Railway**. Django 6.0.7, CSP, Chart.js local, outbox con Resend por HTTPS y cron operativo cada 5 minutos; **274 tests OK**. Railway ejecuta `283319b` con migraciones hasta `signos_sintomas.0024` y `home.0002`. Cuenta `medico_piloto`, IP tras proxy y entrega real de correo verificadas. Rama `sprint-5-produccion` |
 
 **Punto actual (21/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
 desplegada en Railway y el cron base funcionando. Quedaron cerrados, validados
@@ -480,24 +480,24 @@ médica** (**256 tests OK**). URL:
   solo ID opaco y enlace al panel, sin nombre, teléfono, cédula, síntomas ni
   mensaje clínico. Reintentos con timeout y espera creciente. Resend quedó
   integrado por API HTTPS con clave idempotente por alerta y validación de
-  respuesta; sigue inactivo hasta cargar sus credenciales y hacer la prueba real.
+  respuesta. Quedó activo y entregó el aviso controlado de la alerta demo #90
+  a `seguimientolionalejo@gmail.com`; el Arquitecto lo confirmó en spam.
 - **IP tras Railway:** el rate limit del formulario usa `X-Real-IP` solo con
   `TRUST_RAILWAY_PROXY=True`, marca `X-Railway-Edge` válida e IP bien formada;
   en cualquier otro caso conserva `REMOTE_ADDR`. No confía en
   `X-Forwarded-For`.
 - **Estado Railway (21/07/2026):** web y ambos cron en `SUCCESS` sobre
-  `5d6b379`; HTTPS 200, `/admin/` devuelve 404, la ruta privada redirige al
+  `283319b`; HTTPS 200, `/admin/` devuelve 404, la ruta privada redirige al
   login, CSP presente y Chart.js local responde 200. `check --deploy` remoto
   quedó sin issues. `cron-tarde` fue reutilizado temporalmente como
   `cron_operativo` cada 5 minutos por el límite del plan; ejecutó en vivo
   cierre, reintento del motor y bandeja de correo. La cuenta `medico_piloto`
   fue probada por el Arquitecto, conserva `staff=True`, `superuser=False`, dos
   demos asignados y el correo `seguimientolionalejo@gmail.com`.
-**Próximo paso exacto (al retomar):** crear la API key con la cuenta Resend
-del proyecto, cargar `EMAIL_DELIVERY_PROVIDER=resend`, `RESEND_API_KEY` y
-`RESEND_FROM_EMAIL` en el servicio web y verificar una entrega real al correo
-de `medico_piloto`. Luego ejecutar el smoke real de SID duplicado + check-in
-completo. Al mejorar
+**Próximo paso exacto (al retomar):** iniciar el **Loop 5 de validación**:
+inventariar la cobertura ya existente de concurrencia/permisos/fallo del motor,
+ejecutar la prueba de carga y cerrar un flujo WhatsApp completo con datos
+ficticios, incluido SID duplicado. Al mejorar
 el plan Railway, crear `cron-operativo` como servicio separado y restaurar
 `cron-tarde` a su horario original. Después: **datos reales del médico** (reemplazar
 `[corchetes]`, subir logo/colores, `MOSTRAR_AVISO_BOCETO=False`) y los
@@ -591,26 +591,23 @@ la IP remota y `X-Railway-Edge` como marca agregada por su edge. El código solo
 las usa con confianza explícita, formato de edge válido e IP validada; de lo
 contrario vuelve a `REMOTE_ADDR`. `X-Forwarded-For` continúa descartado.
 
-**Por resolver (al 10/07/2026) — lista consolidada de lo pendiente:**
-1. **[CRÍTICO PARA PILOTO] Falta verificar el canal real del correo ALTA.**
-   El Loop 4 ya eliminó el bloqueo del webhook: cada evento queda en una outbox
-   persistente y se reintenta por cron con `EMAIL_TIMEOUT=10`. Sin embargo, la
-   prueba de conectividad del 19/07 confirmó que Railway no abre
-   `smtp.gmail.com:587`. Resend por HTTPS ya está implementado y el correo de
-   `medico_piloto` ya está configurado. Falta cargar la API key/remitente en
-   Railway y comprobar que un aviso ficticio llegue realmente.
-2. **Datos reales del médico en la landing (P-12):** reemplazar los
+**Canal de correo resuelto (21/07/2026):** Resend aceptó y entregó un aviso
+real sin PHI/PII. Llegó a spam por usar el dominio de prueba
+`onboarding@resend.dev`; antes del piloto se requiere dominio propio autenticado.
+
+**Por resolver (actualizado 21/07/2026) — lista consolidada:**
+1. **Datos reales del médico en la landing (P-12):** reemplazar los
    `[corchetes]`, subir logo/colores propios, y poner
    `MOSTRAR_AVISO_BOCETO = False` en `home/views.py`.
-3. **Cuenta del médico definitivo:** `medico_piloto` ya fue creada, probada y
+2. **Cuenta del médico definitivo:** `medico_piloto` ya fue creada, probada y
    limitada correctamente. Antes de pacientes reales se debe decidir si esa
    cuenta se transfiere al médico o se crea la definitiva con el mismo comando
    y se reasignan los pacientes.
-4. **Requisitos del piloto real** (ver ROADMAP, "Requisitos para un PILOTO REAL
+3. **Requisitos del piloto real** (ver ROADMAP, "Requisitos para un PILOTO REAL
    con pacientes"): plan de pago Railway, salir del Sandbox de Twilio a
    **WhatsApp Business API**, completar los corchetes de
    `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md`, y prueba real por WhatsApp.
-5. **`enviar_recordatorios` sigue stub** (Twilio saliente real): hoy el sistema
+4. **`enviar_recordatorios` sigue stub** (Twilio saliente real): hoy el sistema
    es reactivo (responde cuando el paciente escribe); el envío matutino
    automático real está pendiente.
 

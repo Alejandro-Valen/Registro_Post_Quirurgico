@@ -119,9 +119,9 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 - **Rate limit / IP real** → resuelto con `X-Real-IP` documentado por Railway,
   confianza explícita y validación conjunta de `X-Railway-Edge`. No usar
   `X-Forwarded-For`.
-- **Gmail SMTP inaccesible desde Railway** → Resend por HTTPS está
-  implementado. Antes del piloto real hay que cargar sus credenciales y
-  comprobar una entrega; no marcar una fila como enviada sin ID del proveedor.
+- **Gmail SMTP inaccesible desde Railway** → Resend por HTTPS quedó activo y
+  entregó la prueba del 21/07/2026. El dominio de onboarding llegó a spam;
+  antes del piloto real verificar un dominio propio con SPF/DKIM/DMARC.
 - **Límite de recursos del plan** → crear un tercer cron fue rechazado por
   Railway. `cron-tarde` está reutilizado cada 5 minutos solo hasta mejorar el
   plan y separar `cron-operativo`.

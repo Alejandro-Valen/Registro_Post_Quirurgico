@@ -889,9 +889,9 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
 - [x] **Loop 4 — entrega durable de alertas ALTA:** outbox
   `NotificacionAlerta`, timeout, reintentos crecientes y procesamiento fuera
   del webhook. Correo genérico sin datos del paciente (migración 0024).
-- [ ] **Canal real de correo en Railway:** Resend por API HTTPS ya está
-  implementado con idempotencia y el email de `medico_piloto` configurado.
-  Falta cargar la API key/remitente en Railway y verificar una entrega real.
+- [x] **Canal real de correo en Railway:** Resend por API HTTPS activo con
+  idempotencia. El aviso controlado de la alerta demo #90 fue aceptado y
+  recibido en `seguimientolionalejo@gmail.com` el 21/07/2026.
 - [x] **Loop 4 — hardening web/dependencias:** Django 6.0.7, dependencias
   directas fijadas y auditadas, CSP activo y Chart.js 4.5.1 servido localmente.
 - [x] Comando idempotente `crear_medico` + grupo "Médicos" de privilegio mínimo
@@ -949,6 +949,9 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
 > "pacientes reales". Ninguno bloquea seguir probando el sistema con el Sandbox.
 
 **Infraestructura / operación (con costo):**
+- [ ] **Dominio propio para correo:** verificarlo en Resend y configurar
+  SPF/DKIM/DMARC antes del piloto. La entrega con `onboarding@resend.dev`
+  funciona, pero la prueba del 21/07/2026 llegó a spam.
 - [ ] **Plan de pago en Railway.** Además de sostener web + Postgres + Redis,
   debe permitir separar el cron operativo frecuente. El plan actual rechazó
   un tercer cron por límite de recursos.

@@ -110,8 +110,8 @@ responsabilidad original eran el cierre de la tarde.
 - [ ] `cerrar_checkins_vencidos` corrió en sus dos horarios sin error
 - [x] `cron_operativo` corre cada 5 minutos y ejecuta cierre, reintento del
   motor y bandeja de notificaciones en ese orden
-- [ ] Una alerta ALTA ficticia crea una notificación y el proveedor de correo
-  la entrega; Gmail SMTP sigue inaccesible desde Railway
+- [x] Una alerta ALTA ficticia crea una notificación y Resend la entrega
+  (alerta demo #90, 21/07/2026; recibida en spam por usar dominio de prueba)
 - [ ] Un fallo forzado (ej. detener la BD un momento) efectivamente
   genera un email a `MAILTO`
 
