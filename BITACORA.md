@@ -3042,3 +3042,39 @@ respaldo idempotente. Esta reutilización no debe quedar como arquitectura final
 3. Se conserva `REMOTE_ADDR` para no confiar en un `X-Forwarded-For`
    spoofeable. Falta definir una fuente de IP verificable en Railway; el rate
    limit actual puede agrupar clientes detrás del proxy.
+
+---
+
+## 21/07/2026 — Loop 4: IP real y canal HTTPS preparados
+
+**Estado:** código y despliegue validados; pendiente una credencial externa y
+la recepción de un correo real para declarar cerrado el Loop 4.
+
+- El Arquitecto ingresó con `medico_piloto`. En producción se verificó que la
+  cuenta está activa, es staff no-superuser y solo tiene los dos demos
+  asignados. Se configuró `seguimientolionalejo@gmail.com` como destinatario.
+- Railway documenta `X-Real-IP` como IP remota y agrega `X-Railway-Edge` a cada
+  solicitud. El formulario de contacto usa esa IP solo con
+  `TRUST_RAILWAY_PROXY=True`, edge de formato válido e IP parseable; conserva
+  `REMOTE_ADDR` como fallback y nunca usa `X-Forwarded-For`.
+- Se integró Resend por HTTPS al outbox. Cada alerta usa una clave idempotente,
+  exige ID de respuesta para confirmar entrega y conserva pendiente/reintento
+  ante timeout, error, proveedor inválido o credencial ausente. El payload
+  continúa sin nombre, teléfono, cédula, síntomas ni mensaje clínico.
+- `requests==2.32.5` quedó como dependencia directa de runtime. La configuración
+  de producción solo exige secretos SMTP cuando el proveedor es `django`.
+
+**Verificación:** 273 pruebas completas pasaron y, tras el último caso de
+header malformado, las 17 pruebas enfocadas también pasaron (**274 casos
+vigentes**). `check --deploy` en modo Resend: 0 issues. El entorno de desarrollo
+mantiene un conflicto no-runtime entre el `httpx` antiguo de `googletrans` y
+Jupyter/Hugging Face; Railway instala el archivo runtime separado y no está
+afectado. Commit `5d6b379` desplegado con web y ambos cron en `SUCCESS`.
+Smoke interno: inicio 200, `/admin/` 404, Admin privado 302 al login, CSP/HSTS/
+nosniff presentes y confianza Railway activa.
+
+**Pendiente exacto:** crear la API key de Resend con la cuenta del proyecto,
+cargar `EMAIL_DELIVERY_PROVIDER=resend`, `RESEND_API_KEY` y
+`RESEND_FROM_EMAIL` en el servicio web, ejecutar un aviso ficticio controlado y
+confirmar su recepción en Gmail. Solo entonces marcar el canal real y el Loop 4
+como cerrados.

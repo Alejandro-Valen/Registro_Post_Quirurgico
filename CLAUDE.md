@@ -419,9 +419,9 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B y **Loops 1-4 desplegados en Railway**. Django 6.0.7, CSP, Chart.js local, outbox de notificaciones y cron operativo cada 5 minutos; **267 tests OK**. Railway ejecuta `7cb4380` con migraciones hasta `signos_sintomas.0024` y `home.0002`. Faltan proveedor real de correo, email/acceso final del médico, IP verificable tras proxy y requisitos del piloto. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B y **Loops 1-4 desplegados en Railway**. Django 6.0.7, CSP, Chart.js local, outbox de notificaciones, Resend por HTTPS y cron operativo cada 5 minutos; **274 tests OK**. Railway ejecuta `5d6b379` con migraciones hasta `signos_sintomas.0024` y `home.0002`. Cuenta `medico_piloto` e IP real tras el proxy verificadas; falta cargar la clave Resend y comprobar una entrega real antes de cerrar el Loop 4. Rama `sprint-5-produccion` |
 
-**Punto actual (19/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
+**Punto actual (21/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
 desplegada en Railway y el cron base funcionando. Quedaron cerrados, validados
 y desplegados el **Loop 1 de integridad clínica/permisos**, el **Loop 2 de
 confiabilidad del webhook y entrega de alertas** y el **Loop 3 de experiencia
@@ -474,22 +474,30 @@ médica** (**256 tests OK**). URL:
   `--limpiar --confirmar`. Crea 2 pacientes de ejemplo con registros y alertas.
   En Railway se renovaron el 19/07: 2 activos, 18 registros, 10 alertas abiertas
   agrupadas y 36 detecciones, asignados temporalmente al superusuario `SeñorAL`.
-- **Loop 4 de producción (19/07/2026):** Django y dependencias directas fijadas,
+- **Loop 4 de producción (21/07/2026):** Django y dependencias directas fijadas,
   CSP activo, Chart.js 4.5.1 servido localmente y correo ALTA desacoplado del
   webhook mediante `NotificacionAlerta` (migración 0024). El correo es genérico:
   solo ID opaco y enlace al panel, sin nombre, teléfono, cédula, síntomas ni
-  mensaje clínico. Reintentos con timeout y espera creciente.
-- **Estado Railway (19/07/2026):** web y ambos cron en `SUCCESS` sobre
-  `7cb4380`; HTTPS 200, `/admin/` devuelve 404, la ruta privada redirige al
+  mensaje clínico. Reintentos con timeout y espera creciente. Resend quedó
+  integrado por API HTTPS con clave idempotente por alerta y validación de
+  respuesta; sigue inactivo hasta cargar sus credenciales y hacer la prueba real.
+- **IP tras Railway:** el rate limit del formulario usa `X-Real-IP` solo con
+  `TRUST_RAILWAY_PROXY=True`, marca `X-Railway-Edge` válida e IP bien formada;
+  en cualquier otro caso conserva `REMOTE_ADDR`. No confía en
+  `X-Forwarded-For`.
+- **Estado Railway (21/07/2026):** web y ambos cron en `SUCCESS` sobre
+  `5d6b379`; HTTPS 200, `/admin/` devuelve 404, la ruta privada redirige al
   login, CSP presente y Chart.js local responde 200. `check --deploy` remoto
   quedó sin issues. `cron-tarde` fue reutilizado temporalmente como
   `cron_operativo` cada 5 minutos por el límite del plan; ejecutó en vivo
   cierre, reintento del motor y bandeja de correo. La cuenta `medico_piloto`
-  existe como staff no-superuser, pero aún no tiene email configurado.
-**Próximo paso exacto (al retomar):** configurar y verificar el correo de
-`medico_piloto`, sustituir Gmail SMTP por una API HTTPS de correo (el puerto
-587 sigue inaccesible desde Railway) y cerrar la IP verificable tras el proxy.
-Luego ejecutar el smoke real de SID duplicado + check-in completo. Al mejorar
+  fue probada por el Arquitecto, conserva `staff=True`, `superuser=False`, dos
+  demos asignados y el correo `seguimientolionalejo@gmail.com`.
+**Próximo paso exacto (al retomar):** crear la API key con la cuenta Resend
+del proyecto, cargar `EMAIL_DELIVERY_PROVIDER=resend`, `RESEND_API_KEY` y
+`RESEND_FROM_EMAIL` en el servicio web y verificar una entrega real al correo
+de `medico_piloto`. Luego ejecutar el smoke real de SID duplicado + check-in
+completo. Al mejorar
 el plan Railway, crear `cron-operativo` como servicio separado y restaurar
 `cron-tarde` a su horario original. Después: **datos reales del médico** (reemplazar
 `[corchetes]`, subir logo/colores, `MOSTRAR_AVISO_BOCETO=False`) y los
@@ -578,28 +586,26 @@ Test Credentials; usar el de Test causa `403`. Para ngrok free, `ALLOWED_HOSTS`
 usa el comodín `.ngrok-free.dev` (el subdominio cambia en cada reinicio). Detalle
 completo en BITACORA.md.
 
-**Pendiente de producción:** Railway no documenta una garantía suficiente para
-confiar ciegamente en `X-Forwarded-For`; el código conserva `REMOTE_ADDR` para
-evitar spoofing. Falta definir una fuente de IP verificable en la
-infraestructura. Hasta entonces, el rate limit puede agrupar clientes detrás
-del proxy, aunque no acepta una IP arbitraria enviada por el atacante.
+**IP de producción resuelta (21/07/2026):** Railway documenta `X-Real-IP` como
+la IP remota y `X-Railway-Edge` como marca agregada por su edge. El código solo
+las usa con confianza explícita, formato de edge válido e IP validada; de lo
+contrario vuelve a `REMOTE_ADDR`. `X-Forwarded-For` continúa descartado.
 
 **Por resolver (al 10/07/2026) — lista consolidada de lo pendiente:**
-1. **[CRÍTICO PARA PILOTO] Falta el canal de entrega real del correo ALTA.**
+1. **[CRÍTICO PARA PILOTO] Falta verificar el canal real del correo ALTA.**
    El Loop 4 ya eliminó el bloqueo del webhook: cada evento queda en una outbox
    persistente y se reintenta por cron con `EMAIL_TIMEOUT=10`. Sin embargo, la
    prueba de conectividad del 19/07 confirmó que Railway no abre
-   `smtp.gmail.com:587`. Migrar a una **API HTTPS de correo** (Resend / SendGrid /
-   Mailgun) o habilitar una salida compatible y probar una entrega real. También
-   configurar el email de `medico_piloto`, hoy vacío.
+   `smtp.gmail.com:587`. Resend por HTTPS ya está implementado y el correo de
+   `medico_piloto` ya está configurado. Falta cargar la API key/remitente en
+   Railway y comprobar que un aviso ficticio llegue realmente.
 2. **Datos reales del médico en la landing (P-12):** reemplazar los
    `[corchetes]`, subir logo/colores propios, y poner
    `MOSTRAR_AVISO_BOCETO = False` en `home/views.py`.
-3. **Cuenta real del médico:** el comando idempotente `crear_medico` y el grupo
-   de privilegio mínimo ya están implementados. Falta cargar temporalmente
-   `DJANGO_MEDICO_*` en Railway, verificar el acceso y asignarle sus pacientes
-   (`medico_responsable`). Registros/check-ins son de solo lectura; alertas se
-   resuelven únicamente mediante la acción con motivo.
+3. **Cuenta del médico definitivo:** `medico_piloto` ya fue creada, probada y
+   limitada correctamente. Antes de pacientes reales se debe decidir si esa
+   cuenta se transfiere al médico o se crea la definitiva con el mismo comando
+   y se reasignan los pacientes.
 4. **Requisitos del piloto real** (ver ROADMAP, "Requisitos para un PILOTO REAL
    con pacientes"): plan de pago Railway, salir del Sandbox de Twilio a
    **WhatsApp Business API**, completar los corchetes de

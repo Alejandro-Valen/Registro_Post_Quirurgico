@@ -872,8 +872,9 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   (inmutables). Nada que limpiar; sin cambios de código.
 - [ ] Configurar monitoreo externo básico (ping al servidor cada 5 min)
   para detectar caídas totales independientemente del cron
-- [ ] Nginx: `proxy_set_header REMOTE_ADDR $remote_addr;` para que el
-  rate limit funcione correctamente con la IP real del cliente
+- [x] IP real para rate limit en Railway: `X-Real-IP` solo se acepta con
+  `TRUST_RAILWAY_PROXY=True`, una marca `X-Railway-Edge` válida y una IP bien
+  formada; `X-Forwarded-For` se descarta por ser spoofeable.
 - [x] Landing page de presentación del médico (P-12) — hecha en la app `home`
   (Django, no estática): `/` como landing del médico + sistema de diseño
   compartido (`base.html` + `static/home/css/site.css`); contenido en
@@ -888,9 +889,9 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
 - [x] **Loop 4 — entrega durable de alertas ALTA:** outbox
   `NotificacionAlerta`, timeout, reintentos crecientes y procesamiento fuera
   del webhook. Correo genérico sin datos del paciente (migración 0024).
-- [ ] **Canal real de correo en Railway:** el puerto SMTP 587 continúa
-  inaccesible. Migrar a API HTTPS o habilitar una salida compatible, configurar
-  el email del médico y verificar una entrega real antes del piloto.
+- [ ] **Canal real de correo en Railway:** Resend por API HTTPS ya está
+  implementado con idempotencia y el email de `medico_piloto` configurado.
+  Falta cargar la API key/remitente en Railway y verificar una entrega real.
 - [x] **Loop 4 — hardening web/dependencias:** Django 6.0.7, dependencias
   directas fijadas y auditadas, CSP activo y Chart.js 4.5.1 servido localmente.
 - [x] Comando idempotente `crear_medico` + grupo "Médicos" de privilegio mínimo
@@ -930,7 +931,8 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   notificaciones. Temporalmente reutiliza `cron-tarde` por el límite del plan.
 - [ ] Al mejorar el plan de Railway, crear un servicio `cron-operativo`
   independiente y restaurar `cron-tarde` a su horario original de las 6 PM.
-- [ ] Provisionar y verificar en Railway la cuenta real del médico
+- [x] Provisionar y verificar en Railway la cuenta `medico_piloto` con
+  privilegio mínimo, correo configurado y dos demos asignados
 - [ ] Entrega final al equipo médico
 
 **Diferido explícitamente a Sprint 6:**

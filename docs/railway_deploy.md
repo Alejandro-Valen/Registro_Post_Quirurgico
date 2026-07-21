@@ -64,9 +64,11 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 | `DB_HOST` | `${{Postgres.PGHOST}}` |
 | `DB_PORT` | `${{Postgres.PGPORT}}` |
 | `REDIS_URL` | Referencia al Redis de Railway: `${{Redis.REDIS_URL}}` |
-| `EMAIL_HOST_USER` | Cuenta Gmail del proyecto (Bloque 5) |
-| `EMAIL_HOST_PASSWORD` | **Contraseña de aplicación** de esa cuenta (16 caracteres, NUNCA la normal) |
-| `EMAIL_TIMEOUT` | `10` segundos. Impide esperas SMTP indefinidas. |
+| `TRUST_RAILWAY_PROXY` | `True` solo en el servicio web que recibe todo su tráfico por el edge de Railway. |
+| `EMAIL_DELIVERY_PROVIDER` | `resend` para entregar alertas por HTTPS. |
+| `RESEND_API_KEY` | Clave secreta `re_...` creada en Resend; nunca copiarla en documentación o chat. |
+| `RESEND_FROM_EMAIL` | Remitente verificado. Para la prueba restringida: `Seguimiento posquirúrgico <onboarding@resend.dev>`. |
+| `EMAIL_TIMEOUT` | `10` segundos. Limita cada llamada al proveedor. |
 | `PANEL_MEDICO_URL` | URL HTTPS completa de la ruta privada del Admin; se usa en el correo sin incluir datos del paciente. |
 | `ADMIN_URL` | *(recomendado)* slug no trivial con `/` final, ej. `gestion-clinica-x7k2/`. Cambia la URL del Admin para reducir ataques. Si se omite, queda `admin/`. |
 | `TWILIO_AUTH_TOKEN` | Auth Token **primario** de Twilio (no el de Test) |
@@ -114,15 +116,12 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
   (sin manifest).
 - **`ALLOWED_HOSTS` mal escrito** → Django responde `400 Bad Request` a todo.
   El valor es el host sin esquema; la variable se llama `ALLOWED_HOSTS`.
-- **Rate limit / IP real** → pendiente de Sprint 3-Hardening: el proxy debe
-  pasar una IP de cliente verificable a `REMOTE_ADDR`. No se adopta
-  `X-Forwarded-For` sin una garantía documentada del proxy porque es
-  spoofeable; hasta cerrar esa configuración, el rate limit puede agrupar
-  clientes detrás del proxy.
-- **Gmail SMTP inaccesible desde Railway** → el 19/07/2026 una conexión
-  acotada al puerto 587 falló. La bandeja persistente evita perder alertas y
-  desacopla el webhook, pero antes del piloto real hay que migrar a una API
-  HTTPS de correo o habilitar una salida SMTP compatible y probar una entrega.
+- **Rate limit / IP real** → resuelto con `X-Real-IP` documentado por Railway,
+  confianza explícita y validación conjunta de `X-Railway-Edge`. No usar
+  `X-Forwarded-For`.
+- **Gmail SMTP inaccesible desde Railway** → Resend por HTTPS está
+  implementado. Antes del piloto real hay que cargar sus credenciales y
+  comprobar una entrega; no marcar una fila como enviada sin ID del proveedor.
 - **Límite de recursos del plan** → crear un tercer cron fue rechazado por
   Railway. `cron-tarde` está reutilizado cada 5 minutos solo hasta mejorar el
   plan y separar `cron-operativo`.
