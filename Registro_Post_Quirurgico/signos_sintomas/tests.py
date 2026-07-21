@@ -1711,6 +1711,35 @@ class WebhookWhatsAppTests(TestCase):
         self.assertEqual(respuesta['Content-Type'], 'application/xml')
         self.assertIn('temperatura', respuesta.content.decode().lower())
 
+    @override_settings(
+        TWILIO_VALIDATE_SIGNATURE=True,
+        TWILIO_AUTH_TOKEN='token_prueba_firma_valida',
+    )
+    def test_firma_twilio_valida_permite_procesar(self):
+        from twilio.request_validator import RequestValidator
+
+        payload = {
+            'From': 'whatsapp:+573009999991',
+            'Body': 'hola',
+            'MessageSid': 'SMfirmavalida0001',
+        }
+        firma = RequestValidator(
+            'token_prueba_firma_valida'
+        ).compute_signature(f'http://testserver{self.url}', payload)
+
+        respuesta = self.client.post(
+            self.url,
+            payload,
+            HTTP_X_TWILIO_SIGNATURE=firma,
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta['Content-Type'], 'application/xml')
+        self.assertEqual(
+            RecepcionWebhookTwilio.objects.get().estado,
+            RecepcionWebhookTwilio.ESTADO_COMPLETADO,
+        )
+
     def test_get_no_permitido(self):
         respuesta = self.client.get(self.url)
         self.assertEqual(respuesta.status_code, 405)
@@ -1952,6 +1981,211 @@ class WebhookWhatsAppTests(TestCase):
         self.assertNotIn(b'<Message>', respuesta.content)
 
 
+class WebhookFlujoCompletoTests(TestCase):
+    TELEFONO = '+573006660001'
+
+    def setUp(self):
+        self.url = reverse('signos_sintomas:webhook_whatsapp')
+        medico = get_user_model().objects.create_user(
+            username='medico_flujo_webhook',
+            password='pass',
+            email='medico-flujo@test.com',
+        )
+        self.paciente = Paciente.objects.create(
+            nombre_completo='Paciente Flujo Webhook',
+            telefono_whatsapp=self.TELEFONO,
+            fecha_cirugia=timezone.localdate() - timedelta(days=3),
+            consentimiento_informado=True,
+            medico_responsable=medico,
+        )
+        self.checkin = CheckInProgramado.objects.create(
+            paciente=self.paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now(),
+        )
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_recorrido_completo_por_webhook_crea_registro_alerta_y_outbox(self):
+        respuestas = [
+            'hola', '38.5', '3', 'sí', '1', 'normal',
+            'sí, 0', 'nada', '78', '16', 'sí',
+        ]
+
+        ultima_respuesta = None
+        for indice, texto in enumerate(respuestas, start=1):
+            ultima_respuesta = self.client.post(
+                self.url,
+                {
+                    'From': f'whatsapp:{self.TELEFONO}',
+                    'Body': texto,
+                    'MessageSid': f'SMflujocompleto{indice:04d}',
+                },
+            )
+            self.assertEqual(ultima_respuesta.status_code, 200)
+
+        self.assertIn('urgencias', ultima_respuesta.content.decode().lower())
+        registro = RegistroDiario.objects.get(paciente=self.paciente)
+        self.checkin.refresh_from_db()
+        conversacion = ConversacionWhatsApp.objects.get(paciente=self.paciente)
+        alerta = Alerta.objects.get(paciente=self.paciente, tipo='SEPSIS')
+        notificacion = NotificacionAlerta.objects.get(alerta=alerta)
+
+        self.assertEqual(registro.temperatura, Decimal('38.5'))
+        self.assertEqual(
+            registro.estado_evaluacion_alertas,
+            RegistroDiario.EVALUACION_COMPLETADA,
+        )
+        self.assertEqual(self.checkin.estado, CheckInProgramado.ESTADO_COMPLETADO)
+        self.assertEqual(self.checkin.registro, registro)
+        self.assertEqual(conversacion.estado, ConversacionWhatsApp.ESTADO_COMPLETADO)
+        self.assertEqual(alerta.severidad, 'ALTA')
+        self.assertEqual(notificacion.estado, NotificacionAlerta.ESTADO_PENDIENTE)
+        self.assertEqual(notificacion.destinatario, 'medico-flujo@test.com')
+        self.assertEqual(RecepcionWebhookTwilio.objects.count(), len(respuestas))
+        self.assertFalse(
+            RecepcionWebhookTwilio.objects.exclude(
+                estado=RecepcionWebhookTwilio.ESTADO_COMPLETADO,
+            ).exists()
+        )
+
+
+class WebhookConcurrenciaTests(TransactionTestCase):
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_dos_requests_simultaneos_del_mismo_sid_procesan_una_vez(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Event
+        from unittest.mock import patch
+
+        from django.test import Client
+
+        iniciado = Event()
+        liberar = Event()
+        url = reverse('signos_sintomas:webhook_whatsapp')
+        payload = {
+            'From': 'whatsapp:+573006660002',
+            'Body': 'hola',
+            'MessageSid': 'SMconcurrente0001',
+        }
+
+        def procesar_lento(*args, **kwargs):
+            iniciado.set()
+            if not liberar.wait(timeout=10):
+                raise TimeoutError('La prueba no liberó el primer worker.')
+            return 'Reporte recibido'
+
+        def enviar():
+            close_old_connections()
+            try:
+                return Client().post(url, payload)
+            finally:
+                close_old_connections()
+
+        with patch(
+            'signos_sintomas.views.procesar_mensaje',
+            side_effect=procesar_lento,
+        ) as procesar:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                primera_futura = executor.submit(enviar)
+                self.assertTrue(iniciado.wait(timeout=10))
+                segunda = executor.submit(enviar).result(timeout=10)
+                liberar.set()
+                primera = primera_futura.result(timeout=10)
+
+        self.assertEqual(primera.status_code, 200)
+        self.assertEqual(segunda.status_code, 503)
+        self.assertEqual(segunda['Retry-After'], '30')
+        procesar.assert_called_once()
+        recepcion = RecepcionWebhookTwilio.objects.get(
+            message_sid='SMconcurrente0001'
+        )
+        self.assertEqual(recepcion.estado, RecepcionWebhookTwilio.ESTADO_COMPLETADO)
+        self.assertEqual(recepcion.intentos, 1)
+
+
+class WebhookCargaTests(TransactionTestCase):
+    PACIENTES = 50
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_rafaga_50_pacientes_responde_antes_del_timeout_twilio(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        from time import perf_counter
+
+        from django.test import Client
+
+        url = reverse('signos_sintomas:webhook_whatsapp')
+        barrera = Barrier(self.PACIENTES)
+        respuestas = [
+            'hola', '37.0', '3', 'sí', '1', 'normal',
+            'sí, 0', 'nada', '78', '16', 'sí',
+        ]
+        for indice in range(self.PACIENTES):
+            telefono = f'+5730077{indice:05d}'
+            paciente = Paciente.objects.create(
+                nombre_completo=f'Paciente Carga {indice:02d}',
+                telefono_whatsapp=telefono,
+                fecha_cirugia=timezone.localdate() - timedelta(days=2),
+                consentimiento_informado=True,
+            )
+            CheckInProgramado.objects.create(
+                paciente=paciente,
+                fecha_dia=timezone.localdate(),
+                orden=1,
+                etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+                hora_programada=timezone.now(),
+            )
+
+        def enviar(indice):
+            close_old_connections()
+            try:
+                telefono = f'+5730077{indice:05d}'
+                barrera.wait(timeout=20)
+                cliente = Client()
+                resultados_paciente = []
+                for paso, texto in enumerate(respuestas, start=1):
+                    inicio = perf_counter()
+                    respuesta = cliente.post(
+                        url,
+                        {
+                            'From': f'whatsapp:{telefono}',
+                            'Body': texto,
+                            'MessageSid': f'SMcarga{indice:03d}{paso:02d}',
+                        },
+                    )
+                    resultados_paciente.append(
+                        (respuesta.status_code, perf_counter() - inicio)
+                    )
+                return resultados_paciente
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=self.PACIENTES) as executor:
+            lotes = list(executor.map(enviar, range(self.PACIENTES)))
+
+        resultados = [resultado for lote in lotes for resultado in lote]
+        estados = [estado for estado, _ in resultados]
+        duraciones = [duracion for _, duracion in resultados]
+        total_webhooks = self.PACIENTES * len(respuestas)
+        self.assertEqual(estados, [200] * total_webhooks)
+        self.assertLess(max(duraciones), 15)
+        self.assertEqual(RecepcionWebhookTwilio.objects.count(), total_webhooks)
+        self.assertEqual(ConversacionWhatsApp.objects.count(), self.PACIENTES)
+        self.assertEqual(RegistroDiario.objects.count(), self.PACIENTES)
+        self.assertEqual(
+            CheckInProgramado.objects.filter(
+                estado=CheckInProgramado.ESTADO_COMPLETADO,
+            ).count(),
+            self.PACIENTES,
+        )
+        self.assertFalse(
+            RecepcionWebhookTwilio.objects.exclude(
+                estado=RecepcionWebhookTwilio.ESTADO_COMPLETADO,
+            ).exists()
+        )
+
+
 class EvaluacionAlertasPersistenteTests(TestCase):
     def setUp(self):
         self.paciente = Paciente.objects.create(
@@ -2014,6 +2248,37 @@ class EvaluacionAlertasPersistenteTests(TestCase):
         self.assertEqual(self.registro.intentos_evaluacion_alertas, 2)
         self.assertEqual(self.registro.ultimo_error_evaluacion_alertas, '')
         self.assertEqual([alerta.tipo for alerta in alertas], ['SEPSIS'])
+
+    def test_error_revierte_alertas_parciales_antes_de_marcar_reintento(self):
+        from unittest.mock import patch
+
+        from .evaluacion_alertas import evaluar_registro_con_estado
+
+        def crear_parcial_y_fallar(registro, fecha_referencia=None):
+            Alerta.objects.create(
+                paciente=registro.paciente,
+                registro_origen=registro,
+                tipo='SEPSIS',
+                severidad='ALTA',
+                mensaje='Alerta parcial que debe revertirse',
+            )
+            raise RuntimeError('detalle clínico que no debe persistir')
+
+        with patch(
+            'signos_sintomas.evaluacion_alertas.evaluar_registro',
+            side_effect=crear_parcial_y_fallar,
+        ):
+            with self.assertRaises(RuntimeError):
+                evaluar_registro_con_estado(self.registro)
+
+        self.registro.refresh_from_db()
+        self.assertEqual(
+            self.registro.estado_evaluacion_alertas,
+            RegistroDiario.EVALUACION_ERROR,
+        )
+        self.assertEqual(self.registro.ultimo_error_evaluacion_alertas, 'RuntimeError')
+        self.assertFalse(Alerta.objects.filter(registro_origen=self.registro).exists())
+        self.assertFalse(NotificacionAlerta.objects.exists())
 
 
 class ReintentarEvaluacionesAlertasCommandTests(TestCase):
@@ -2864,6 +3129,78 @@ class AlertaEmailNotificacionTests(TestCase):
         evaluar_registro(_reg(155))
         self.assertEqual(NotificacionAlerta.objects.count(), 1)
         self.assertEqual(Alerta.objects.filter(tipo='TAQUICARDIA').count(), 1)
+
+
+class NotificacionConcurrenciaTests(TransactionTestCase):
+    def setUp(self):
+        medico = get_user_model().objects.create_user(
+            username='medico_notificacion_concurrente',
+            password='pass',
+            email='medico-concurrente@test.com',
+        )
+        paciente = Paciente.objects.create(
+            nombre_completo='Paciente Notificacion Concurrente',
+            telefono_whatsapp='+573006660003',
+            fecha_cirugia=timezone.localdate() - timedelta(days=2),
+            medico_responsable=medico,
+        )
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal('38.5'),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            aspecto_drenaje='sin_drenaje',
+            presencia_gases=True,
+            episodios_nauseas=0,
+        )
+        alerta = Alerta.objects.create(
+            paciente=paciente,
+            registro_origen=registro,
+            tipo='SEPSIS',
+            severidad='ALTA',
+            mensaje='Prueba de concurrencia',
+        )
+        self.notificacion = NotificacionAlerta.objects.get(alerta=alerta)
+
+    def test_dos_workers_no_envian_la_misma_notificacion_dos_veces(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Event
+        from unittest.mock import patch
+
+        from .notificaciones import procesar_notificaciones_pendientes
+
+        iniciado = Event()
+        liberar = Event()
+
+        def enviar_lento(notificacion):
+            iniciado.set()
+            if not liberar.wait(timeout=10):
+                raise TimeoutError('La prueba no liberó el primer worker.')
+
+        def procesar():
+            close_old_connections()
+            try:
+                return procesar_notificaciones_pendientes(limite=1)
+            finally:
+                close_old_connections()
+
+        with patch(
+            'signos_sintomas.notificaciones._enviar',
+            side_effect=enviar_lento,
+        ) as enviar:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                primero_futuro = executor.submit(procesar)
+                self.assertTrue(iniciado.wait(timeout=10))
+                segundo = executor.submit(procesar).result(timeout=10)
+                liberar.set()
+                primero = primero_futuro.result(timeout=10)
+
+        self.notificacion.refresh_from_db()
+        self.assertEqual(enviar.call_count, 1)
+        self.assertEqual(primero['enviadas'], 1)
+        self.assertEqual(segundo['enviadas'], 0)
+        self.assertEqual(self.notificacion.estado, NotificacionAlerta.ESTADO_ENVIADA)
+        self.assertEqual(self.notificacion.intentos, 1)
 
 
 class CacheProductionConfigTests(TestCase):
