@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 
+import requests
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
@@ -15,6 +16,10 @@ class DestinatarioNoConfigurado(Exception):
 
 
 class EntregaEmailNoConfirmada(Exception):
+    pass
+
+
+class ProveedorEmailNoConfigurado(Exception):
     pass
 
 
@@ -42,6 +47,50 @@ def _minutos_reintento(intentos):
     return min(5 * (3 ** max(intentos - 1, 0)), 360)
 
 
+def _enviar_por_resend(notificacion, asunto, cuerpo):
+    api_key = getattr(settings, 'RESEND_API_KEY', '').strip()
+    remitente = getattr(settings, 'RESEND_FROM_EMAIL', '').strip()
+    if not api_key or not remitente:
+        raise ProveedorEmailNoConfigurado
+
+    respuesta = requests.post(
+        'https://api.resend.com/emails',
+        headers={
+            'Authorization': f'Bearer {api_key}',
+            'Idempotency-Key': f'alerta-alta-{notificacion.alerta_id}',
+        },
+        json={
+            'from': remitente,
+            'to': [notificacion.destinatario],
+            'subject': asunto,
+            'text': cuerpo,
+        },
+        timeout=getattr(settings, 'EMAIL_TIMEOUT', 10),
+    )
+    respuesta.raise_for_status()
+    if not respuesta.json().get('id'):
+        raise EntregaEmailNoConfirmada
+
+
+def _entregar_email(notificacion, asunto, cuerpo):
+    proveedor = getattr(settings, 'EMAIL_DELIVERY_PROVIDER', 'django').strip().lower()
+    if proveedor == 'resend':
+        _enviar_por_resend(notificacion, asunto, cuerpo)
+        return
+    if proveedor != 'django':
+        raise ProveedorEmailNoConfigurado
+
+    enviados = send_mail(
+        subject=asunto,
+        message=cuerpo,
+        from_email=None,
+        recipient_list=[notificacion.destinatario],
+        fail_silently=False,
+    )
+    if enviados != 1:
+        raise EntregaEmailNoConfirmada
+
+
 def _enviar(notificacion):
     if not notificacion.destinatario:
         medico = notificacion.alerta.paciente.medico_responsable
@@ -52,15 +101,7 @@ def _enviar(notificacion):
             raise DestinatarioNoConfigurado
 
     asunto, cuerpo = _contenido_seguro(notificacion)
-    enviados = send_mail(
-        subject=asunto,
-        message=cuerpo,
-        from_email=None,
-        recipient_list=[notificacion.destinatario],
-        fail_silently=False,
-    )
-    if enviados != 1:
-        raise EntregaEmailNoConfirmada
+    _entregar_email(notificacion, asunto, cuerpo)
 
 
 def procesar_notificaciones_pendientes(limite=50):

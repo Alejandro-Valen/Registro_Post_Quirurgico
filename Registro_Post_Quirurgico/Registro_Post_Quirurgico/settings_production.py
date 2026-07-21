@@ -12,14 +12,18 @@ Variables de entorno OBLIGATORIAS en producción (además de las del .env base):
     SECRET_KEY             — clave larga y aleatoria (no reutilizar la de desarrollo)
     DB_NAME/DB_USER/DB_PASSWORD/DB_HOST/DB_PORT — credenciales de PostgreSQL
     REDIS_URL              — cache compartido (ver CACHES abajo)
-    EMAIL_HOST_USER        — cuenta de Gmail del proyecto (Sprint 5, Bloque 5)
-    EMAIL_HOST_PASSWORD    — contraseña de aplicación de esa cuenta (NUNCA la normal)
+    TRUST_RAILWAY_PROXY    — True solo cuando el tráfico entra por Railway
+    EMAIL_DELIVERY_PROVIDER — "resend" para entrega por HTTPS en Railway
+    RESEND_API_KEY         — clave de API del proyecto en Resend
+    RESEND_FROM_EMAIL      — remitente verificado o onboarding@resend.dev
+    EMAIL_HOST_USER/PASSWORD — obligatorias solo con proveedor "django"
 
 B1: configuración de producción con cabeceras HTTPS, cookies seguras y HSTS.
 A6: DEBUG hardcodeado a False — nunca True en producción.
 """
 from .settings import *  # noqa: F401, F403
 from decouple import config, Csv
+from django.core.exceptions import ImproperlyConfigured
 from django.utils.csp import CSP
 
 # A6: DEBUG=False siempre en producción. Stacktrace nunca llega al cliente.
@@ -78,6 +82,12 @@ SECURE_CSP = {
 # Ejemplo en .env de producción: CSRF_TRUSTED_ORIGINS=https://midominio.com
 CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
 
+# Railway documenta X-Real-IP como la IP remota y X-Railway-Edge como una
+# cabecera presente en todas las solicitudes que atraviesan su edge. La
+# confianza se habilita de forma explícita para no aceptar esos headers en
+# despliegues directos o locales.
+TRUST_RAILWAY_PROXY = config('TRUST_RAILWAY_PROXY', default=False, cast=bool)
+
 # B5: URL del admin en producción debe diferir de la de desarrollo (ver urls.py).
 # Se documenta aquí para recordatorio; el cambio real está en urls.py.
 
@@ -93,18 +103,25 @@ CACHES = {
     }
 }
 
-# Sprint 5, Bloque 5 — SMTP real para el email de alerta ALTA (signals.py).
-# En desarrollo (settings_local.py) el backend sigue siendo consola — esto
-# solo aplica cuando corre con DJANGO_SETTINGS_MODULE=...settings_production.
-# EMAIL_HOST_USER/EMAIL_HOST_PASSWORD no tienen default: si faltan en el
-# .env de producción, decouple falla fuerte (fail-clear) en vez de arrancar
-# el servidor sin poder enviar correo.
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
-EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = config('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER)
+# Sprint 5, Bloque 5 — entrega real del email de alerta ALTA.
+EMAIL_DELIVERY_PROVIDER = config(
+    'EMAIL_DELIVERY_PROVIDER', default='django'
+).strip().lower()
 EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=10, cast=int)
 PANEL_MEDICO_URL = config('PANEL_MEDICO_URL', default='')
+
+if EMAIL_DELIVERY_PROVIDER == 'django':
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+    EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+    EMAIL_USE_TLS = True
+    EMAIL_HOST_USER = config('EMAIL_HOST_USER')
+    EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
+    DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER)
+elif EMAIL_DELIVERY_PROVIDER == 'resend':
+    RESEND_API_KEY = config('RESEND_API_KEY')
+    RESEND_FROM_EMAIL = config('RESEND_FROM_EMAIL')
+else:
+    raise ImproperlyConfigured(
+        'EMAIL_DELIVERY_PROVIDER debe ser "django" o "resend".'
+    )

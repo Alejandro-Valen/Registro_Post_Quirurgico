@@ -2794,6 +2794,58 @@ class AlertaEmailNotificacionTests(TestCase):
         self.assertEqual(notificacion.estado, NotificacionAlerta.ESTADO_PENDIENTE)
         self.assertEqual(notificacion.ultimo_error, 'EntregaEmailNoConfirmada')
 
+    @override_settings(
+        EMAIL_DELIVERY_PROVIDER='resend',
+        RESEND_API_KEY='re_clave_prueba',
+        RESEND_FROM_EMAIL='Seguimiento <onboarding@resend.dev>',
+        EMAIL_TIMEOUT=7,
+        PANEL_MEDICO_URL='https://ejemplo.test/acceso-seguro/',
+    )
+    def test_resend_entrega_por_https_con_idempotencia_y_sin_datos_clinicos(self):
+        from unittest.mock import Mock, patch
+        from django.core.management import call_command
+
+        respuesta = Mock()
+        respuesta.json.return_value = {'id': 'email_123'}
+        alerta = self._crear_alerta_alta()
+
+        with patch(
+            'signos_sintomas.notificaciones.requests.post',
+            return_value=respuesta,
+        ) as post:
+            call_command('procesar_notificaciones_email', verbosity=0)
+
+        llamada = post.call_args
+        self.assertEqual(llamada.args[0], 'https://api.resend.com/emails')
+        self.assertEqual(llamada.kwargs['timeout'], 7)
+        self.assertEqual(
+            llamada.kwargs['headers']['Idempotency-Key'],
+            f'alerta-alta-{alerta.pk}',
+        )
+        carga = llamada.kwargs['json']
+        self.assertEqual(carga['to'], [self.medico.email])
+        self.assertIn(f'alerta #{alerta.pk}', carga['text'])
+        self.assertNotIn(self.paciente.nombre_completo, carga['text'])
+        self.assertNotIn(self.paciente.telefono_whatsapp, carga['text'])
+        self.assertNotIn(self.paciente.cedula, carga['text'])
+        self.assertNotIn(alerta.mensaje, carga['text'])
+
+    @override_settings(
+        EMAIL_DELIVERY_PROVIDER='resend',
+        RESEND_API_KEY='',
+        RESEND_FROM_EMAIL='Seguimiento <onboarding@resend.dev>',
+    )
+    def test_resend_sin_clave_conserva_notificacion_pendiente(self):
+        from django.core.management import CommandError, call_command
+
+        alerta = self._crear_alerta_alta()
+        with self.assertRaises(CommandError):
+            call_command('procesar_notificaciones_email', verbosity=0)
+
+        notificacion = NotificacionAlerta.objects.get(alerta=alerta)
+        self.assertEqual(notificacion.estado, NotificacionAlerta.ESTADO_PENDIENTE)
+        self.assertEqual(notificacion.ultimo_error, 'ProveedorEmailNoConfigurado')
+
     def test_notificacion_solo_al_alcanzar_alta_no_en_recurrencia(self):
         def _reg(fc):
             return RegistroDiario.objects.create(

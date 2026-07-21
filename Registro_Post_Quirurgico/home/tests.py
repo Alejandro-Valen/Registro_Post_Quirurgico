@@ -1,8 +1,68 @@
 from django.contrib.auth import get_user_model
+from django.test import RequestFactory
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .models import MensajeContacto
+from .views import _get_client_ip
+
+
+class ClientIpTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def test_por_defecto_ignora_headers_spoofeables(self):
+        request = self.factory.get(
+            '/',
+            REMOTE_ADDR='10.0.0.4',
+            HTTP_X_REAL_IP='198.51.100.20',
+            HTTP_X_RAILWAY_EDGE='railway/us-east4-eqdc4a',
+        )
+
+        self.assertEqual(_get_client_ip(request), '10.0.0.4')
+
+    @override_settings(TRUST_RAILWAY_PROXY=True)
+    def test_usa_x_real_ip_solo_con_edge_railway(self):
+        request = self.factory.get(
+            '/',
+            REMOTE_ADDR='10.0.0.4',
+            HTTP_X_REAL_IP='198.51.100.20',
+            HTTP_X_RAILWAY_EDGE='railway/us-east4-eqdc4a',
+        )
+
+        self.assertEqual(_get_client_ip(request), '198.51.100.20')
+
+    @override_settings(TRUST_RAILWAY_PROXY=True)
+    def test_header_railway_ausente_conserva_remote_addr(self):
+        request = self.factory.get(
+            '/',
+            REMOTE_ADDR='10.0.0.4',
+            HTTP_X_REAL_IP='198.51.100.20',
+        )
+
+        self.assertEqual(_get_client_ip(request), '10.0.0.4')
+
+    @override_settings(TRUST_RAILWAY_PROXY=True)
+    def test_header_railway_malformado_conserva_remote_addr(self):
+        request = self.factory.get(
+            '/',
+            REMOTE_ADDR='10.0.0.4',
+            HTTP_X_REAL_IP='198.51.100.20',
+            HTTP_X_RAILWAY_EDGE='railway/../../falso',
+        )
+
+        self.assertEqual(_get_client_ip(request), '10.0.0.4')
+
+    @override_settings(TRUST_RAILWAY_PROXY=True)
+    def test_x_real_ip_malformada_conserva_remote_addr(self):
+        request = self.factory.get(
+            '/',
+            REMOTE_ADDR='10.0.0.4',
+            HTTP_X_REAL_IP='valor-no-valido, 198.51.100.20',
+            HTTP_X_RAILWAY_EDGE='railway/us-east4-eqdc4a',
+        )
+
+        self.assertEqual(_get_client_ip(request), '10.0.0.4')
 
 
 class LandingTests(TestCase):

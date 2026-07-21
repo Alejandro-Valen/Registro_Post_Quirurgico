@@ -1,3 +1,6 @@
+import ipaddress
+import re
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -9,14 +12,23 @@ _LIMITE_CONTACTO_HORA = 5   # envíos por IP por hora
 _MAX_NOMBRE  = 100
 _MAX_TELEFONO = 30
 _MAX_MENSAJE = 2000
+_RAILWAY_EDGE_RE = re.compile(r'^railway/[a-z0-9-]+$')
 
 
 def _get_client_ip(request):
-    # Usa REMOTE_ADDR: no es spoofeable por el cliente.
-    # X-Forwarded-For se descarta porque el primer elemento lo pone el cliente
-    # y puede ser falso. El proxy/balanceador de producción debe configurarse
-    # para que REMOTE_ADDR refleje la IP real (Nginx: proxy_set_header).
-    return request.META.get('REMOTE_ADDR', '')
+    remote_addr = request.META.get('REMOTE_ADDR', '')
+    if not getattr(settings, 'TRUST_RAILWAY_PROXY', False):
+        return remote_addr
+
+    railway_edge = request.META.get('HTTP_X_RAILWAY_EDGE', '')
+    real_ip = request.META.get('HTTP_X_REAL_IP', '')
+    if not _RAILWAY_EDGE_RE.fullmatch(railway_edge):
+        return remote_addr
+
+    try:
+        return str(ipaddress.ip_address(real_ip))
+    except ValueError:
+        return remote_addr
 
 
 def _rate_limit_contacto_excedido(ip):

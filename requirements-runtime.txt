@@ -7,6 +7,7 @@ python-decouple==3.8
 twilio==9.10.9
 django-axes==7.0.1
 redis==8.0.1
+requests==2.32.5
 # Servidor WSGI de producción y servidor de estáticos (despliegue, 04/07/2026)
 gunicorn==26.0.0
 whitenoise==6.12.0
