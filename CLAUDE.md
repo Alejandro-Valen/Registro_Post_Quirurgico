@@ -419,13 +419,12 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B y **Loops 1-4 cerrados y desplegados en Railway**. Django 6.0.7, CSP, Chart.js local, outbox con Resend por HTTPS y cron operativo cada 5 minutos; **274 tests OK**. Railway ejecuta `283319b` con migraciones hasta `signos_sintomas.0024` y `home.0002`. Cuenta `medico_piloto`, IP tras proxy y entrega real de correo verificadas. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B y **Loops 1-5 cerrados**. Django 6.0.7, CSP, Chart.js local, outbox con Resend por HTTPS y cron operativo cada 5 minutos; **280 tests OK**. Validación de firma, concurrencia, rollback del motor, 550 webhooks de carga y flujo real por WhatsApp completada. Punto de restauración `3c86487`. Rama `sprint-5-produccion` |
 
 **Punto actual (21/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
 desplegada en Railway y el cron base funcionando. Quedaron cerrados, validados
-y desplegados el **Loop 1 de integridad clínica/permisos**, el **Loop 2 de
-confiabilidad del webhook y entrega de alertas** y el **Loop 3 de experiencia
-médica** (**256 tests OK**). URL:
+y desplegados los **Loops 1-3**, el **Loop 4 de producción** y el **Loop 5 de
+validación**. La suite completa contiene **280 tests OK**. URL:
 `registropostquirurgico-production-1f96.up.railway.app`.
 - **Panel del médico (Admin):** `/admin/` con branding "calma clínica"
   (override de `admin/base_site.html` + `signos_sintomas/static/admin/css/panel_admin.css`
@@ -486,6 +485,14 @@ médica** (**256 tests OK**). URL:
   `TRUST_RAILWAY_PROXY=True`, marca `X-Railway-Edge` válida e IP bien formada;
   en cualquier otro caso conserva `REMOTE_ADDR`. No confía en
   `X-Forwarded-For`.
+- **Loop 5 de validación (21/07/2026):** firma Twilio válida aceptada; dos
+  requests simultáneos del mismo SID ejecutan el bot una sola vez; dos workers
+  no duplican el correo; un fallo tras crear una alerta parcial revierte alerta
+  y outbox; el flujo de 10 preguntas por webhook crea registro, alerta y
+  notificación coherentes. La carga local completó 50 pacientes concurrentes,
+  550 webhooks y 50 registros en 5,03 s, sin solicitudes de 15 s ni recibos
+  incompletos. El Sandbox real completó un check-in normal con
+  `medico_piloto`; los datos ficticios se eliminaron después de verificar.
 - **Estado Railway (21/07/2026):** web y ambos cron en `SUCCESS` sobre
   `283319b`; HTTPS 200, `/admin/` devuelve 404, la ruta privada redirige al
   login, CSP presente y Chart.js local responde 200. `check --deploy` remoto
@@ -494,10 +501,10 @@ médica** (**256 tests OK**). URL:
   cierre, reintento del motor y bandeja de correo. La cuenta `medico_piloto`
   fue probada por el Arquitecto, conserva `staff=True`, `superuser=False`, dos
   demos asignados y el correo `seguimientolionalejo@gmail.com`.
-**Próximo paso exacto (al retomar):** iniciar el **Loop 5 de validación**:
-inventariar la cobertura ya existente de concurrencia/permisos/fallo del motor,
-ejecutar la prueba de carga y cerrar un flujo WhatsApp completo con datos
-ficticios, incluido SID duplicado. Al mejorar
+**Próximo paso exacto (al retomar):** iniciar el **Loop 6 de cierre**: revisar
+y depurar el roadmap final, ejecutar la prueba manual del tono MEDIA/ALTA,
+hacer el smoke con `medico_piloto`, preparar el PR hacia `Desarrollo`, revisar
+el diff completo y decidir el merge. Al mejorar
 el plan Railway, crear `cron-operativo` como servicio separado y restaurar
 `cron-tarde` a su horario original. Después: **datos reales del médico** (reemplazar
 `[corchetes]`, subir logo/colores, `MOSTRAR_AVISO_BOCETO=False`) y los

@@ -3087,3 +3087,40 @@ PII dentro del panel autenticado. La llegada a spam se atribuye al remitente de
 pruebas `onboarding@resend.dev`; se registra como requisito del piloto verificar
 un dominio propio con SPF/DKIM/DMARC. **Loop 4 cerrado. Siguiente: Loop 5 de
 validación (concurrencia, permisos, fallo del motor, carga y WhatsApp completo).**
+
+---
+
+## 21/07/2026 — Loop 5 de validación cerrado
+
+**Estado:** validación automatizada, carga y flujo real por WhatsApp completados.
+
+- Se auditó la cobertura existente antes de agregar pruebas. Permisos ya cubría
+  aislamiento entre médicos, inmutabilidad y restricciones de borrado; no se
+  duplicaron esos casos.
+- Se agregaron seis validaciones: firma Twilio válida; flujo completo por el
+  endpoint; dos requests concurrentes con el mismo `MessageSid`; rollback de
+  alerta/outbox parcial al fallar el motor; dos workers sobre una notificación;
+  y carga concurrente de 50 pacientes.
+- La prueba de carga recorrió las 10 preguntas para cada paciente: 550 webhooks,
+  50 registros, 50 conversaciones y 50 check-ins completados en 5,03 segundos.
+  Todas las respuestas fueron 200, ninguna superó 15 segundos y no quedaron
+  recepciones incompletas.
+- Suite completa: **280 tests OK** en 215,6 segundos. Commit de pruebas
+  `3c86487` publicado en `sprint-5-produccion`.
+
+**Prueba real Sandbox:** el Arquitecto creó `PRUEBA-WA-L5-001` desde la cuenta
+`medico_piloto`, activó el Sandbox y completó el cuestionario con valores
+normales. Railway confirmó un registro, evaluación `COMPLETADA`, conversación
+cerrada y turno TARDE vinculado, sin alerta clínica ni correo. Como los
+check-ins se crearon manualmente a las 18:00, el cron alcanzó a cerrar el turno
+MAÑANA con una alerta operativa `SILENCIO/BAJA`; el bot eligió correctamente el
+turno TARDE pendiente. Las 20 recepciones técnicas recientes estaban completas
+y con un solo intento.
+
+**Limpieza:** transacción confirmada sobre la cédula ficticia exacta: 1 paciente,
+1 registro, 2 check-ins, 1 conversación, 1 alerta de silencio, 1 detección y 2
+logs Admin eliminados. Cero pacientes `PRUEBA-WA-*` restantes; demos y demás
+datos intactos.
+
+**Siguiente paso:** Loop 6 de cierre: prueba manual MEDIA/ALTA, depuración final
+del roadmap, smoke de la cuenta médica, PR hacia `Desarrollo`, revisión y merge.

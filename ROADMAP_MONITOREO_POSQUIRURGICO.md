@@ -894,6 +894,10 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   recibido en `seguimientolionalejo@gmail.com` el 21/07/2026.
 - [x] **Loop 4 — hardening web/dependencias:** Django 6.0.7, dependencias
   directas fijadas y auditadas, CSP activo y Chart.js 4.5.1 servido localmente.
+- [x] **Loop 5 — validación:** firma Twilio positiva, SID concurrente,
+  concurrencia de outbox, rollback parcial del motor y flujo completo por
+  webhook cubiertos. Carga local: 50 pacientes concurrentes, 550 webhooks y
+  50 registros en 5,03 s, sin superar 15 s por solicitud. Suite: **280 OK**.
 - [x] Comando idempotente `crear_medico` + grupo "Médicos" de privilegio mínimo
 - [x] **Hardening Loop 2 — confiabilidad del webhook y alertas:** recibo
   persistente por `MessageSid` en PostgreSQL (sin teléfono ni Body), reintento
@@ -980,10 +984,12 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   `consentimiento_informado=True`.
 
 **Validación end-to-end (con el Sandbox alcanza):**
-- [ ] Crear un **paciente de prueba** en el Admin (con `consentimiento_informado`),
+- [x] Crear un **paciente de prueba** en el Admin (con `consentimiento_informado`),
   correr `crear_checkins_diarios`, y hacer una **prueba real de WhatsApp
-  completa** (recorrer las 10 preguntas y verificar que se crea el
-  `RegistroDiario` y las alertas).
+  completa**. Ejecutada el 21/07/2026 con valores normales: registro y turno
+  tarde completados, motor en `COMPLETADA`, sin alerta clínica. El turno mañana
+  creado a las 18:00 fue cerrado por cron con `SILENCIO/BAJA`, comportamiento
+  operativo esperado. Todos los datos ficticios se eliminaron al terminar.
 - [ ] Prueba manual del **tono del bot** (Bloque B): disparar una alerta MEDIA y
   una ALTA y confirmar los mensajes de cierre `MSG_CIERRE_ALERTA_*`.
 
