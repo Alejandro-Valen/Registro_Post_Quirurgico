@@ -20,7 +20,7 @@ from django.urls import path, include
 
 # B5: URL del admin configurable por variable de entorno para que no sea trivial.
 # Valor por defecto intencional solo para desarrollo — en producción usar
-# DJANGO_ADMIN_URL con un slug difícil de adivinar (ej. "gestion-clinica-x7k2/").
+# ADMIN_URL con un slug difícil de adivinar (ej. "gestion-clinica-x7k2/").
 _ADMIN_URL = getattr(settings, 'ADMIN_URL', 'admin/')
 
 urlpatterns = [

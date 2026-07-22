@@ -1,6 +1,10 @@
 # Análisis Documento por Documento — 9 PDFs ERAS/Alta Temprana Colorrectal
 ## MVP Sugarbaker / Clínica Somer — Auditoría de literatura científica
 
+> **Documento histórico (junio de 2026).** Las frases sobre pasos o decisiones
+> pendientes reflejan la sesión original. Para el estado vigente consulta
+> `CLAUDE.md` y `ROADMAP_MONITOREO_POSQUIRURGICO.md`.
+
 > Complementa la síntesis cruzada de umbrales ya generada en la sesión anterior
 > (ver `CONTEXTO_TRANSFERENCIA_AUDITORIA_PDFS.md`). Aquí cada uno de los 9 PDFs
 > se analiza individualmente en el formato acordado: resumen clínico, datos

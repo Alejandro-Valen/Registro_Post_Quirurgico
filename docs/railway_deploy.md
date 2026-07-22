@@ -5,8 +5,9 @@
 > fijas las decisiones, las variables de entorno exactas y el orden correcto,
 > para no depender de la memoria de nadie.
 >
-> Estado: **desplegado en Railway**. Web, PostgreSQL, Redis y dos servicios
-> cron operativos verificados el 19/07/2026.
+> Estado al 21/07/2026: **desplegado en Railway**. Web, PostgreSQL, Redis y
+> dos servicios cron operativos. Flujos NORMAL/MEDIA/ALTA y correo real
+> verificados; punto funcional `0d12d88`.
 
 ---
 
@@ -48,9 +49,10 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 
 ## 3. Variables de entorno (configurar ANTES del primer deploy)
 
-> Railway hace disponibles estas variables tanto en el build como en el arranque.
-> El `collectstatic` del build necesita que ya existan (importa
-> `settings_production`). Por eso: **primero variables, luego deploy.**
+> El Dockerfile actual instala dependencias durante el build y ejecuta
+> `collectstatic`, `migrate`, bootstrap y Gunicorn durante el arranque. Ese
+> arranque importa `settings_production`, por lo que las variables deben existir
+> antes del primer deploy: **primero variables, luego deploy.**
 
 | Variable | Valor / de dónde sale |
 |----------|----------------------|
@@ -65,6 +67,8 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 | `DB_PORT` | `${{Postgres.PGPORT}}` |
 | `REDIS_URL` | Referencia al Redis de Railway: `${{Redis.REDIS_URL}}` |
 | `TRUST_RAILWAY_PROXY` | `True` solo en el servicio web que recibe todo su tráfico por el edge de Railway. |
+| `ADMIN_URL` | Slug privado no trivial terminado en `/`. No publicar el valor real. |
+| `MEDICO_CONTACTO_USERNAME` | Usuario médico que recibe los mensajes del formulario público. |
 | `EMAIL_DELIVERY_PROVIDER` | `resend` para entregar alertas por HTTPS. |
 | `RESEND_API_KEY` | Clave secreta `re_...` creada en Resend; nunca copiarla en documentación o chat. |
 | `RESEND_FROM_EMAIL` | Remitente verificado. Para la prueba restringida: `Seguimiento posquirúrgico <onboarding@resend.dev>`. |
@@ -76,6 +80,7 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 | `DEFAULT_FROM_EMAIL` | *(opcional)* si se omite, usa `EMAIL_HOST_USER` |
 | `DJANGO_SUPERUSER_USERNAME` / `DJANGO_SUPERUSER_PASSWORD` / `DJANGO_SUPERUSER_EMAIL` | Bootstrap temporal de la cuenta técnica. Retirar usuario y contraseña tras verificar el primer arranque. |
 | `DJANGO_MEDICO_USERNAME` / `DJANGO_MEDICO_PASSWORD` / `DJANGO_MEDICO_EMAIL` | Bootstrap temporal de la cuenta `staff` del médico. `crear_medico` la asigna al grupo de privilegio mínimo. Retirar usuario y contraseña tras verificar el acceso. |
+| `RESET_AXES` | Interruptor temporal. Usar `1` solo para desbloquear Axes y volver a `0` o retirarlo inmediatamente. |
 
 > **Nota sobre `DB_*` con `${{Postgres.*}}`:** Railway permite "referenciar"
 > variables de otro servicio. Al escribir `${{Postgres.PGHOST}}` en el servicio
@@ -106,12 +111,13 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 
 ## 5. Gotchas conocidos
 
-- **Primer deploy sin variables → falla.** `collectstatic` en el build importa
-  `settings_production`, que exige `SECRET_KEY`, `DB_*` y `EMAIL_*`. Cargar las
-  variables **antes** de desplegar.
+- **Primer deploy sin variables → falla al arrancar.** `collectstatic` y los
+  demás comandos del `CMD` importan `settings_production`, que exige
+  `SECRET_KEY`, `DB_*` y las credenciales del proveedor de email seleccionado.
+  Cargar las variables **antes** de desplegar.
 - **Estáticos del Admin sin estilo** → revisar que `collectstatic` corrió en el
-  build y que WhiteNoise está en el middleware (ya configurado). Si el build
-  falla en `collectstatic` por una referencia estática inexistente, degradar en
+  arranque y que WhiteNoise está en el middleware (ya configurado). Si el deploy
+  falla al ejecutar `collectstatic` por una referencia estática inexistente, degradar en
   `settings_production.py` a `whitenoise.storage.CompressedStaticFilesStorage`
   (sin manifest).
 - **`ALLOWED_HOSTS` mal escrito** → Django responde `400 Bad Request` a todo.
@@ -126,5 +132,7 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
   Railway. `cron-tarde` está reutilizado cada 5 minutos solo hasta mejorar el
   plan y separar `cron-operativo`.
 - **Antes del primer paciente real:** completar los `[corchetes]` de
-  `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` y hacer la prueba manual del bot
-  por WhatsApp (tono MEDIA/ALTA y flujo de consentimiento).
+  `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md`; verificar WhatsApp Business,
+  plantillas y envío saliente; autenticar un dominio de correo; y completar los
+  datos definitivos del médico. Los tonos NORMAL/MEDIA/ALTA ya se probaron en
+  el Sandbox el 21/07/2026.

@@ -3200,3 +3200,63 @@ hasta recibir una auditoría independiente favorable.
 Claude Code contraste todo el árbol, los seis loops, las 280 pruebas y los
 controles de producción. No se abrirá PR ni se hará merge hasta clasificar sus
 hallazgos, resolver los bloqueantes y repetir las pruebas afectadas.
+
+---
+
+## 21/07/2026 — Barrido documental integral y pausa segura
+
+**Objetivo:** detener el proyecto temporalmente sin perder contexto ni dejar
+instrucciones activas contradictorias antes de la auditoría con Claude Code.
+
+### Alcance revisado
+
+- Memoria y planificación: `CLAUDE.md`, roadmap, bitácora e instrucción de
+  auditoría pre-merge.
+- Operación: despliegue Railway, cron, transferencia de cuentas y
+  `.env.example`, contrastados contra Dockerfile, settings, URLs y management
+  commands actuales.
+- Clínica/referencia: `knowledge_base.md`, consentimiento rastreado, auditoría de
+  Sprint 3 y toda la carpeta `docs/auditoria_literatura/`.
+- Licencia de Chart.js identificada como archivo de proveedor, sin edición.
+
+### Correcciones documentales
+
+- Se creó `docs/README.md` como índice canónico: distingue fuentes vigentes,
+  bitácora acumulativa, auditorías históricas, placeholder RAG y documento legal.
+- El roadmap y `CLAUDE.md` ahora reflejan dos check-ins diarios ligados al turno,
+  cuestionario de hasta 10 preguntas, 280 tests, migraciones hasta 0024, seis
+  tareas matutinas, ruta Admin privada, RAG en Sprint 6 y tonos MEDIA/ALTA ya
+  probados.
+- `docs/transferencia_cuentas.md` dejó de describir Railway/Redis como pendientes,
+  cambió las gráficas de 7/14/30 a 3/7/10 y registró Resend, WhatsApp Business y
+  los requisitos reales de transferencia.
+- `docs/railway_deploy.md` quedó alineado con el Dockerfile: dependencias en el
+  build; `collectstatic`, migraciones, bootstrap y Gunicorn al arrancar. Se
+  completaron variables faltantes y se retiró la prueba MEDIA/ALTA del backlog.
+- `docs/cron_setup.md` distingue reintentos internos de monitoreo externo. En
+  Railway no existe el `MAILTO` del ejemplo de crontab: sigue pendiente una
+  alarma independiente si el scheduler deja de ejecutar. También queda explícito
+  que `cron_matutino` corre hoy a las 6:00 AM e incluye el recordatorio stub; al
+  implementar Twilio saliente se debe decidir el horario antes de activarlo.
+- `.env.example` agregó `CSRF_TRUSTED_ORIGINS`, `ADMIN_URL`, `REDIS_URL` y
+  `RESET_AXES`, todos con valores de ejemplo no secretos y advertencia de no
+  copiar la plantilla completa a producción.
+- La auditoría de Sprint 3 y los análisis de literatura recibieron un aviso de
+  documento histórico. Sus observaciones originales se conservaron intactas.
+- Se corrigieron únicamente dos comentarios de código: `collectstatic` corre al
+  arrancar el contenedor y la variable real del Admin es `ADMIN_URL`. No cambió
+  comportamiento ejecutable.
+
+### Integridad y estado de pausa
+
+- La copia raíz no rastreada de `FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` y la
+  versión canónica en `docs/` tienen el mismo SHA-256. La copia raíz permaneció
+  intacta y fuera del commit.
+- No se reejecutó la suite porque este barrido solo modifica documentación y dos
+  comentarios. `manage.py check` se repitió y quedó sin incidencias; también se
+  validaron 26 archivos Markdown sin enlaces locales rotos. La última evidencia
+  funcional sigue siendo **280/280 tests OK**, `check --deploy` limpio y
+  `pip-audit` sin vulnerabilidades conocidas.
+- No se abrió PR ni se hizo merge. El siguiente paso obligatorio es entregar a
+  Claude Code `AUDITORIA_PRE_MERGE_LOOPS_1_6.md`, recibir su informe completo y
+  volver a Codex para resolver conjuntamente cualquier hallazgo bloqueante.

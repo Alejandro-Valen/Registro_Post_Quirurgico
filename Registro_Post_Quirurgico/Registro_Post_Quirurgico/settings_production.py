@@ -33,7 +33,7 @@ DEBUG = False
 # Railway no tiene un Nginx delante que sirva /static/, así que WhiteNoise
 # sirve los estáticos del Admin desde el propio proceso Django. El middleware
 # va INMEDIATAMENTE después de SecurityMiddleware (índice 0 de la lista base).
-# collectstatic corre en el build (ver nixpacks.toml) hacia STATIC_ROOT.
+# collectstatic corre al arrancar el contenedor (ver Dockerfile) hacia STATIC_ROOT.
 MIDDLEWARE = [
     MIDDLEWARE[0],  # django.middleware.security.SecurityMiddleware
     'whitenoise.middleware.WhiteNoiseMiddleware',

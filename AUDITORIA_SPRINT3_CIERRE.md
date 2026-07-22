@@ -1,4 +1,11 @@
 # Auditoría de Cierre — Sprint 3
+
+> **Documento histórico.** Describe el estado de `sprint-3-whatsapp` el
+> 21/06/2026, antes de `sprint-3-hardening` y de los Loops 1-6. Los grupos A-D
+> fueron posteriormente tratados y no deben reportarse como vulnerabilidades
+> actuales sin reproducirlos sobre `sprint-5-produccion`. La auditoría vigente
+> pre-merge está en `AUDITORIA_PRE_MERGE_LOOPS_1_6.md`.
+
 **Fecha:** 21/06/2026
 **Rama auditada:** sprint-3-whatsapp
 **Auditores:** Claude Code (coherencia interna y lógica clínica) +

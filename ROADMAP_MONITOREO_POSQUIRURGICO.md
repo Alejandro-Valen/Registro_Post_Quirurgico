@@ -153,7 +153,8 @@ Registro_Post_Quirurgico/                    ← raíz del repositorio
     │   ├── views.py                         ← index y contacto (rate limit)
     │   ├── admin.py
     │   ├── urls.py
-    │   ├── migrations/0001_initial.py
+    │   ├── migrations/                    ← 0001 a 0002
+    │   ├── tests.py                       ← 18 tests
     │   └── templates/home/
     │       ├── index.html
     │       └── contacto.html
@@ -163,18 +164,25 @@ Registro_Post_Quirurgico/                    ← raíz del repositorio
         ├── alert_engine.py                  ← motor clínico + unicidad concurrente de alertas
         ├── evaluacion_alertas.py            ← estado auditable y reintentos del motor
         ├── bot.py                           ← máquina de estados WhatsApp (10 preguntas, 2×/día)
-        ├── signals.py                       ← email al médico por alerta ALTA (on_commit)
+        ├── signals.py                       ← crea outbox durable para alertas ALTA
         ├── views.py                         ← webhook Twilio (firma + SID durable en PostgreSQL)
         ├── urls.py
-        ├── knowledge_base.md                ← placeholder (RAG diferido a FASE 5/6)
+        ├── knowledge_base.md                ← placeholder (RAG diferido a Sprint 6)
         ├── management/commands/
+        │   ├── crear_admin.py
+        │   ├── crear_medico.py
+        │   ├── desactivar_pacientes_vencidos.py
         │   ├── crear_checkins_diarios.py
         │   ├── enviar_recordatorios.py
         │   ├── cerrar_checkins_vencidos.py
         │   ├── reintentar_evaluaciones_alertas.py
-        │   └── seed_demo.py                 ← datos demo (Camilo Rueda, demo_medico/demo1234)
-        ├── migrations/                      ← 0001 a 0021
-        └── tests.py                         ← 234 tests
+        │   ├── procesar_notificaciones_email.py
+        │   ├── cron_matutino.py
+        │   ├── cron_operativo.py
+        │   ├── seed_demo.py                 ← solo desarrollo
+        │   └── seed_demo_produccion.py      ← demo reversible y confirmada
+        ├── migrations/                      ← 0001 a 0024
+        └── tests.py                         ← 262 tests (280 total con home)
 ```
 
 ---
@@ -344,8 +352,11 @@ Restricción: como máximo una alerta abierta por `(paciente, tipo)`.
 > la URL (build_absolute_uri() era correcta) sino por usar el Test Auth Token en
 > vez del primario. Detalle completo en BITACORA.md (sesión Twilio+ngrok).
 >
-> **Diferido:** envío automático matutino 7-10 AM Bogotá → FASE 4 (Celery).
-> Capa RAG sobre knowledge_base.md real → FASE 5 (pendiente acceso Drive médico).
+> **Diferido:** el envío automático matutino sigue en stub; antes del piloto
+> requiere WhatsApp Business, plantillas aprobadas y una decisión explícita de
+> horario. No se activará por arrastre de una fase anterior.
+> Capa RAG sobre `knowledge_base.md` real → Sprint 6 (requiere corpus validado
+> por el médico).
 
 ---
 
@@ -507,10 +518,10 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 - [x] D1 — Cache local-memory no comparte estado entre workers (A3/A5/C7 rompen en multi-worker)
 - [x] D2 — Admin scoping sin `formfield_for_foreignkey` ni `has_*_permission` por objeto
 - [x] D3 — `X-Forwarded-For` spoofeable en rate limit del formulario de contacto
-  > ⚠️ **Pendiente de producción (FASE 5):** Nginx debe configurar
-  > `proxy_set_header REMOTE_ADDR $remote_addr;` para que el rate limit funcione
-  > correctamente con la IP real del cliente. El código Django usa `REMOTE_ADDR`
-  > de forma segura — el ajuste requerido es exclusivamente de infraestructura.
+  > **Resuelto en Railway (Loop 4):** el código acepta `X-Real-IP` únicamente
+  > cuando `TRUST_RAILWAY_PROXY=True`, existe una marca `X-Railway-Edge` válida
+  > y la IP tiene formato correcto. En cualquier otro despliegue usa
+  > `REMOTE_ADDR`; `X-Forwarded-For` se descarta.
 - [x] D4 — `requirements.txt` interno con Django 6.0.5 / duplicado con el de raíz
 - [x] D5 — Sin tests de acceso admin para médico no-superuser (changelist + URL directa)
 
@@ -621,14 +632,14 @@ del alert_engine, jun 2026):**
   (Bloque 4).
 
 **Mejoras futuras (decisiones diferidas explícitamente, no bloqueantes):**
-- [ ] **Vista de historial del paciente — versión completa (Sprint 5+):**
+- [ ] **Vista de historial del paciente — versión completa (Sprint 6+):**
   Sprint 4 implementa el historial como sección dentro del admin
   (`change_view` de `PacienteAdmin`, Opción A). La versión completa sería
   una URL y template propios (`/signos_sintomas/paciente/<id>/historial/`)
   con gráfica de temperatura, EVA y alertas a lo largo del tiempo. Requiere
   decisión de si el dashboard médico permanece en Django Admin o evoluciona
   a una app independiente.
-- [ ] **Integración IA/RAG en el chat del paciente (Sprint 5+):**
+- [ ] **Integración IA/RAG en el chat del paciente (Sprint 6):**
   Cuando el paciente escribe fuera de un check-in programado, hoy recibe
   un mensaje neutro + FAQ predefinidos. La mejora es conectar ese flujo a
   un agente IA con acceso a un sistema RAG (NotebookLM u otro) que responda
@@ -640,7 +651,7 @@ del alert_engine, jun 2026):**
 
 ---
 
-### ⏳ FASE 5 — Producción — EN CURSO
+### ⏳ FASE 5 — Producción — CIERRE TÉCNICO, AUDITORÍA PRE-MERGE PENDIENTE
 > Rama: `sprint-5-produccion` (creada desde `Desarrollo` post-merge Sprint 4)
 
 **Decisiones de producto — confirmadas explícitamente por el Arquitecto en
@@ -862,9 +873,9 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   paciente (MEDIA: contactar médico; ALTA: urgencias), sin revelar tipo de
   alerta ni valores. `evaluar_registro` pasó de `on_commit` a síncrono
   dentro de `_crear_registro` (savepoint defensivo — un fallo del engine
-  nunca pierde el reporte del paciente). **191 tests OK.** **Pendiente:**
-  prueba manual real por WhatsApp de los mensajes MEDIA/ALTA (canal Twilio,
-  fuera de `manage.py test`).
+  nunca pierde el reporte del paciente). **191 tests OK** en ese bloque.
+  **Validación posterior completada en Loop 6:** mensajes MEDIA y ALTA probados
+  por el Sandbox real el 21/07/2026, sin exponer tipo ni valor clínico.
 - [x] **Bloque C — Limpieza de Sugarbaker en index.html (02/07/2026):
   no-op verificado.** No existe ninguna mención de "Sugarbaker"/"HIPEC" en
   `index.html` ni en `home`; el único uso es la opción legítima
@@ -903,6 +914,10 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   rate limit corregida; reintento durable de Resend comprobado; Requests 2.33.0
   y `pip-audit` limpio; smoke de producción correcto. Los datos ficticios se
   eliminaron. **280 tests OK.** Auditoría independiente pre-merge pendiente.
+- [x] **Barrido documental y pausa segura (21/07/2026):** memoria, roadmap,
+  bitácora, despliegue, cron, transferencia, variables, base de conocimiento y
+  material histórico reconciliados. `docs/README.md` define fuentes vigentes y
+  protocolo de reanudación. Sin cambios funcionales ni PR.
 - [x] Comando idempotente `crear_medico` + grupo "Médicos" de privilegio mínimo
 - [x] **Hardening Loop 2 — confiabilidad del webhook y alertas:** recibo
   persistente por `MessageSid` en PostgreSQL (sin teléfono ni Body), reintento
@@ -959,6 +974,9 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
 > "pacientes reales". Ninguno bloquea seguir probando el sistema con el Sandbox.
 
 **Infraestructura / operación (con costo):**
+- [ ] **Monitoreo externo:** alerta independiente si la web cae o si un cron de
+  Railway deja de ejecutarse. Los reintentos internos no detectan por sí solos
+  una ausencia total de ejecuciones.
 - [ ] **Dominio propio para correo:** verificarlo en Resend y configurar
   SPF/DKIM/DMARC antes del piloto. La entrega con `onboarding@resend.dev`
   funciona, pero la prueba del 21/07/2026 llegó a spam.

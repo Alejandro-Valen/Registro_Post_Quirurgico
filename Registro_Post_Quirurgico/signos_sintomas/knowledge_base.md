@@ -1,9 +1,9 @@
 # Base de Conocimiento Clínico — Bot de Seguimiento Posquirúrgico
 
-> **Estado:** PLACEHOLDER. El contenido clínico real se construirá cuando el
-> equipo tenga acceso al Drive del médico (pendiente). La capa RAG está
-> pospuesta (ver ROADMAP, FASE 5). Por ahora el bot responde dudas con las
-> respuestas predefinidas conservadoras de la última sección.
+> **Estado al 21/07/2026:** PLACEHOLDER no conectado al runtime. El contenido
+> clínico real se construirá cuando el equipo tenga acceso al material validado
+> por el médico. La capa RAG está diferida a Sprint 6. Por ahora el bot responde
+> dudas con las respuestas predefinidas conservadoras de la última sección.
 
 ---
 
@@ -39,3 +39,6 @@
 > `RESP_FALLBACK`). Este archivo es la fuente humana de verdad; al actualizar una
 > respuesta aquí, reflejarla en `bot.py` (hasta que exista la capa RAG que lea
 > este documento directamente).
+>
+> No agregar umbrales, diagnósticos ni recomendaciones nuevas sin validación
+> explícita del médico y pruebas del comportamiento resultante.

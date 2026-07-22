@@ -25,8 +25,9 @@ de produccion, y emitir un veredicto reproducible antes del PR a `Desarrollo`.
 
 ### Lectura obligatoria previa
 
-Lee completos `CLAUDE.md`, `ROADMAP_MONITOREO_POSQUIRURGICO.md`, `BITACORA.md`,
-`AUDITORIA_SEGURIDAD_SPRINT3.md` si existe, `docs/cron_setup.md`,
+Lee completos `docs/README.md`, `CLAUDE.md`,
+`ROADMAP_MONITOREO_POSQUIRURGICO.md`, `BITACORA.md`,
+`AUDITORIA_SPRINT3_CIERRE.md`, `docs/cron_setup.md`,
 `docs/railway_deploy.md`, `docs/transferencia_cuentas.md` y el consentimiento
 rastreado dentro de `docs/`. Despues inspecciona el proyecto completo, incluidos
 `settings.py`, `settings_production.py`, `urls.py`, `wsgi.py`, `asgi.py`,
@@ -138,7 +139,8 @@ afecta ese runtime reproducible.
     scripts no introduzcan XSS ni dependencias remotas incompatibles con CSP.
 13. **Operacion:** contrasta comandos y documentacion de Railway. Revisa que el
     cron frecuente recupere evaluaciones y correos, y que cerrar check-ins sea
-    idempotente. Detecta diferencias entre el codigo y los horarios documentados.
+    idempotente. Detecta diferencias entre el codigo y los horarios documentados,
+    y evalua la falta de monitoreo externo del scheduler.
 14. **Cobertura:** identifica caminos criticos no cubiertos aunque los 280 tests
     pasen. No uses el numero de tests como sustituto de revisar su calidad.
 
@@ -157,6 +159,9 @@ afecta ese runtime reproducible.
 - El plan actual de Railway reutiliza temporalmente `cron-tarde` cada 5 minutos.
   Tras el upgrade se necesita un `cron-operativo` separado y restaurar el horario
   de tarde.
+- Railway todavía no tiene una alarma externa que detecte una ejecución de cron
+  omitida o una caída total. Los reintentos internos recuperan trabajo fallido,
+  pero no prueban que el scheduler siga arrancando.
 - Deben completarse y firmarse los marcadores del Habeas Data antes del primer
   paciente real.
 - La landing conserva datos del medico entre corchetes y el aviso de boceto.

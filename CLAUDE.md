@@ -353,27 +353,29 @@ INICIO
     ni "datos") y no entra a la máquina de estados. El médico marca el
     campo en el Admin tras obtener la firma física de
     `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md`.
-3. **Un registro por día.** Si ya completó hoy, responde "Ya registramos tus
-   datos de hoy" y se reinicia automáticamente al día siguiente.
+3. **Un registro por check-in pendiente.** Se programan dos turnos diarios
+   (mañana/tarde) y la conversación se liga al check-in exacto. Si no queda un
+   turno pendiente, el bot informa que no hay reporte por completar.
 4. **Lenguaje:** español coloquial, tuteo, tono cálido — nunca jerga médica en
    las preguntas al paciente (ej. no decir "hemático", se muestra "rojo con
    sangre").
 5. **Validación con reintento por pregunta:** cada respuesta mal formada pide
    reintento con un mensaje específico de esa pregunta, nunca un error genérico.
-6. **Sin bloqueo horario en la lógica del bot.** El horario 7-10 AM Bogotá es
-   para el envío automático matutino (diferido a FASE 4 con Celery); el bot
-   responde a cualquier hora si el paciente escribe primero.
+6. **Sin bloqueo horario artificial en la lógica del bot.** El bot puede
+   completar un check-in pendiente cuando el paciente escribe. El inicio
+   proactivo por WhatsApp sigue pendiente en `enviar_recordatorios`; hoy el
+   sistema es reactivo.
 7. **Dudas (FAQ) fuera del flujo de registro:** respuestas predefinidas
    conservadoras (fiebre / alimentación / dolor / fallback a "contacta a tu
    médico"). Esto es un espejo temporal de `knowledge_base.md` mientras no
-   exista la capa RAG (FASE 5).
+   exista la capa RAG (Sprint 6).
 
 **`knowledge_base.md`:** placeholder con la estructura final pendiente y las
 respuestas predefinidas actuales. **No completar con información clínica real
-ni cambiar las reglas del alert_engine sin que el Arquitecto lo decida
-explícitamente en sesión** — la auditoría de literatura ya está disponible
-(ver sección 'Auditoría de Literatura Clínica' abajo), pero las decisiones
-que se derivan de ella todavía no se han tomado.
+ni cambiar las reglas del alert_engine sin que el Arquitecto y el médico lo
+validen explícitamente**. La auditoría de literatura ya está disponible; las
+reglas vigentes están documentadas y cualquier ampliación clínica futura debe
+volver a pasar por esa validación.
 
 ---
 
@@ -414,12 +416,12 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 1 | Modelos clínicos y base de datos | ✅ Completado |
 | Sprint 1 Frontend | Formulario de contacto, templates, admin home | ✅ Completado |
 | Sprint 2 | Motor de alertas (alert_engine) | ✅ Completado (fix post-merge 01b8a47) |
-| Sprint 3 | Bot WhatsApp (Twilio) | ⏳ Funcional end-to-end — merge a Desarrollo POSPUESTO a propósito (ver nota) |
+| Sprint 3 | Bot WhatsApp (Twilio) | ✅ Completado, mergeado a Desarrollo y posteriormente endurecido en Sprint 3-Hardening |
 | Sprint 3.5 | Auditoría de literatura, generalización de alcance/marca y documentación | ✅ Completado |
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En cierre — Bloques 1-7 + A/B y **Loops 1-6 completados técnicamente**; auditoría externa pre-merge pendiente. Django 6.0.7, Requests 2.33.0, CSP, Chart.js local, outbox con Resend por HTTPS y cron operativo cada 5 minutos; **280 tests OK**. Validación de firma, concurrencia, rollback del motor, 550 webhooks de carga y flujos reales NORMAL/MEDIA/ALTA completados. Punto funcional `0d12d88`. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y cierre pre-merge (RAG diferido a Sprint 6) | ⏳ En cierre — Bloques 1-7 + A/B y **Loops 1-6 completados técnicamente**; auditoría externa pre-merge pendiente. Django 6.0.7, Requests 2.33.0, CSP, Chart.js local, outbox con Resend por HTTPS y cron operativo cada 5 minutos; **280 tests OK**. Validación de firma, concurrencia, rollback del motor, 550 webhooks de carga y flujos reales NORMAL/MEDIA/ALTA completados. Punto funcional `0d12d88`. Rama `sprint-5-produccion` |
 
 **Punto actual (21/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
 desplegada en Railway y el cron base funcionando. Quedaron cerrados, validados
@@ -427,7 +429,12 @@ y desplegados los **Loops 1-3**, el **Loop 4 de producción**, el **Loop 5 de
 validación** y el **Loop 6 de cierre técnico**. Falta la auditoría externa antes
 del PR. La suite completa contiene **280 tests OK**. URL:
 `registropostquirurgico-production-1f96.up.railway.app`.
-- **Panel del médico (Admin):** `/admin/` con branding "calma clínica"
+- **Pausa segura y documentación:** `docs/README.md` clasifica fuentes vigentes,
+  historia y documento legal canónico. El barrido del 21/07 actualizó despliegue,
+  cron, transferencia, variables, RAG diferido y protocolo de reanudación. No
+  hubo cambios funcionales, PR ni merge.
+- **Panel del médico (Django Admin):** `/admin/` solo en desarrollo y ruta
+  privada definida por `ADMIN_URL` en producción, con branding "calma clínica"
   (override de `admin/base_site.html` + `signos_sintomas/static/admin/css/panel_admin.css`
   que sobreescribe las variables del Admin) y un **tablero de triage** como
   índice (`admin/index_panel.html` extiende el índice real + template tag
@@ -473,7 +480,8 @@ del PR. La suite completa contiene **280 tests OK**. URL:
   cédula `DEMO-000X` / teléfono ficticio, y **reversible** con
   `--limpiar --confirmar`. Crea 2 pacientes de ejemplo con registros y alertas.
   En Railway se renovaron el 19/07: 2 activos, 18 registros, 10 alertas abiertas
-  agrupadas y 36 detecciones, asignados temporalmente al superusuario `SeñorAL`.
+  agrupadas y 36 detecciones, asignados temporalmente al superusuario `SeñorAL`;
+  esos datos fueron posteriormente limpiados y no son datos clínicos reales.
 - **Loop 4 de producción (21/07/2026):** Django y dependencias directas fijadas,
   CSP activo, Chart.js 4.5.1 servido localmente y correo ALTA desacoplado del
   webhook mediante `NotificacionAlerta` (migración 0024). El correo es genérico:
@@ -512,8 +520,9 @@ del PR. La suite completa contiene **280 tests OK**. URL:
   fue probada por el Arquitecto, conserva `staff=True`, `superuser=False` y el
   correo `seguimientolionalejo@gmail.com`; los pacientes ficticios del Loop 6
   ya fueron eliminados.
-**Próximo paso exacto (al retomar):** entregar a Claude Code la instrucción
-`AUDITORIA_PRE_MERGE_LOOPS_1_6.md`, recibir su auditoría independiente, resolver
+**Próximo paso exacto (al retomar):** leer primero `docs/README.md` y entregar
+a Claude Code la instrucción `AUDITORIA_PRE_MERGE_LOOPS_1_6.md`, recibir su
+auditoría independiente, resolver
 cualquier hallazgo bloqueante y repetir las validaciones afectadas. Solo con
 veredicto favorable se prepara el PR hacia `Desarrollo`, se revisa el diff y se
 decide el merge. Al mejorar
@@ -526,7 +535,8 @@ HABEAS DATA).
 
 **Nota cron (08/07/2026):** en Railway, encadenar comandos con `&&` en el
 Custom Start Command **solo corre el primero** → se creó el comando único
-`cron_matutino` (corre las 4 tareas matutinas en orden con `call_command`).
+`cron_matutino` (corre **6 tareas** en orden con `call_command`, incluidas la
+recuperación del motor y la bandeja de correo).
 Los horarios cron van en **UTC** (Bogotá −5: 6 AM = 11:00 UTC, 6 PM = 23:00
 UTC); mínimo de intervalo 5 min. Cambiar el Custom Start Command exige
 **redesplegar** el servicio cron para que tome efecto.
@@ -624,22 +634,23 @@ real sin PHI/PII. Llegó a spam por usar el dominio de prueba
    y se reasignan los pacientes.
 3. **Requisitos del piloto real** (ver ROADMAP, "Requisitos para un PILOTO REAL
    con pacientes"): plan de pago Railway, salir del Sandbox de Twilio a
-   **WhatsApp Business API**, completar los corchetes de
-   `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md`, y prueba real por WhatsApp.
+   **WhatsApp Business API**, dominio autenticado de Resend, monitoreo externo,
+   completar los corchetes de `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` y
+   repetir el end-to-end sobre el canal definitivo.
 4. **`enviar_recordatorios` sigue stub** (Twilio saliente real): hoy el sistema
    es reactivo (responde cuando el paciente escribe); el envío matutino
    automático real está pendiente.
 
 **Diferido explícitamente:**
-- Desplegar en Railway o Render con PostgreSQL en la nube.
 - Integración Twilio saliente real en `enviar_recordatorios` (stub hoy).
+- Monitoreo externo de disponibilidad y ausencia de ejecuciones de los cron de
+  Railway; los reintentos internos no sustituyen esta alarma operativa.
 - Completar los campos entre corchetes de
   `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` (datos reales del médico/
   institución) antes de imprimirlo para el primer paciente real.
 - Vista separada historial paciente (URL y template propios).
 - RAG/MCP en el bot — Sprint 6, con corpus de `knowledge_base.md`
-  validado por el médico (decisión P-13); pendiente de que se decidan
-  primero los umbrales del `alert_engine`.
+  validado por el médico (decisión P-13).
 - OpenMed (anonimización PII) — Sprint 6, solo referencia (P-14).
 
 ---

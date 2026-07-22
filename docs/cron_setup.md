@@ -4,6 +4,10 @@
 > 01/07/2026): el cron corre en **Linux**, no en Windows Task Scheduler —
 > el destino de despliegue es Railway o Render (ambos Linux), no la
 > máquina de Alejandro. Ver ROADMAP_MONITOREO_POSQUIRURGICO.md, FASE 5.
+>
+> Estado al 21/07/2026: `cron-manana` y el `cron_operativo` temporal están
+> desplegados. La recuperación de evaluaciones y correo fue verificada; el
+> monitoreo externo de ausencia de ejecuciones sigue pendiente.
 
 ## Los 6 management commands que deben programarse
 
@@ -77,6 +81,11 @@ salida estándar/error de un command llega por email automáticamente al
 desarrollador — es el mecanismo de "cron falla → email → resolución en
 ~30 min" de la decisión P-3 (mantenimiento con intervención mínima).
 
+`MAILTO` aplica al ejemplo de `crontab` autogestionado. Los servicios cron de
+Railway no heredan este mecanismo: hoy sus fallos quedan en logs. Antes del
+piloto real se debe configurar monitoreo externo que avise si una ejecución no
+ocurre o si web/cron dejan de responder.
+
 **Nota sobre `desactivar_pacientes_vencidos` a las 5:55 y `crear_checkins_diarios`/`cerrar_checkins_vencidos` a las 6:00 en el mismo minuto UTC (11:00):**
 cron ejecuta cada línea como un proceso independiente; el orden entre
 tareas programadas para el mismo minuto no está garantizado por cron.
@@ -91,6 +100,12 @@ Desde el 19/07/2026 hay dos servicios cron:
 - `cron-manana`: `cron_matutino`, a las `0 11 * * *` UTC.
 - `cron-tarde`: **reutilizado temporalmente** con `cron_operativo`, cada
   `*/5 * * * *`.
+
+`cron_matutino` ejecuta hoy las seis tareas en una sola corrida de las 6:00 AM,
+incluido `enviar_recordatorios`. Como ese command sigue siendo un stub, todavía
+no envía nada. Al implementar Twilio saliente se debe decidir si el recordatorio
+se separa a las 7:00 AM o si se aprueba explícitamente enviarlo a las 6:00 AM;
+no se debe activar el envío conservando el horario por accidente.
 
 Esta reutilización fue necesaria porque Railway rechazó un servicio adicional
 con `Free plan resource provision limit exceeded`. No es la arquitectura final:
@@ -107,13 +122,16 @@ responsabilidad original eran el cierre de la tarde.
 - [ ] `crear_checkins_diarios` creó 2 check-ins por paciente activo
 - [ ] `enviar_recordatorios` corrió sin error (aunque el envío real de
   WhatsApp saliente siga en stub — ver Sprint 5, tareas diferidas)
-- [ ] `cerrar_checkins_vencidos` corrió en sus dos horarios sin error
+- [x] `cerrar_checkins_vencidos` fue ejecutado en vivo por `cron_operativo` y
+  cerró check-ins vencidos de forma idempotente
 - [x] `cron_operativo` corre cada 5 minutos y ejecuta cierre, reintento del
   motor y bandeja de notificaciones en ese orden
 - [x] Una alerta ALTA ficticia crea una notificación y Resend la entrega
   (alerta demo #90, 21/07/2026; recibida en spam por usar dominio de prueba)
-- [ ] Un fallo forzado (ej. detener la BD un momento) efectivamente
-  genera un email a `MAILTO`
+- [x] Un fallo transitorio de entrega conservó la notificación PENDIENTE y el
+  mismo procesador la envió al reintentar, sin duplicarla (21/07/2026)
+- [ ] Un fallo forzado (ej. detener la BD un momento) genera una alerta del
+  sistema de monitoreo externo; todavía no está configurado
 
 ## Diferido explícitamente (no bloquea Sprint 5)
 
@@ -123,3 +141,6 @@ responsabilidad original eran el cierre de la tarde.
   se describe arriba. La reutilización actual es una medida temporal.
 - Integración real de Twilio saliente en `enviar_recordatorios` (hoy es
   un stub que solo loguea).
+- Monitoreo externo de disponibilidad y ejecuciones omitidas de Railway. Los
+  reintentos internos recuperan trabajo fallido, pero no detectan por sí solos
+  que un servicio cron haya dejado de arrancar.
