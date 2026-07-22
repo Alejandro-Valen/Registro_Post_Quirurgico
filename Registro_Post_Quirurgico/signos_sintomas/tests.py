@@ -1960,10 +1960,10 @@ class WebhookWhatsAppTests(TestCase):
         self.assertNotIn('+573002223377', valores)
 
     @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
-    def test_rate_limit_excedido_devuelve_twiml_vacio(self):
+    def test_rate_limit_excedido_informa_sin_procesar_el_mensaje(self):
         # Más de _LIMITE_MENSAJES_HORA (20) mensajes del mismo número en una
-        # hora → los mensajes excedentes reciben TwiML vacío sin procesar.
-        from signos_sintomas.views import _LIMITE_MENSAJES_HORA
+        # hora: el mensaje no se procesa, pero el paciente recibe orientación.
+        from signos_sintomas.views import _LIMITE_MENSAJES_HORA, _MSG_RATE_LIMIT
         telefono = 'whatsapp:+573005556677'
         # Forzar el contador de cache directamente al límite
         clave = 'rl_wh_{}'.format(telefono.replace('+', '').replace(':', ''))
@@ -1978,7 +1978,15 @@ class WebhookWhatsAppTests(TestCase):
             },
         )
         self.assertEqual(respuesta.status_code, 200)
-        self.assertNotIn(b'<Message>', respuesta.content)
+        self.assertIn(b'<Message>', respuesta.content)
+        self.assertIn(_MSG_RATE_LIMIT.encode(), respuesta.content)
+        recepcion = RecepcionWebhookTwilio.objects.get(
+            message_sid='SMratelimit0001',
+        )
+        self.assertEqual(
+            recepcion.estado,
+            RecepcionWebhookTwilio.ESTADO_COMPLETADO,
+        )
 
 
 class WebhookFlujoCompletoTests(TestCase):

@@ -21,6 +21,12 @@ from .models import RecepcionWebhookTwilio
 # --- Constantes de protección del webhook ---
 _LIMITE_MENSAJES_HORA = 20
 _MAX_EDAD_PROCESANDO = timedelta(minutes=2)
+_MSG_RATE_LIMIT = (
+    'Recibimos varios mensajes en poco tiempo y pausamos temporalmente el '
+    'cuestionario. Inténtalo de nuevo más tarde. Si necesitas atención '
+    'médica inmediata, comunícate con tu médico o con el servicio de '
+    'urgencias.'
+)
 
 
 @sensitive_post_parameters('From', 'Body')   # B2: oculta PII en error reports
@@ -52,7 +58,7 @@ def webhook_whatsapp(request):
 
     if _rate_limit_excedido(telefono):
         _marcar_recepcion_completada(recepcion)
-        return _respuesta_twiml_vacia()
+        return _respuesta_twiml(_MSG_RATE_LIMIT)
 
     try:
         with transaction.atomic():
@@ -72,9 +78,7 @@ def webhook_whatsapp(request):
         )
         raise
 
-    twiml = MessagingResponse()
-    twiml.message(respuesta)
-    return HttpResponse(str(twiml), content_type='application/xml')
+    return _respuesta_twiml(respuesta)
 
 
 def _sid_twilio_valido(sid):
@@ -127,8 +131,15 @@ def _marcar_recepcion_completada(recepcion):
 
 
 def _respuesta_twiml_vacia():
+    return _respuesta_twiml()
+
+
+def _respuesta_twiml(mensaje=None):
+    twiml = MessagingResponse()
+    if mensaje:
+        twiml.message(mensaje)
     return HttpResponse(
-        str(MessagingResponse()),
+        str(twiml),
         content_type='application/xml',
     )
 
