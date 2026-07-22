@@ -419,12 +419,13 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En curso — Bloques 1-7 + A/B y **Loops 1-5 cerrados**. Django 6.0.7, CSP, Chart.js local, outbox con Resend por HTTPS y cron operativo cada 5 minutos; **280 tests OK**. Validación de firma, concurrencia, rollback del motor, 550 webhooks de carga y flujo real por WhatsApp completada. Punto de restauración `3c86487`. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y RAG con contenido real | ⏳ En cierre — Bloques 1-7 + A/B y **Loops 1-6 completados técnicamente**; auditoría externa pre-merge pendiente. Django 6.0.7, Requests 2.33.0, CSP, Chart.js local, outbox con Resend por HTTPS y cron operativo cada 5 minutos; **280 tests OK**. Validación de firma, concurrencia, rollback del motor, 550 webhooks de carga y flujos reales NORMAL/MEDIA/ALTA completados. Punto funcional `0d12d88`. Rama `sprint-5-produccion` |
 
 **Punto actual (21/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
 desplegada en Railway y el cron base funcionando. Quedaron cerrados, validados
-y desplegados los **Loops 1-3**, el **Loop 4 de producción** y el **Loop 5 de
-validación**. La suite completa contiene **280 tests OK**. URL:
+y desplegados los **Loops 1-3**, el **Loop 4 de producción**, el **Loop 5 de
+validación** y el **Loop 6 de cierre técnico**. Falta la auditoría externa antes
+del PR. La suite completa contiene **280 tests OK**. URL:
 `registropostquirurgico-production-1f96.up.railway.app`.
 - **Panel del médico (Admin):** `/admin/` con branding "calma clínica"
   (override de `admin/base_site.html` + `signos_sintomas/static/admin/css/panel_admin.css`
@@ -493,18 +494,29 @@ validación**. La suite completa contiene **280 tests OK**. URL:
   550 webhooks y 50 registros en 5,03 s, sin solicitudes de 15 s ni recibos
   incompletos. El Sandbox real completó un check-in normal con
   `medico_piloto`; los datos ficticios se eliminaron después de verificar.
+- **Loop 6 de cierre técnico (21/07/2026):** se completaron por el Sandbox los
+  tonos MEDIA y ALTA y se verificaron alerta, detección, registro, check-in,
+  panel médico y correo real. Dos cuestionarios dentro de una hora alcanzaron
+  el límite de 20 mensajes: el webhook ya no responde en silencio y devuelve
+  una explicación neutra (`c12bfe5`). Un primer intento de Resend registró
+  `OSError`; el outbox lo conservó PENDIENTE y el mismo comando de cron lo envió
+  correctamente al reintentar, sin duplicarlo. Requests subió a 2.33.0 por
+  PYSEC-2026-2275; `pip-audit` quedó limpio y los **280 tests** pasaron de nuevo.
+  Se eliminaron transaccionalmente el paciente y todos los datos ficticios.
 - **Estado Railway (21/07/2026):** web y ambos cron en `SUCCESS` sobre
-  `283319b`; HTTPS 200, `/admin/` devuelve 404, la ruta privada redirige al
+  `0d12d88`; HTTPS 200, `/admin/` devuelve 404, la ruta privada redirige al
   login, CSP presente y Chart.js local responde 200. `check --deploy` remoto
   quedó sin issues. `cron-tarde` fue reutilizado temporalmente como
   `cron_operativo` cada 5 minutos por el límite del plan; ejecutó en vivo
   cierre, reintento del motor y bandeja de correo. La cuenta `medico_piloto`
-  fue probada por el Arquitecto, conserva `staff=True`, `superuser=False`, dos
-  demos asignados y el correo `seguimientolionalejo@gmail.com`.
-**Próximo paso exacto (al retomar):** iniciar el **Loop 6 de cierre**: revisar
-y depurar el roadmap final, ejecutar la prueba manual del tono MEDIA/ALTA,
-hacer el smoke con `medico_piloto`, preparar el PR hacia `Desarrollo`, revisar
-el diff completo y decidir el merge. Al mejorar
+  fue probada por el Arquitecto, conserva `staff=True`, `superuser=False` y el
+  correo `seguimientolionalejo@gmail.com`; los pacientes ficticios del Loop 6
+  ya fueron eliminados.
+**Próximo paso exacto (al retomar):** entregar a Claude Code la instrucción
+`AUDITORIA_PRE_MERGE_LOOPS_1_6.md`, recibir su auditoría independiente, resolver
+cualquier hallazgo bloqueante y repetir las validaciones afectadas. Solo con
+veredicto favorable se prepara el PR hacia `Desarrollo`, se revisa el diff y se
+decide el merge. Al mejorar
 el plan Railway, crear `cron-operativo` como servicio separado y restaurar
 `cron-tarde` a su horario original. Después: **datos reales del médico** (reemplazar
 `[corchetes]`, subir logo/colores, `MOSTRAR_AVISO_BOCETO=False`) y los
@@ -553,7 +565,7 @@ Resumen de lo resuelto en `sprint-5-produccion` (Bloques 1-6):
 - Bloque 5: SMTP real (`EMAIL_*` en `settings_production.py`) probado primero
   en local. La implementación inicial con datos identificables fue sustituida
   en el Loop 4 por una bandeja persistente, timeout y un correo genérico sin
-  PHI/PII. La entrega real desde Railway sigue pendiente de una API HTTPS.
+  PHI/PII. Resend por API HTTPS quedó activo y con entrega real confirmada.
 - Bloque 6: `docs/cron_setup.md` (4 commands, orden obligatorio:
   `desactivar_pacientes_vencidos` **antes** de `crear_checkins_diarios`)
   y `docs/transferencia_cuentas.md`.

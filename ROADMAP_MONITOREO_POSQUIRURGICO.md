@@ -898,6 +898,11 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   concurrencia de outbox, rollback parcial del motor y flujo completo por
   webhook cubiertos. Carga local: 50 pacientes concurrentes, 550 webhooks y
   50 registros en 5,03 s, sin superar 15 s por solicitud. Suite: **280 OK**.
+- [x] **Loop 6 — cierre técnico:** flujos reales MEDIA y ALTA verificados con
+  `medico_piloto`; panel y correo ALTA confirmados; respuesta silenciosa del
+  rate limit corregida; reintento durable de Resend comprobado; Requests 2.33.0
+  y `pip-audit` limpio; smoke de producción correcto. Los datos ficticios se
+  eliminaron. **280 tests OK.** Auditoría independiente pre-merge pendiente.
 - [x] Comando idempotente `crear_medico` + grupo "Médicos" de privilegio mínimo
 - [x] **Hardening Loop 2 — confiabilidad del webhook y alertas:** recibo
   persistente por `MessageSid` en PostgreSQL (sin teléfono ni Body), reintento
@@ -936,7 +941,8 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
 - [ ] Al mejorar el plan de Railway, crear un servicio `cron-operativo`
   independiente y restaurar `cron-tarde` a su horario original de las 6 PM.
 - [x] Provisionar y verificar en Railway la cuenta `medico_piloto` con
-  privilegio mínimo, correo configurado y dos demos asignados
+  privilegio mínimo y correo configurado. Los demos y pacientes ficticios de
+  las validaciones ya fueron eliminados.
 - [ ] Entrega final al equipo médico
 
 **Diferido explícitamente a Sprint 6:**
@@ -990,8 +996,10 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   tarde completados, motor en `COMPLETADA`, sin alerta clínica. El turno mañana
   creado a las 18:00 fue cerrado por cron con `SILENCIO/BAJA`, comportamiento
   operativo esperado. Todos los datos ficticios se eliminaron al terminar.
-- [ ] Prueba manual del **tono del bot** (Bloque B): disparar una alerta MEDIA y
-  una ALTA y confirmar los mensajes de cierre `MSG_CIERRE_ALERTA_*`.
+- [x] Prueba manual del **tono del bot** (Bloque B): alerta MEDIA provocada por
+  drenaje turbio y alerta ALTA por temperatura de 38,5 °C. Ambos mensajes de
+  cierre `MSG_CIERRE_ALERTA_*` se recibieron sin exponer tipo ni valor clínico.
+  Registro, check-in, motor y alertas quedaron coherentes y luego se limpiaron.
 
 **Limpieza técnica menor (no bloqueante):**
 - [ ] Revisar/limpiar el dominio duplicado en Railway (si quedaron dos).
@@ -1090,17 +1098,11 @@ DB_PORT=5432
 
 ---
 
-*Última actualización: 01/07/2026 — Sprint 4 (Dashboard médico y
-notificaciones) completo y mergeado a `Desarrollo` (fast-forward, 135
-tests OK). Checklist de FASE 3, FASE 3.6 y FASE 4 sincronizado contra
-el historial real de git (se marcaron tareas completadas que habían
-quedado sin `[x]`). Árbol de "Estructura del Proyecto Django"
-actualizado contra el filesystem real.*
-*Siguiente paso: Sprint 5 (producción) en rama `sprint-5-produccion`.
-Antes de ejecutar cualquier bloque de código de Sprint 5, resolver las
-preguntas de arquitectura abiertas (duración del seguimiento activo /
-desactivación automática de `Paciente.activo`, ubicación del cron,
-proveedor SMTP real) y confirmar explícitamente con el Arquitecto las
-decisiones de producto propuestas en la sesión externa del 01/07/2026
-antes de incorporarlas como definitivas a este roadmap — ver aviso de
-seguridad y discrepancias en BITACORA.md, sesión 01/07/2026.*
+*Última actualización: 21/07/2026. Sprint 5 en cierre sobre
+`sprint-5-produccion`: Loops 1-6 completados técnicamente, 280 tests OK y
+producción validada con flujos NORMAL/MEDIA/ALTA. Siguiente paso: ejecutar la
+auditoría independiente descrita en `AUDITORIA_PRE_MERGE_LOOPS_1_6.md`, resolver
+hallazgos bloqueantes y solo entonces preparar el PR hacia `Desarrollo`. Los
+requisitos externos de WhatsApp Business, correo con dominio propio, plan
+Railway, Habeas Data y datos definitivos del médico siguen siendo compuertas
+separadas para el piloto real.*

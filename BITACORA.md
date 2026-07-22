@@ -3124,3 +3124,79 @@ datos intactos.
 
 **Siguiente paso:** Loop 6 de cierre: prueba manual MEDIA/ALTA, depuración final
 del roadmap, smoke de la cuenta médica, PR hacia `Desarrollo`, revisión y merge.
+
+---
+
+## 21/07/2026 — Loop 6: cierre técnico y compuerta de auditoría
+
+**Estado:** validación técnica completada. El PR y el merge permanecen detenidos
+hasta recibir una auditoría independiente favorable.
+
+### Pruebas manuales en Railway y Sandbox
+
+- Se creó desde `medico_piloto` el paciente ficticio exacto
+  `PRUEBA LOOP 6 TONOS` (`9900000006`) y se generaron check-ins controlados.
+- Flujo MEDIA: respuestas normales salvo drenaje turbio. El bot entregó el tono
+  MEDIA esperado y Railway confirmó check-in 76, registro 67, evaluación
+  completada y alerta `FUGA_ANASTOMOTICA/MEDIA`.
+- Al responder `si` en la última pregunta de un segundo flujo, Twilio recibió
+  200 pero el bot quedó en `ESPERANDO_TOLERANCIA_LIQUIDOS`. El parser sí aceptaba
+  `si`: el contador Redis había llegado a 22 frente al límite de 20 mensajes por
+  hora por ejecutar dos cuestionarios completos. El recibo SID se cerraba y la
+  respuesta TwiML quedaba vacía.
+- Se corrigió el comportamiento en `c12bfe5`: una solicitud Twilio válida que
+  supera el límite recibe ahora un mensaje neutro, sin datos clínicos, en vez de
+  silencio. Pasaron 15 pruebas enfocadas y luego la suite completa.
+- Tras limpiar únicamente la clave Redis del paciente ficticio, se completó el
+  flujo MEDIA. Para ALTA se creó el check-in 77 y se respondió temperatura
+  38,5 °C; el bot mostró el cierre ALTA esperado sin revelar alerta ni valor.
+  Railway confirmó registro 68, evaluación completada y `SEPSIS/ALTA`.
+- `medico_piloto` visualizó el resultado con aislamiento correcto en el panel.
+
+### Entrega de correo
+
+- La notificación ALTA quedó primero PENDIENTE tras almacenar solamente la clase
+  de error `OSError`, política deliberada para no persistir contenido sensible.
+- El cron de las 19:25 se ejecutó antes de la elegibilidad del reintento
+  (19:25:31); por ello el siguiente intento automático habría ocurrido a las
+  19:30. Se ejecutó una vez el mismo comando desplegado
+  `procesar_notificaciones_email`: tomó una candidata y la envió, sin pendientes
+  ni duplicados. El Arquitecto confirmó recepción en spam.
+- El correo mantuvo el formato genérico: referencia opaca y enlace autenticado,
+  sin nombre, teléfono, cédula, signos, síntomas ni detalle clínico.
+
+### Auditoría técnica final
+
+- Suite completa con Requests 2.33.0: **280/280 OK** en 126,46 segundos.
+- `makemigrations --check --dry-run`, `manage.py check` y `check --deploy` con
+  configuración de producción temporal: sin issues.
+- `pip-audit` detectó inicialmente PYSEC-2026-2275 en Requests 2.32.5. El
+  proyecto no invoca `requests.utils.extract_zipped_paths`, pero se actualizaron
+  `requirements-runtime.txt` y `requirements.txt` a 2.33.0. La auditoría quedó
+  sin vulnerabilidades conocidas (`0d12d88`).
+- El escaneo del árbol y del historial no encontró claves Resend/Twilio,
+  credenciales ni llaves privadas reales. `.env` no está rastreado. Las
+  migraciones `RunPython` 0019 y 0020 no contienen pacientes ni secretos.
+- Smoke de `0d12d88`: `/` 200 con CSP, `/admin/` 404, ruta privada 302 al login
+  y Chart.js local 200 (208.522 bytes). Web de Railway en `SUCCESS`.
+- `pip check` del Python global conserva conflictos ajenos entre herramientas de
+  notebooks y `googletrans`/`httpx`; no corresponden al runtime reproducible de
+  Railway, cuyo Dockerfile instala solo `requirements-runtime.txt`.
+
+### Limpieza y estado
+
+- Se eliminaron transaccionalmente solo los datos del paciente ficticio: 1
+  notificación, 3 detecciones, 2 alertas, 1 conversación, 2 check-ins, 2
+  registros y 1 log Admin; quedaron cero pacientes de esta prueba. También se
+  limpió exclusivamente su clave de rate limit.
+- Rama `sprint-5-produccion` sincronizada con origin en `0d12d88` antes de esta
+  actualización documental. El único archivo raíz no rastreado es el formato de
+  consentimiento recibido externamente y permanece intacto.
+- Sigue pendiente para un piloto real: WhatsApp Business y envío saliente real
+  (`enviar_recordatorios` continúa stub), dominio propio de Resend, plan Railway
+  con cron separado, Habeas Data firmado y datos definitivos del médico.
+
+**Compuerta de cierre:** se creó `AUDITORIA_PRE_MERGE_LOOPS_1_6.md` para que
+Claude Code contraste todo el árbol, los seis loops, las 280 pruebas y los
+controles de producción. No se abrirá PR ni se hará merge hasta clasificar sus
+hallazgos, resolver los bloqueantes y repetir las pruebas afectadas.
