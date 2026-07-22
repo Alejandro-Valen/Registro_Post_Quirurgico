@@ -14,11 +14,14 @@ y verifica siempre el codigo real.
    requisitos separados para merge y para piloto real.
 3. `AUDITORIA_PRE_MERGE_LOOPS_1_6.md`: instruccion obligatoria para la segunda
    opinion de Claude Code antes del PR a `Desarrollo`.
-4. `docs/railway_deploy.md`: topologia, variables y despliegue actual.
-5. `docs/cron_setup.md`: programacion y limitaciones operativas de los cron.
-6. `docs/transferencia_cuentas.md`: propiedad y entrega futura de servicios y
+4. `docs/decisiones_correccion_auditoria.md`: decisiones D1-D7 tomadas por el
+   Arquitecto para corregir los hallazgos de esa auditoria, con su razonamiento
+   y el plan de los tres loops. Se consulta por tema, no por fecha.
+5. `docs/railway_deploy.md`: topologia, variables y despliegue actual.
+6. `docs/cron_setup.md`: programacion y limitaciones operativas de los cron.
+7. `docs/transferencia_cuentas.md`: propiedad y entrega futura de servicios y
    credenciales.
-7. `Registro_Post_Quirurgico/.env.example`: nombres de variables y ejemplos no
+8. `Registro_Post_Quirurgico/.env.example`: nombres de variables y ejemplos no
    secretos. Nunca es un archivo listo para copiar en produccion sin revisar.
 
 `BITACORA.md` es la cronologia de ejecucion. Es acumulativa: las afirmaciones de
