@@ -29,9 +29,18 @@ la entrada de `BITACORA.md` del 22/07/2026 (informe y hallazgos).
 | [D5](#d5) | Signos concurrentes de íleo en un mismo check-in | 10 | A | Aceptada |
 | [D6](#d6) | Límite de reintentos y estado terminal | 13 | B | Aceptada |
 | [D7](#d7) | Registros dados por evaluados en la migración 0020 | 3 | C | Aceptada |
+| [D8](#d8) | Días sin datos en las reglas de días consecutivos | *(nuevo)* | C | Aceptada |
+| [D9](#d9) | Campo `fecha_ultimo_registro` sin lectores | *(nuevo)* | C | Aceptada |
+| [D10](#d10) | Cláusula MEDIA de la regla de hinchazón | *(nuevo)* | C | Aceptada |
 
 Los hallazgos 2, 6, 7, 8, 9, 11 y 14 son correcciones técnicas sin decisión de
 producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
+
+**D8, D9 y D10 no vienen de la auditoría.** Salieron de un ejercicio distinto el
+22/07/2026: se le pidió a otra sesión que **documentara** el sistema explorando
+el código. Explicar algo obliga a entenderlo de otra forma que auditarlo, y
+encontró tres cosas que la auditoría no vio. Las tres se verificaron contra el
+código antes de aceptarlas.
 
 ---
 
@@ -41,9 +50,11 @@ producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
 > Es lo primero que debe leer quien retome el trabajo.
 
 **Última actualización:** 22/07/2026
-**Punto alcanzado:** **Loop A CERRADO y publicado.** Siguiente: Loop B, en
-sesión nueva, empezando por el commit B1 (test en rojo).
+**Punto alcanzado:** **Loop A CERRADO y publicado.** Se agregaron D8, D9 y D10
+(hallazgos del ejercicio de documentación, todos para el Loop C). Siguiente:
+Loop B, en sesión nueva, empezando por el commit B1 (test en rojo).
 **Rama:** `sprint-5-produccion` · **Restauración segura:** `fbf62a8`
+**Línea base de la suite:** 286 tests OK
 
 ### Loop A — Corrección clínica *(bloquea el merge)*
 
@@ -92,8 +103,9 @@ nada si no se verifica por qué está verde.**
 - [ ] **C2** `fix: conservar el estado de error del motor en la ruta del bot` → hallazgo 7
 - [ ] **C3** `fix: no exponer otras cuentas medicas en los filtros` → hallazgo 8
 - [ ] **C4** `fix: validar variables de entorno vacias al arrancar` → hallazgo 11
-- [ ] **C5** `docs: corregir CLAUDE.md, comentarios de migracion y despliegue` → hallazgos 9, 14
+- [ ] **C5** `docs: corregir CLAUDE.md, comentarios de migracion y despliegue` → hallazgos 9, 14 · **D8** (redacción "días con datos", no "días calendario") · **D9** (`help_text` obsoleto) · recorte de CLAUDE.md (supera el umbral de 40.000 chars; ~36% es cronología duplicada de BITACORA)
 - [ ] **C6** D7 — consulta de solo lectura en Railway y anotación en BITACORA
+- [ ] **C7** `test: fijar y simplificar la condicion MEDIA de hinchazon` → **D10** (pruebas primero, expresión legible, **sin cambiar comportamiento**)
 - [ ] Cierre: suite · `check --deploy` · `pip-audit` · documentación sin contradicciones
 
 ### Después de los tres loops
@@ -571,6 +583,153 @@ una duda contable en ruido clínico real.
 de los Loops 5 y 6 se eliminaron transaccionalmente, y nunca ha habido un
 paciente real en el sistema. Pero es una expectativa, y por eso el primer paso
 es contar.
+
+---
+
+<a id="d8"></a>
+## D8 — Días sin datos en las reglas de días consecutivos
+
+**Origen:** ejercicio de documentación, 22/07/2026 · **Loop:** C · **Estado:** Aceptada
+
+### Problema
+
+Las cuatro reglas que cuentan días consecutivos **dejan de contar cuando
+encuentran un día sin ningún registro**. Cuentan *días con datos consecutivos*,
+no *días calendario consecutivos*, que es como los describen CLAUDE.md y el
+ROADMAP.
+
+| Regla | Cómo se corta |
+|-------|---------------|
+| 3 — gases | `alert_engine.py:394` — `if not existe_registro: break` |
+| 6 — tolerancia a líquidos | `alert_engine.py:576` — `if not existe_registro: break` |
+| 4 — náuseas | rompe cuando no hubo náuseas; un día sin datos cuenta como "sin náuseas" |
+| 7 — hinchazón | `_nivel_hinchazon_dia` devuelve `None` → `break` |
+
+En la práctica:
+
+```
+Lunes      reporta:  sin gases     → cuenta 1
+Martes     no reporta              → CORTA el conteo
+Miércoles  reporta:  sin gases     → vuelve a contar desde 1
+```
+
+Tres días sin tránsito intestinal quedan registrados como "un día".
+
+### Decisión
+
+**Conservar el comportamiento del código. Corregir la documentación**, que es
+donde está el error: las tablas de referencia deben decir "días con datos
+consecutivos", no "días calendario consecutivos".
+
+### Razonamiento
+
+Al detectarlo pareció una **inconsistencia con D1** — allí se decidió que un
+check-in `PENDIENTE` (un desconocido) **no rompe** la racha de SILENCIO, y aquí
+un día sin datos (otro desconocido) **sí la rompe**. Al analizarlo, los dos
+casos no son equivalentes:
+
+- En D1, el `PENDIENTE` es un desconocido **cuyo desenlace ya está determinado**:
+  ese check-in no puede responderse (el bot solo sirve los de hoy), así que
+  terminará en `NO_RESPONDIDO`. Ignorarlo recupera un hecho conocido.
+- Aquí, un día sin datos es un desconocido **genuino**: el paciente pudo haber
+  tenido gases y no reportarlo. Contar a través de él **inventaría un hecho
+  clínico**.
+
+No inventar datos que no se observaron es el principio más consistente de este
+proyecto: no se hizo backfill de `veces`, ni de `resuelta_por` (D3), y la
+migración 0019 fue criticada precisamente por fabricar una `fecha_resolucion`.
+
+Además **el hueco ya tiene su propia alerta**: si el paciente no reporta, se
+genera SILENCIO, que tras el Loop A sí escala correctamente.
+
+### Límite explícito
+
+Esta decisión **no cierra la pregunta clínica**. Si el médico considera que un
+día sin reportar no debería reiniciar el conteo —por ejemplo, tolerar un hueco
+de un solo día sin romper la racha— eso es un **cambio de umbral clínico** y
+requiere su validación explícita más evidencia. Queda anotado como pregunta
+abierta, no como decisión tomada.
+
+**Limitación conocida que se acepta:** un paciente que reporta de forma
+intermitente puede tener 3 días con signos y que ninguna regla escale, mientras
+recibe alertas SILENCIO por separado. Las dos señales **no se suman** — el
+médico ve `ILEO/BAJA` + `SILENCIO/BAJA` en vez de un cuadro que escale.
+
+---
+
+<a id="d9"></a>
+## D9 — Campo `fecha_ultimo_registro` sin lectores
+
+**Origen:** ejercicio de documentación, 22/07/2026 · **Loop:** C · **Estado:** Aceptada
+
+### Problema
+
+`ConversacionWhatsApp.fecha_ultimo_registro` se escribe pero **nunca se lee**.
+Verificado: aparece exactamente dos veces en todo el código —
+`models.py:726` (definición) y `bot.py:724` (escritura). Cero lecturas.
+
+Es un resto del modelo anterior de "un registro por día", que hoy se controla
+por `CheckInProgramado`.
+
+### Decisión
+
+**Marcar el campo como obsoleto en su `help_text`. Sin migración, sin borrar la
+columna, sin quitar la escritura.**
+
+### Razonamiento
+
+Borrar una columna en una base de datos de producción exige migración y
+despliegue. El beneficio es cosmético; el riesgo, aunque bajo, no es cero. En
+medio de una corrección que bloquea un merge, no se justifica.
+
+Dejar la escritura mantiene el campo coherente por si alguien lo consulta
+manualmente. La limpieza real —quitar campo y escritura— queda para después del
+merge, cuando no haya nada en juego.
+
+---
+
+<a id="d10"></a>
+## D10 — Cláusula MEDIA de la regla de hinchazón
+
+**Origen:** ejercicio de documentación, 22/07/2026 · **Loop:** C · **Estado:** Aceptada
+
+### Problema
+
+La condición MEDIA de la Regla 7 (`alert_engine.py:623-626`) encadena tres
+comparaciones, y **dos de ellas se vuelven trivialmente verdaderas cuando falta
+el dato de ayer**:
+
+```python
+if nivel_hoy > nivel_antier and (
+    nivel_ayer is None or nivel_ayer >= nivel_antier      # ← True si falta ayer
+) and nivel_hoy >= (nivel_ayer if nivel_ayer is not None else nivel_hoy):
+                                                          # ← nivel_hoy >= nivel_hoy
+```
+
+Sin el dato de ayer, toda la condición se reduce a `nivel_hoy > nivel_antier`:
+la verificación de "sostenido" desaparece justo cuando no hay con qué
+verificarla. La regla documentada dice "empeoramiento sostenido sin bajar".
+
+### Decisión
+
+**Primero hacerla auditable, después decidir.** En el Loop C:
+
+1. Agregar pruebas dedicadas que **fijen el comportamiento actual**, incluido
+   explícitamente el caso sin dato de ayer.
+2. Reescribir la expresión para que sea legible, **sin cambiar comportamiento**
+   — las pruebas del punto 1 lo garantizan.
+3. **No** modificar cuándo dispara la alerta.
+
+### Razonamiento
+
+Cambiar cuándo dispara es mover un umbral clínico, y CLAUDE.md exige validación
+explícita del Arquitecto y del médico para eso. Pero la expresión actual no se
+puede auditar leyéndola, así que hoy nadie —ni el médico— puede opinar con
+fundamento sobre si es correcta.
+
+El orden importa: **hacerla legible y cubierta por pruebas primero** permite que
+la decisión clínica se tome después con la información a la vista, y que
+cualquier cambio futuro sea verificable en vez de arriesgado.
 
 ---
 
