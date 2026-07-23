@@ -3260,3 +3260,143 @@ instrucciones activas contradictorias antes de la auditoría con Claude Code.
 - No se abrió PR ni se hizo merge. El siguiente paso obligatorio es entregar a
   Claude Code `AUDITORIA_PRE_MERGE_LOOPS_1_6.md`, recibir su informe completo y
   volver a Codex para resolver conjuntamente cualquier hallazgo bloqueante.
+
+---
+
+## 22/07/2026 — Auditoría independiente pre-merge y Loop A de corrección
+
+**Estado:** auditoría entregada, 14 hallazgos. El único bloqueante del PR quedó
+corregido y verificado. Loops B y C pendientes.
+
+### Auditoría independiente (Claude Code)
+
+Se ejecutó `AUDITORIA_PRE_MERGE_LOOPS_1_6.md` sobre `fbf62a8`, sin editar
+código. **Veredicto: BLOQUEADO PARA PR A DESARROLLO.**
+
+Las cuatro cifras que reportaba Codex se confirmaron reproduciéndolas: 280 tests
+OK, `check --deploy` sin issues, `pip-audit` sin vulnerabilidades y migraciones
+al día. El **aislamiento por médico resistió** un intento activo de romperlo con
+15 comprobaciones (acceso por URL a paciente, registro, alerta, check-in e
+historial de otro médico; listados; búsqueda; tablero; acción de resolver).
+Todos los accesos redirigen sin exponer dato alguno. La única fuga es menor: el
+filtro lateral de pacientes expone los nombres de usuario de los demás médicos.
+
+**El hallazgo bloqueante (ALTO):** la escalera de severidad de las alertas
+SILENCIO **nunca escalaba en producción**. `_calcular_racha` recorría todos los
+check-ins del paciente sin excluir los posteriores al que cerraba, y trataba un
+`PENDIENTE` igual que un `COMPLETADO`: rompía la racha. Como el scheduler
+siempre deja turnos pendientes, la racha valía 1 en cada cierre. Un paciente con
+tres días completos sin responder (6 turnos) producía `SILENCIO / BAJA —
+Monitorear`, y en el tablero de triage las BAJA se ordenan de últimas.
+
+Se reprodujo contra base de datos de prueba simulando la secuencia exacta de
+`cron_matutino`, con un control que aisló la causa: mismo historial sin turno
+posterior pendiente daba racha 5 y severidad ALTA.
+
+**Por qué sobrevivió a 280 pruebas en verde:** los tests de racha prefijaban los
+turnos previos a mano y dejaban un único check-in pendiente — un estado que el
+scheduler real nunca produce. La prueba estaba escrita mirando el código, no el
+requisito.
+
+### Decisiones tomadas antes de escribir código (D1-D7)
+
+Se documentaron en `docs/decisiones_correccion_auditoria.md`, una ficha por
+decisión con su razonamiento, antes de tocar una línea. Las clínicas:
+
+- **D1 — escalera de SILENCIO.** Cuenta check-ins, no días calendario: la
+  agrupación por día existe para de-duplicar mediciones y aquí no hay
+  mediciones que de-duplicar. Escalera 1 → BAJA, 2-3 → MEDIA, 4+ → ALTA; el
+  umbral ALTA de 4 equivale a dos días calendario completos sin señal. Un
+  `PENDIENTE` anterior se ignora sin romper la racha, para que una caída del
+  cron no degrade una alerta clínica. Base del modelo: SILENCIO es ausencia de
+  datos, no un síntoma — no genera mensaje al paciente, así que el costo de un
+  falso positivo es una llamada telefónica y conviene errar hacia la
+  sensibilidad.
+- **D4 — umbral de fiebre.** `RESP_FIEBRE` decía "si supera 38 °C" mientras el
+  motor alerta desde 37.9: un paciente con 37.9 recibía el mensaje de que estaba
+  bien mientras el sistema mandaba un correo urgente al médico. De fondo violaba
+  la regla no negociable del bot (el paciente nunca ve umbrales). Se retiró el
+  número en vez de corregirlo. **Redacción final pendiente de validación
+  médica.**
+- **D5 — signos concurrentes.** El detalle de una alerta conservaba solo el
+  signo más grave. Solo afecta a `ILEO_PARALITICO`, único tipo con reglas que
+  pueden coincidir. Ahora acumula todos: distensión sola puede ser muchas cosas,
+  distensión + ausencia de tránsito + vómito es el cuadro de íleo.
+
+Las operativas (D2 rate limit y caída de Redis, D3 quién resuelve cada alerta,
+D6 límite de reintentos, D7 registros de la migración 0020) quedaron decididas y
+documentadas; se implementan en los Loops B y C.
+
+### Loop A — cinco commits
+
+- `a6afb30` **test en rojo**: cuatro casos que fallan contra el código anterior,
+  ejecutando `crear_checkins_diarios` + `cerrar_checkins_vencidos` en el orden
+  real de `cron_matutino`.
+- `20ee837` corrección de la racha (D1).
+- `0ac7021` retiro del umbral de fiebre (D4) + test que vigila que ninguna de
+  las cuatro respuestas exponga una cifra clínica, sea cual sea la redacción
+  que apruebe el médico.
+- `f4892fc` acumulación de signos concurrentes (D5), idempotente ante los
+  reintentos del motor.
+- `5a5b477` sincronización de CLAUDE.md, ROADMAP y `knowledge_base.md`.
+
+### Problemas encontrados durante el propio Loop A
+
+Dos defectos **en las pruebas recién escritas**, no en el código, detectados
+gracias a ejecutarlas en rojo antes del arreglo:
+
+1. Un test dependía de la **hora del día** en que corriera la suite: a las 18:56
+   el turno de las 7:00 de hoy ya estaba vencido y el cierre se lo llevaba,
+   dando `5 != 4`. En producción `cron_matutino` corre a las 6:00 AM, cuando
+   ambos turnos del día siguen en el futuro. Se normalizó la hora de los turnos
+   del día en el helper y se dejó el porqué en su docstring.
+2. Un test **pasaba en verde contra el código roto**: el escenario tenía dos
+   turnos vencidos, el primero calculaba mal la racha pero el segundo la
+   calculaba bien y, como la severidad es la máxima, el resultado final era el
+   correcto por el camino equivocado. Se reescribió para llamar a
+   `_calcular_racha` directamente.
+
+Es el mismo patrón que dejó vivo el hallazgo 1 durante seis loops. La lección no
+es que alguien se equivocara: **un test en verde no prueba nada si no se
+verifica por qué está verde.**
+
+### Verificación
+
+- Suite completa: **286 tests OK** (280 originales + 6 nuevos). El commit `5a5b477`
+  solo tocó archivos `.md`, así que no se repitió la suite tras él.
+- `manage.py check`, `makemigrations --check --dry-run` y `check --deploy` con
+  configuración de producción temporal: los tres sin issues.
+- `git diff --check` limpio.
+- **Verificación del Arquitecto:** León ejecutó él mismo un script contra base de
+  datos desechable que muestra la escalera subiendo BAJA → MEDIA → MEDIA → ALTA
+  con la racha 1 → 2 → 3 → 4, el reinicio al responder, el detalle de íleo con
+  ambos signos sin duplicarse tras tres reevaluaciones, y el mensaje de fiebre
+  sin cifras.
+
+### Aclaración registrada durante la verificación
+
+La racha se reinicia porque **el paciente responde** (un `COMPLETADO` corta el
+conteo), no porque el médico resuelva la alerta. Resolver solo permite que nazca
+una alerta nueva, ya que la base admite una sola abierta por (paciente, tipo).
+Consecuencia visible en el panel: si el médico resuelve y el paciente **sigue**
+sin responder, la siguiente alerta aparece como **×1 pero con severidad ALTA**,
+porque la racha real venía alta. Es correcto y deliberado — si resolver
+reiniciara la racha, bastaría con cerrar alertas para que el sistema dejara de
+escalar.
+
+### Estado de la documentación
+
+- `docs/decisiones_correccion_auditoria.md`: nuevo. Fichas D1-D7 con su
+  razonamiento, método de trabajo, estado de avance por commit y **prompt de
+  reanudación** para retomar en otra sesión sin depender de la conversación.
+- `knowledge_base.md`: nueva sección "Consulta pendiente al médico" con tres
+  preguntas concretas (~10 minutos) listas para llevarle al médico.
+- CLAUDE.md: la escalera de SILENCIO quedó documentada en tabla por primera vez
+  (antes solo vivía en el docstring del command).
+
+**Pendiente inmediato:** **Loop B** — degradación del rate limit sin bloquear al
+paciente y límite de 20 → 60 mensajes/hora (D2), endpoint `/salud/` para
+monitoreo externo, `resuelta_por` (D3, migración 0025), límite de reintentos y
+estado `FALLIDA` (D6), y acotar el bloqueo de filas durante el envío de correo
+(hallazgo 2). Se arranca en sesión nueva con el prompt de reanudación del
+documento de decisiones.

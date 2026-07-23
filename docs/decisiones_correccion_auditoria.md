@@ -41,8 +41,8 @@ producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
 > Es lo primero que debe leer quien retome el trabajo.
 
 **Última actualización:** 22/07/2026
-**Punto alcanzado:** Loop A con sus cinco commits hechos; falta el cierre
-(suite, checks y verificación de León) y el push
+**Punto alcanzado:** **Loop A CERRADO y publicado.** Siguiente: Loop B, en
+sesión nueva, empezando por el commit B1 (test en rojo).
 **Rama:** `sprint-5-produccion` · **Restauración segura:** `fbf62a8`
 
 ### Loop A — Corrección clínica *(bloquea el merge)*
@@ -51,9 +51,17 @@ producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
 - [x] **A2** `fix: corregir el conteo de racha en alertas de silencio` → D1 — `20ee837`
 - [x] **A3** `fix: retirar el umbral clinico del mensaje de fiebre al paciente` → D4 — `0ac7021`
 - [x] **A4** `feat: conservar los signos concurrentes de ileo en el detalle` → D5 — `f4892fc`
-- [x] **A5** `docs: sincronizar reglas del motor y consulta pendiente al medico`
-- [ ] Cierre: suite completa · `makemigrations --check` · `check --deploy` · **verificación de León**
-- [ ] Push a `origin/sprint-5-produccion` + entrada de BITACORA
+- [x] **A5** `docs: sincronizar reglas del motor y consulta pendiente al medico` — `5a5b477`
+- [x] Cierre: **286 tests OK** · `manage.py check`, `makemigrations --check` y `check --deploy` sin issues · `git diff --check` limpio
+- [x] **Verificación de León:** ejecutó él mismo la comprobación contra base de datos desechable — escalera BAJA → MEDIA → MEDIA → ALTA con racha 1→2→3→4, reinicio al responder, detalle de íleo con ambos signos sin duplicar tras tres reevaluaciones, y mensaje de fiebre sin cifras
+- [x] Push a `origin/sprint-5-produccion` + entrada de BITACORA
+
+**Aclaración registrada en la verificación:** la racha se reinicia porque el
+paciente **responde** (un `COMPLETADO` corta el conteo), no porque el médico
+resuelva la alerta — resolver solo permite que nazca una alerta nueva. Efecto
+visible: si el médico resuelve y el paciente sigue sin responder, la siguiente
+alerta aparece como **×1 pero ALTA**. Es correcto: si resolver reiniciara la
+racha, bastaría con cerrar alertas para que el sistema dejara de escalar.
 
 **Resultado de A1 (evidencia del hallazgo):** los cuatro casos fallaron contra el
 código anterior — `'BAJA' != 'ALTA'`, `'BAJA' != 'MEDIA'` ×2, y `1 != 5` en

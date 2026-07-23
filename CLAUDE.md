@@ -463,14 +463,41 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y cierre pre-merge (RAG diferido a Sprint 6) | ⏳ En cierre — Bloques 1-7 + A/B y **Loops 1-6 completados técnicamente**; auditoría externa pre-merge pendiente. Django 6.0.7, Requests 2.33.0, CSP, Chart.js local, outbox con Resend por HTTPS y cron operativo cada 5 minutos; **280 tests OK**. Validación de firma, concurrencia, rollback del motor, 550 webhooks de carga y flujos reales NORMAL/MEDIA/ALTA completados. Punto funcional `0d12d88`. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y cierre pre-merge (RAG diferido a Sprint 6) | ⏳ En corrección post-auditoría — Bloques 1-7 + A/B y Loops 1-6 completados; **auditoría independiente del 22/07/2026 entregada con 14 hallazgos y veredicto BLOQUEADO para el PR**. El único bloqueante (escalera de alertas SILENCIO que nunca escalaba) quedó corregido y verificado en el **Loop A**; faltan los Loops B y C. **286 tests OK**. Rama `sprint-5-produccion` |
 
-**Punto actual (21/07/2026):** Sprint 5 con los 7 Bloques + mejoras A/B, la app
-desplegada en Railway y el cron base funcionando. Quedaron cerrados, validados
-y desplegados los **Loops 1-3**, el **Loop 4 de producción**, el **Loop 5 de
-validación** y el **Loop 6 de cierre técnico**. Falta la auditoría externa antes
-del PR. La suite completa contiene **280 tests OK**. URL:
-`registropostquirurgico-production-1f96.up.railway.app`.
+**Punto actual (22/07/2026):** el Sprint 5 pasó de "cierre técnico" a
+"corrección post-auditoría". La auditoría independiente sobre `fbf62a8` confirmó
+las cuatro cifras que reportaba Codex (280 tests, `check --deploy`, `pip-audit`,
+migraciones) y que **el aislamiento por médico resiste** un intento activo de
+romperlo con 15 comprobaciones. Pero encontró **14 hallazgos**, uno de ellos
+bloqueante.
+
+- **Hallazgo bloqueante (corregido en el Loop A):** la escalera de severidad de
+  las alertas SILENCIO **nunca escalaba en producción**. `_calcular_racha` no
+  excluía los check-ins posteriores al que cerraba y un `PENDIENTE` rompía la
+  racha; como el scheduler siempre deja turnos pendientes, la racha valía 1 en
+  cada cierre. Un paciente con 3 días sin responder producía `SILENCIO / BAJA`.
+  Pasaba las 280 pruebas porque los tests prefijaban los turnos a mano, un
+  estado que el scheduler real nunca produce.
+- **Decisiones D1-D7** tomadas y documentadas **antes** de escribir código, con
+  su razonamiento, en `docs/decisiones_correccion_auditoria.md`. Ese archivo es
+  la fuente de verdad del trabajo de corrección e incluye el estado de avance y
+  el prompt para retomar en otra sesión.
+- **Loop A cerrado** (`a6afb30`, `20ee837`, `0ac7021`, `f4892fc`, `5a5b477`):
+  racha de SILENCIO corregida con escalera 1/2/4 (D1), umbral de fiebre retirado
+  del mensaje al paciente (D4) y signos concurrentes de íleo conservados en el
+  detalle (D5). Verificado por el Arquitecto ejecutando él mismo la comprobación.
+- **Método de trabajo:** decidir → documentar → **test en rojo** → implementar →
+  verificación del Arquitecto → un loop por sesión. Durante el propio Loop A
+  aparecieron dos pruebas defectuosas (una dependía de la hora del día, otra
+  pasaba en verde por el camino equivocado); ambas se detectaron por ejecutarlas
+  en rojo antes del arreglo.
+- **Pendiente:** Loop B (rate limit y caída de Redis, `/salud/`, `resuelta_por`
+  con migración 0025, límite de reintentos, bloqueo de filas en el envío de
+  correo) y Loop C (coherencia e higiene, incluida la consulta D7 sobre la
+  migración 0020). El PR sigue detenido hasta cerrarlos.
+
+URL: `registropostquirurgico-production-1f96.up.railway.app`.
 - **Pausa segura y documentación:** `docs/README.md` clasifica fuentes vigentes,
   historia y documento legal canónico. El barrido del 21/07 actualizó despliegue,
   cron, transferencia, variables, RAG diferido y protocolo de reanudación. No
@@ -562,18 +589,20 @@ del PR. La suite completa contiene **280 tests OK**. URL:
   fue probada por el Arquitecto, conserva `staff=True`, `superuser=False` y el
   correo `seguimientolionalejo@gmail.com`; los pacientes ficticios del Loop 6
   ya fueron eliminados.
-**Próximo paso exacto (al retomar):** leer primero `docs/README.md` y entregar
-a Claude Code la instrucción `AUDITORIA_PRE_MERGE_LOOPS_1_6.md`, recibir su
-auditoría independiente, resolver
-cualquier hallazgo bloqueante y repetir las validaciones afectadas. Solo con
-veredicto favorable se prepara el PR hacia `Desarrollo`, se revisa el diff y se
-decide el merge. Al mejorar
-el plan Railway, crear `cron-operativo` como servicio separado y restaurar
-`cron-tarde` a su horario original. Después: **datos reales del médico** (reemplazar
+**Próximo paso exacto (al retomar):** iniciar el **Loop B** de corrección. Leer
+completos `docs/decisiones_correccion_auditoria.md` (fichas D1-D7, método de
+trabajo, estado de avance y prompt de reanudación) y este archivo; verificar el
+estado real contra `git log` y la suite antes de proponer nada. La auditoría ya
+se ejecutó — **no repetirla**: sus 14 hallazgos y el reparto por loop están en
+el documento de decisiones. Loop B implementa D2, D3, D6 y el hallazgo 2;
+Loop C, la coherencia y la consulta D7. Solo al cerrar los tres se prepara el PR
+hacia `Desarrollo`, se revisa el diff y se decide el merge. Al mejorar el plan
+Railway, crear `cron-operativo` como servicio separado y restaurar `cron-tarde`
+a su horario original. Después: **datos reales del médico** (reemplazar
 `[corchetes]`, subir logo/colores, `MOSTRAR_AVISO_BOCETO=False`) y los
 requisitos del piloto real en `ROADMAP_MONITOREO_POSQUIRURGICO.md`, sección
 "Requisitos para un PILOTO REAL con pacientes" (plan Railway, WhatsApp Business,
-HABEAS DATA).
+HABEAS DATA, validación médica de las respuestas del bot).
 
 **Nota cron (08/07/2026):** en Railway, encadenar comandos con `&&` en el
 Custom Start Command **solo corre el primero** → se creó el comando único
