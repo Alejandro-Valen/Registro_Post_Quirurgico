@@ -41,17 +41,31 @@ producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
 > Es lo primero que debe leer quien retome el trabajo.
 
 **Última actualización:** 22/07/2026
-**Punto alcanzado:** decisiones documentadas; sin código todavía
+**Punto alcanzado:** Loop A con sus cinco commits hechos; falta el cierre
+(suite, checks y verificación de León) y el push
 **Rama:** `sprint-5-produccion` · **Restauración segura:** `fbf62a8`
 
 ### Loop A — Corrección clínica *(bloquea el merge)*
 
-- [ ] **A1** `test: reproducir escalera de silencio con el scheduler real` *(debe fallar)*
-- [ ] **A2** `fix: corregir el conteo de racha en alertas de silencio` → D1
-- [ ] **A3** `fix: retirar el umbral clinico del mensaje de fiebre al paciente` → D4
-- [ ] **A4** `feat: conservar los signos concurrentes de ileo en el detalle` → D5
-- [ ] **A5** `docs: sincronizar reglas del motor y consulta pendiente al medico`
+- [x] **A1** `test: reproducir escalera de silencio con el scheduler real` — `a6afb30`
+- [x] **A2** `fix: corregir el conteo de racha en alertas de silencio` → D1 — `20ee837`
+- [x] **A3** `fix: retirar el umbral clinico del mensaje de fiebre al paciente` → D4 — `0ac7021`
+- [x] **A4** `feat: conservar los signos concurrentes de ileo en el detalle` → D5 — `f4892fc`
+- [x] **A5** `docs: sincronizar reglas del motor y consulta pendiente al medico`
 - [ ] Cierre: suite completa · `makemigrations --check` · `check --deploy` · **verificación de León**
+- [ ] Push a `origin/sprint-5-produccion` + entrada de BITACORA
+
+**Resultado de A1 (evidencia del hallazgo):** los cuatro casos fallaron contra el
+código anterior — `'BAJA' != 'ALTA'`, `'BAJA' != 'MEDIA'` ×2, y `1 != 5` en
+`_calcular_racha`. Tras A2 pasaron los 16 casos del scheduler. La suite completa
+quedó en **286 tests OK** (280 originales + 6 nuevos).
+
+**Nota de método:** durante A1 se detectaron dos defectos en las pruebas recién
+escritas, no en el código: una dependía de la hora del día en que corriera la
+suite, y otra pasaba en verde por el orden de cierre en vez de por la regla que
+decía medir. Ambas se corrigieron antes de tocar el código. Es el mismo patrón
+que dejó vivo el hallazgo 1 durante seis loops: **un test en verde no prueba
+nada si no se verifica por qué está verde.**
 
 ### Loop B — Trazabilidad y operación
 

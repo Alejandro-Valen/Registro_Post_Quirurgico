@@ -1006,6 +1006,14 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` con los datos reales del
   médico/institución, imprimirlo y firmarlo con cada paciente antes de marcar
   `consentimiento_informado=True`.
+- [ ] **Validación médica de las respuestas predefinidas del bot** (decisión D4,
+  22/07/2026). Son las únicas frases que el bot le dice al paciente fuera del
+  cuestionario; hoy están redactadas por el equipo técnico y ninguna fue
+  validada clínicamente. La consulta está preparada como tres preguntas
+  concretas (~10 minutos) en
+  `Registro_Post_Quirurgico/signos_sintomas/knowledge_base.md`, sección
+  "Consulta pendiente al médico". No bloquea el merge a `Desarrollo`; sí debe
+  resolverse antes de un paciente real.
 
 **Validación end-to-end (con el Sandbox alcanza):**
 - [x] Crear un **paciente de prueba** en el Admin (con `consentimiento_informado`),

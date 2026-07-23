@@ -42,6 +42,65 @@
 
 ---
 
+## Consulta pendiente al médico
+
+> **Para el médico.** Son tres preguntas concretas, ~10 minutos. Estas frases
+> son las únicas que el bot le dice al paciente cuando pregunta algo fuera del
+> cuestionario diario. Hoy están redactadas de forma conservadora por el equipo
+> técnico y **ninguna ha sido validada clínicamente**. Puede responder sobre
+> este mismo documento.
+>
+> **Regla que no debe romperse:** la respuesta no puede contener un umbral
+> numérico (grados, pulsaciones, escala de dolor). El paciente no necesita
+> auto-evaluarse — el sistema le pregunta la temperatura, el dolor y el pulso
+> dos veces al día y el motor de alertas los evalúa. Si el paciente usa un
+> umbral propio, puede quedarse tranquilo justo cuando el sistema ya escaló.
+
+### 1. Fiebre
+
+- **Texto actual:** "Registramos tu temperatura en cada reporte y tu equipo
+  médico la está revisando. Si te sientes peor, con escalofríos o mucho
+  malestar, comunícate con tu médico. Si es urgente, ve al servicio de
+  urgencias."
+- **Qué hace el sistema:** alerta ALTA desde 37.9 °C en cualquier registro;
+  alerta MEDIA con 37.5–37.8 °C sostenido dos días calendario seguidos.
+- **Antes decía:** "Si supera 38 °C comunícate con tu médico de inmediato" —
+  se retiró porque contradecía al motor (un paciente con 37.9 recibía el
+  mensaje de que estaba bien) y porque daba un umbral al paciente.
+- **Pregunta:** ¿basta con remitir al médico según cómo se siente, o el
+  paciente necesita algún criterio propio? Si necesita uno, ¿cuál, expresado
+  sin número?
+
+### 2. Dolor
+
+- **Texto actual:** "Algo de molestia es esperado. Si el dolor es muy intenso o
+  repentino, contacta a tu médico urgente."
+- **Qué hace el sistema:** escalera por día postoperatorio. El mismo 7/10 es
+  MEDIA ("llamar al médico") en el día 2 y ALTA ("ir a urgencias") en el día 8,
+  porque se espera que el dolor baje con los días.
+- **Pregunta:** ¿conviene decirle al paciente que el dolor debería ir
+  disminuyendo, para que note un estancamiento o un repunte? El texto actual no
+  le da ninguna referencia temporal.
+
+### 3. Alimentación
+
+- **Texto actual:** "La alimentación se recupera gradualmente. Sigue las
+  indicaciones de tu médico."
+- **Qué hace el sistema:** evalúa tolerancia a líquidos — alerta MEDIA el
+  primer día que el paciente no los tolera, ALTA al segundo.
+- **Pregunta:** ¿debería mencionar la hidratación? La deshidratación es la
+  causa #1 de readmisión (Lawrence 2013) y el sistema la vigila, pero la
+  respuesta actual no la nombra.
+
+### Cómo se aplica la respuesta
+
+Al recibir la redacción del médico: actualizarla arriba en "Respuestas
+predefinidas actuales del bot" y reflejarla en las constantes de `bot.py`. El
+test `test_respuestas_predefinidas_no_revelan_umbrales_clinicos` verifica que la
+nueva redacción siga sin exponer cifras clínicas.
+
+---
+
 > **Nota para desarrolladores:** las respuestas predefinidas viven también como
 > constantes en `bot.py` (`RESP_FIEBRE`, `RESP_COMER`, `RESP_DOLOR`,
 > `RESP_FALLBACK`). Este archivo es la fuente humana de verdad; al actualizar una

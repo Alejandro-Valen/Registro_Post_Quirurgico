@@ -157,6 +157,30 @@ escala un nivel de severidad sobre el valor de la tabla (nunca baja
 una severidad ya alcanzada). Base: Delaney 2008, Lee 2022, Outersterp
 2025, Coeckelberghs 2025.
 
+**Regla operativa: SILENCIO (paciente sin responder).** No la produce
+`alert_engine.evaluar_registro` sino el command `cerrar_checkins_vencidos`,
+que cierra los check-in `PENDIENTE` pasadas 10 horas de su
+`hora_programada` y cuenta la racha de turnos consecutivos sin responder.
+
+| Racha | Tipo | Severidad |
+|-------|------|-----------|
+| 1 turno | SILENCIO | BAJA |
+| 2-3 turnos | SILENCIO | MEDIA |
+| 4+ turnos | SILENCIO | ALTA |
+
+**Decisión D1 (22/07/2026):** la racha cuenta **check-ins, no días
+calendario** — la agrupación por día existe para de-duplicar mediciones y
+aquí no hay mediciones que de-duplicar; cada turno perdido es un intento
+de contacto distinto que falló. Con dos turnos diarios, el umbral ALTA de
+4 equivale a **dos días calendario completos sin una sola señal**. Solo se
+miran turnos **estrictamente anteriores** al que se cierra: un
+`COMPLETADO` rompe la racha (el paciente respondió), un `PENDIENTE` se
+ignora sin romperla (una caída del cron no debe degradar una alerta
+clínica). Base del modelo: SILENCIO es ausencia de datos, no un síntoma —
+no genera mensaje al paciente, así que el costo de un falso positivo es
+una llamada telefónica y conviene errar hacia la sensibilidad. Razonamiento
+completo en `docs/decisiones_correccion_auditoria.md`, ficha D1.
+
 ---
 
 ## Modelos de Base de Datos
@@ -255,6 +279,17 @@ regla ni umbral clínico cambió** — solo cómo se almacenan las detecciones. 
 Admin muestra un badge de recurrencia "×N"; el tablero de triage también. Desde
 el Loop 3, `DeteccionAlerta` conserva la fuente, fecha, severidad y mensaje de
 cada detección nueva. No se fabrican filas para el contador histórico previo.
+
+**Signos concurrentes en un mismo check-in (decisión D5, 22/07/2026):** cuando
+dos reglas del mismo tipo se disparan en el mismo check-in,
+`DeteccionAlerta.mensaje_detectado` **acumula todos los signos**, encabezados
+por el más grave (separador `\n· `). Antes conservaba solo el más grave y
+descartaba el resto. Solo afecta a `ILEO_PARALITICO`, el único tipo producido
+por reglas que pueden coincidir — Reglas 3 (gases), 4 (náuseas) y 7 (hinchazón);
+las demás son mutuamente excluyentes. `Alerta.mensaje` **sigue conservando solo
+el signo más grave**: es el titular del listado y del tablero, y debe caber en
+una línea. La acumulación es idempotente porque
+`reintentar_evaluaciones_alertas` vuelve a correr las ocho reglas.
 
 **Correo de alerta ALTA (actualizado 10/07/2026):** `signals.py` envía el email
 al médico solo cuando la alerta **alcanza ALTA por primera vez** (creación ALTA
@@ -368,7 +403,14 @@ INICIO
 7. **Dudas (FAQ) fuera del flujo de registro:** respuestas predefinidas
    conservadoras (fiebre / alimentación / dolor / fallback a "contacta a tu
    médico"). Esto es un espejo temporal de `knowledge_base.md` mientras no
-   exista la capa RAG (Sprint 6).
+   exista la capa RAG (Sprint 6). **Ninguna de ellas puede contener un umbral
+   clínico** (decisión D4): el paciente no se auto-evalúa, el sistema le
+   pregunta la temperatura dos veces al día y el motor la evalúa. `RESP_FIEBRE`
+   decía "si supera 38°C" mientras el motor alerta desde 37.9 — se retiró el
+   número. Lo vigila
+   `test_respuestas_predefinidas_no_revelan_umbrales_clinicos`. La redacción
+   final de las cuatro respuestas está **pendiente de validación médica**: ver
+   `knowledge_base.md`, sección "Consulta pendiente al médico".
 
 **`knowledge_base.md`:** placeholder con la estructura final pendiente y las
 respuestas predefinidas actuales. **No completar con información clínica real
