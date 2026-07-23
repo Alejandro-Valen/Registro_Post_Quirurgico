@@ -20,9 +20,17 @@
 (pendiente - acceso Drive médico)
 
 ## Respuestas predefinidas actuales del bot
+
+> **Ninguna de estas respuestas puede contener un umbral clínico** (decisión D4,
+> 22/07/2026). El paciente nunca ve los valores que disparan una alerta, y no
+> necesita auto-evaluarse: el sistema le pregunta la temperatura dos veces al día
+> y el motor la evalúa. Hay un test que lo vigila
+> (`test_respuestas_predefinidas_no_revelan_umbrales_clinicos`).
+
 - "¿Es normal tener fiebre?" →
-  "Una temperatura leve los primeros días puede ser normal. Si supera 38°C
-  comunícate con tu médico de inmediato."
+  "Registramos tu temperatura en cada reporte y tu equipo médico la está
+  revisando. Si te sientes peor, con escalofríos o mucho malestar, comunícate
+  con tu médico. Si es urgente, ve al servicio de urgencias."
 - "¿Cuándo puedo comer normal?" →
   "La alimentación se recupera gradualmente. Sigue las indicaciones de tu médico."
 - "¿Es normal el dolor?" →

@@ -195,9 +195,17 @@ MSG_REINTENTO_TOLERANCIA_LIQUIDOS = (
 )
 
 # Respuestas predefinidas a dudas (espejo de knowledge_base.md mientras no haya RAG)
+#
+# D4: ninguna de estas respuestas puede contener un umbral clínico. El paciente
+# no necesita auto-evaluarse — el sistema le pregunta la temperatura dos veces al
+# día y el motor la evalúa. Un umbral aquí, además de contradecir al motor,
+# rompe la regla no negociable de que el paciente nunca ve los valores que
+# disparan una alerta. La redacción final está pendiente de validación médica:
+# ver knowledge_base.md, sección "Consulta pendiente al médico".
 RESP_FIEBRE = (
-    "Una temperatura leve los primeros días puede ser normal. Si supera 38°C "
-    "comunícate con tu médico de inmediato."
+    "Registramos tu temperatura en cada reporte y tu equipo médico la está "
+    "revisando. Si te sientes peor, con escalofríos o mucho malestar, "
+    "comunícate con tu médico. Si es urgente, ve al servicio de urgencias."
 )
 RESP_COMER = (
     "La alimentación se recupera gradualmente. Sigue las indicaciones de tu médico."

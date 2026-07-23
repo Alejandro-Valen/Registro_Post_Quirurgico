@@ -1263,6 +1263,33 @@ class BotWhatsAppTests(TestCase):
         respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "¿puedo bañarme hoy?")
         self.assertEqual(respuesta, bot.RESP_FALLBACK)
 
+    def test_respuestas_predefinidas_no_revelan_umbrales_clinicos(self):
+        """Ninguna respuesta al paciente puede contener un umbral clínico (D4).
+
+        Regla de diseño no negociable del bot (CLAUDE.md): el paciente nunca ve
+        los valores que disparan una alerta. Un umbral en la FAQ además puede
+        contradecir al motor —RESP_FIEBRE decía 38 °C mientras el motor alerta
+        desde 37.9— y le pide al paciente que se auto-evalúe cuando el sistema
+        ya lo está midiendo dos veces al día.
+
+        Este test no vigila una redacción concreta: vigila que no vuelva a
+        aparecer una cifra clínica, sea cual sea el texto que apruebe el médico.
+        """
+        import re
+
+        patron_umbral = re.compile(
+            r'\d+([.,]\d+)?\s*(°\s*)?(c\b|grados|lpm|rpm|/10)',
+            re.IGNORECASE,
+        )
+        for nombre in ('RESP_FIEBRE', 'RESP_COMER', 'RESP_DOLOR', 'RESP_FALLBACK'):
+            texto = getattr(bot, nombre)
+            encontrado = patron_umbral.search(texto)
+            self.assertIsNone(
+                encontrado,
+                f'{nombre} expone un umbral clínico al paciente: '
+                f'{encontrado.group(0) if encontrado else ""!r}',
+            )
+
     def test_gases_nauseas_ambiguo_reintenta(self):
         self._crear_paciente()
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
