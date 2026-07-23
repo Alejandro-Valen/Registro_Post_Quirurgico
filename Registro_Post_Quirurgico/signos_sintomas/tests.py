@@ -3558,6 +3558,46 @@ class AlertDeduplicacionTests(TestCase):
         self.assertEqual(detalle.registro, registro)
         self.assertEqual(detalle.severidad_detectada, 'ALTA')
 
+        # D5: el detalle conserva TODOS los signos concurrentes, no solo el más
+        # grave. Distensión sola puede ser muchas cosas; ausencia de tránsito
+        # más vómito es el cuadro de íleo — la evidencia convergente es más
+        # fuerte que la suma de sus partes y el médico debe poder verla.
+        self.assertIn('episodios de náuseas', detalle.mensaje_detectado)
+        self.assertIn('sin gases', detalle.mensaje_detectado)
+        # El signo más grave encabeza; el titular de la alerta no cambia.
+        self.assertTrue(
+            detalle.mensaje_detectado.startswith('5 episodios de náuseas'),
+            f'El signo ALTA debe encabezar el detalle: {detalle.mensaje_detectado!r}',
+        )
+        self.assertNotIn('sin gases', ileo[0].mensaje)
+
+    def test_reevaluar_no_duplica_los_signos_concurrentes(self):
+        """Reintentar el motor sobre el mismo registro no repite el texto (D5).
+
+        `reintentar_evaluaciones_alertas` vuelve a correr las ocho reglas sobre
+        un registro en estado PENDIENTE/ERROR. La acumulación debe ser
+        idempotente o el detalle crecería en cada reintento.
+        """
+        paciente = self._paciente("+573008881016")
+        registro = RegistroDiario.objects.create(
+            paciente=paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=False,   # → ILEO BAJA
+            episodios_nauseas=5,     # → ILEO ALTA
+        )
+
+        evaluar_registro(registro)
+        evaluar_registro(registro)
+        evaluar_registro(registro)
+
+        alerta = Alerta.objects.get(tipo="ILEO_PARALITICO")
+        detalle = alerta.detecciones.get()
+        self.assertEqual(alerta.veces, 1)
+        self.assertEqual(detalle.mensaje_detectado.count('sin gases'), 1)
+        self.assertEqual(detalle.mensaje_detectado.count('episodios de náuseas'), 1)
+
     def test_reintentar_mismo_registro_no_duplica_detalle_ni_contador(self):
         paciente = self._paciente("+573008881008")
         registro = self._reg_fc(paciente, 150)

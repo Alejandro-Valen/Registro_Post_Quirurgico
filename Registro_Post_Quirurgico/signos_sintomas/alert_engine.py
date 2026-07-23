@@ -98,6 +98,31 @@ def _obtener_o_crear_alerta_abierta(
         return alerta, False
 
 
+SEPARADOR_SIGNOS = '\n· '
+
+
+def _acumular_signo(texto_actual, mensaje, encabeza):
+    """Suma un signo concurrente al detalle sin duplicarlo.
+
+    Un mismo check-in puede disparar varias reglas del mismo tipo — solo ocurre
+    con ILEO_PARALITICO, que producen las Reglas 3 (gases), 4 (náuseas) y 7
+    (hinchazón). Antes se conservaba únicamente el mensaje más grave, así que el
+    médico veía un signo aislado cuando el paciente tenía el cuadro completo.
+
+    Idempotente: `reintentar_evaluaciones_alertas` vuelve a correr las ocho
+    reglas sobre un registro PENDIENTE/ERROR, y el texto no debe crecer en cada
+    reintento.
+    """
+    partes = [p for p in texto_actual.split(SEPARADOR_SIGNOS) if p]
+    if mensaje in partes:
+        return texto_actual
+    if encabeza:
+        partes.insert(0, mensaje)
+    else:
+        partes.append(mensaje)
+    return SEPARADOR_SIGNOS.join(partes)
+
+
 def _registrar_detalle_deteccion(
     alerta,
     severidad,
@@ -107,7 +132,11 @@ def _registrar_detalle_deteccion(
     registro=None,
     checkin=None,
 ):
-    """Crea una evidencia idempotente por fuente y conserva su máximo nivel."""
+    """Crea una evidencia idempotente por fuente y conserva su máximo nivel.
+
+    La severidad de la detección es la máxima observada; el mensaje acumula
+    todos los signos concurrentes, encabezado por el más grave (decisión D5).
+    """
     if (registro is None) == (checkin is None):
         raise ValueError('La detección requiere exactamente una fuente.')
 
@@ -121,13 +150,24 @@ def _registrar_detalle_deteccion(
             'fecha_deteccion': fecha_deteccion,
         },
     )
-    if not creado and (
+    if creado:
+        return detalle, creado
+
+    es_mas_grave = (
         ORDEN_SEVERIDAD[severidad]
         > ORDEN_SEVERIDAD[detalle.severidad_detectada]
-    ):
+    )
+    texto = _acumular_signo(detalle.mensaje_detectado, mensaje, es_mas_grave)
+
+    campos = []
+    if texto != detalle.mensaje_detectado:
+        detalle.mensaje_detectado = texto
+        campos.append('mensaje_detectado')
+    if es_mas_grave:
         detalle.severidad_detectada = severidad
-        detalle.mensaje_detectado = mensaje
-        detalle.save(update_fields=['severidad_detectada', 'mensaje_detectado'])
+        campos.append('severidad_detectada')
+    if campos:
+        detalle.save(update_fields=campos)
     return detalle, creado
 
 
