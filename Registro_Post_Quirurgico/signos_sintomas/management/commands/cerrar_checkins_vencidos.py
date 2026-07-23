@@ -9,10 +9,22 @@ Racha (check a check, ignorando horas): cuenta cuántos check-ins
 consecutivos terminaron en NO_RESPONDIDO inmediatamente antes del actual,
 en orden cronológico estricto (fecha_dia + orden).
   - Racha 1 (este check-in solo)  → SILENCIO BAJA
-  - Racha 2 consecutivos          → SILENCIO MEDIA
-  - Racha 3+                      → SILENCIO ALTA
+  - Racha 2 o 3 consecutivos      → SILENCIO MEDIA
+  - Racha 4+                      → SILENCIO ALTA
 
-La racha se rompe con cualquier check-in COMPLETADO entre medias.
+Solo se miran check-ins ESTRICTAMENTE ANTERIORES al que se está cerrando.
+El scheduler siempre deja turnos posteriores en PENDIENTE; mirarlos rompía
+la racha en cada cierre y ninguna alerta SILENCIO llegaba a escalar.
+
+La racha se rompe únicamente con un check-in COMPLETADO: el paciente
+respondió. Un PENDIENTE anterior (cron caído) se ignora y el conteo
+continúa — un check-in de un día pasado ya no puede responderse, porque el
+bot solo sirve los de hoy, así que terminará en NO_RESPONDIDO. Una falla de
+infraestructura no debe degradar una alerta clínica.
+
+El umbral ALTA es 4 porque equivale a dos días calendario completos sin una
+sola señal, con dos check-ins diarios. Decisión D1 — ver
+docs/decisiones_correccion_auditoria.md.
 
 El command es idempotente: el CheckConstraint `unique_checkin_paciente_dia_orden`
 impide duplicados, y la verificación de estado PENDIENTE evita reprocesar.
@@ -25,6 +37,7 @@ from datetime import timedelta
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from signos_sintomas.alert_engine import registrar_alerta_silencio
@@ -38,14 +51,28 @@ logger = logging.getLogger(__name__)
 
 HORAS_GRACIA = 10
 
+# Escalera de severidad de SILENCIO, en número de check-ins consecutivos sin
+# responder (decisión D1). Con dos turnos diarios, 4 = dos días calendario
+# completos sin una sola señal del paciente.
+RACHA_SILENCIO_MEDIA = 2
+RACHA_SILENCIO_ALTA = 4
+
 
 def _calcular_racha(paciente, checkin_actual):
     """
     Cuenta cuántos check-ins NO_RESPONDIDO consecutivos preceden al actual
     (el actual NO está incluido en el conteo — representa el último del bloque).
     Devuelve racha_total = anteriores_no_respondidos + 1 (el actual).
+
+    Solo mira check-ins estrictamente anteriores en el orden (fecha_dia, orden).
+    Un COMPLETADO rompe la racha; un PENDIENTE se ignora sin romperla (D1).
     """
     anteriores = CheckInProgramado.objects.filter(
+        Q(fecha_dia__lt=checkin_actual.fecha_dia)
+        | Q(
+            fecha_dia=checkin_actual.fecha_dia,
+            orden__lt=checkin_actual.orden,
+        ),
         paciente=paciente,
     ).exclude(
         pk=checkin_actual.pk,
@@ -53,18 +80,19 @@ def _calcular_racha(paciente, checkin_actual):
 
     racha = 1  # incluye el check-in actual
     for ci in anteriores:
+        if ci.estado == CheckInProgramado.ESTADO_COMPLETADO:
+            # El paciente respondió: aquí termina el bloque de silencio.
+            break
         if ci.estado == CheckInProgramado.ESTADO_NO_RESPONDIDO:
             racha += 1
-        else:
-            # COMPLETADO o PENDIENTE rompe la racha
-            break
+        # PENDIENTE: el cron aún no lo cerró. No cuenta, pero tampoco corta.
     return racha
 
 
 def _severidad_silencio(racha):
-    if racha >= 3:
+    if racha >= RACHA_SILENCIO_ALTA:
         return 'ALTA'
-    if racha == 2:
+    if racha >= RACHA_SILENCIO_MEDIA:
         return 'MEDIA'
     return 'BAJA'
 

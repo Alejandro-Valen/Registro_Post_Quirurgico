@@ -3912,8 +3912,15 @@ class SchedulerTests(TestCase):
         alerta = Alerta.objects.filter(tipo='SILENCIO').order_by('-fecha_alerta').first()
         self.assertEqual(alerta.severidad, 'MEDIA')
 
-    def test_tres_checkins_consecutivos_dan_silencio_alta(self):
-        """3+ check-ins NO_RESPONDIDO consecutivos → racha 3 → SILENCIO ALTA."""
+    def test_tres_checkins_consecutivos_dan_silencio_media(self):
+        """3 check-ins NO_RESPONDIDO consecutivos → racha 3 → SILENCIO MEDIA.
+
+        Antes de la decisión D1 este caso esperaba ALTA, porque la escalera era
+        1/2/3. Con dos check-ins diarios, una racha de 3 es día y medio de
+        silencio; el umbral ALTA se movió a 4 para que corresponda a dos días
+        calendario completos. El caso ALTA lo cubre
+        test_escalera_silencio_con_scheduler_real_llega_a_alta.
+        """
         from django.core.management import call_command
         paciente = self._paciente()
         for orden, dias in [(1, 2), (2, 1)]:
@@ -3923,7 +3930,7 @@ class SchedulerTests(TestCase):
         self._checkin(paciente, orden=1, horas_atras=11)
         call_command('cerrar_checkins_vencidos', verbosity=0)
         alerta = Alerta.objects.filter(tipo='SILENCIO').order_by('-fecha_alerta').first()
-        self.assertEqual(alerta.severidad, 'ALTA')
+        self.assertEqual(alerta.severidad, 'MEDIA')
 
     def test_checkin_completado_rompe_racha(self):
         """Un check-in COMPLETADO entre medias reinicia la racha → SILENCIO BAJA."""
