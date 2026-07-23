@@ -3943,6 +3943,142 @@ class SchedulerTests(TestCase):
         alerta = Alerta.objects.filter(tipo='SILENCIO').order_by('-fecha_alerta').first()
         self.assertEqual(alerta.severidad, 'BAJA')
 
+    # -------------------------------------------------------------------------
+    # Escalera de SILENCIO con el scheduler real (D1)
+    #
+    # Los tests de racha de arriba prefijan los turnos previos a mano y dejan un
+    # ÚNICO check-in pendiente. El scheduler real nunca produce ese estado: crea
+    # dos turnos por día y siempre deja alguno PENDIENTE. Estos casos reproducen
+    # esa realidad — por eso son los que detectan el subconteo de la racha.
+    # -------------------------------------------------------------------------
+
+    def _turnos_vencidos(self, paciente, dias):
+        """Crea los 2 turnos de cada día indicado, vencidos y sin responder."""
+        creados = []
+        for dias_atras in dias:
+            for orden in (1, 2):
+                creados.append(self._checkin(
+                    paciente,
+                    orden=orden,
+                    dias_atras=dias_atras,
+                    # Muy por encima de las 10 h de gracia.
+                    horas_atras=24 * dias_atras + 12,
+                ))
+        return creados
+
+    def _correr_scheduler_matutino(self, paciente):
+        """Ejecuta crear_checkins_diarios + cerrar_checkins_vencidos, en ese orden.
+
+        Es la secuencia real de `cron_matutino`. Los turnos de hoy que crea el
+        scheduler quedan a las 7:00 y 14:00; en producción el cron corre a las
+        6:00 AM, así que ambos están todavía en el futuro y ninguno vence en esa
+        misma corrida. Aquí se normalizan a "recién programados" para que el
+        resultado no dependa de la hora en que se ejecute la suite — sin eso, un
+        test corrido por la tarde cerraría también el turno de la mañana de hoy.
+        """
+        from django.core.management import call_command
+
+        call_command('crear_checkins_diarios', verbosity=0)
+        CheckInProgramado.objects.filter(
+            paciente=paciente,
+            fecha_dia=timezone.localdate(),
+        ).update(hora_programada=timezone.now())
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+
+    def test_escalera_silencio_con_scheduler_real_llega_a_alta(self):
+        """Paciente con 2 días completos sin responder → SILENCIO ALTA.
+
+        Reproduce la secuencia exacta de cron_matutino: crear_checkins_diarios
+        deja los turnos de HOY en PENDIENTE y solo después corre el cierre. Esos
+        turnos pendientes no deben interrumpir el conteo de la racha.
+        """
+        paciente = self._paciente()
+        self._turnos_vencidos(paciente, dias=[2, 1])   # 4 turnos perdidos
+
+        self._correr_scheduler_matutino(paciente)   # deja 2 de hoy PENDIENTE
+
+        self.assertEqual(
+            CheckInProgramado.objects.filter(
+                paciente=paciente,
+                estado=CheckInProgramado.ESTADO_NO_RESPONDIDO,
+            ).count(),
+            4,
+            'Los 4 turnos vencidos deben cerrarse como NO_RESPONDIDO.',
+        )
+        alerta = Alerta.objects.get(paciente=paciente, tipo='SILENCIO')
+        self.assertEqual(
+            alerta.severidad,
+            'ALTA',
+            'Cuatro turnos consecutivos sin responder (2 días completos) deben '
+            'escalar a ALTA; los turnos de hoy, aún pendientes, no rompen la racha.',
+        )
+        self.assertEqual(alerta.veces, 4)
+
+    def test_dos_turnos_perdidos_dan_media_pese_a_turnos_pendientes(self):
+        """Racha 2 → MEDIA, con turnos posteriores todavía pendientes."""
+        paciente = self._paciente()
+        self._turnos_vencidos(paciente, dias=[1])   # 2 turnos perdidos
+
+        self._correr_scheduler_matutino(paciente)
+
+        alerta = Alerta.objects.get(paciente=paciente, tipo='SILENCIO')
+        self.assertEqual(alerta.severidad, 'MEDIA')
+        self.assertEqual(alerta.veces, 2)
+
+    def test_tres_turnos_perdidos_todavia_no_alcanzan_alta(self):
+        """Racha 3 → MEDIA. ALTA exige 4 (dos días calendario completos, D1)."""
+        paciente = self._paciente()
+        self._turnos_vencidos(paciente, dias=[1])
+        # Un tercer turno perdido, del día anterior por la tarde.
+        self._checkin(paciente, orden=2, dias_atras=2, horas_atras=24 * 2 + 12)
+
+        self._correr_scheduler_matutino(paciente)
+
+        alerta = Alerta.objects.get(paciente=paciente, tipo='SILENCIO')
+        self.assertEqual(
+            alerta.severidad,
+            'MEDIA',
+            'El umbral ALTA es 4 turnos, no 3 (decisión D1).',
+        )
+        self.assertEqual(alerta.veces, 3)
+
+    def test_turno_anterior_pendiente_no_interrumpe_la_racha(self):
+        """Un PENDIENTE anterior (cron caído) se ignora y el conteo sigue.
+
+        Se prueba `_calcular_racha` directamente: montar este estado con el
+        command exigiría que el propio cron dejara un turno sin cerrar, y
+        entonces el resultado dependería del orden de cierre en vez de aislar
+        la regla. Base clínica (D1): un check-in de un día pasado ya no puede
+        responderse —el bot solo sirve los de hoy— así que terminará en
+        NO_RESPONDIDO; una falla de infraestructura no debe degradar una alerta.
+        """
+        from signos_sintomas.management.commands.cerrar_checkins_vencidos import (
+            _calcular_racha,
+        )
+
+        paciente = self._paciente()
+        # Días -3 y -2 sin responder, ya cerrados: 4 turnos.
+        for dias_atras in (3, 2):
+            for orden in (1, 2):
+                ci = self._checkin(
+                    paciente, orden=orden, dias_atras=dias_atras,
+                    horas_atras=24 * dias_atras + 12,
+                )
+                ci.estado = CheckInProgramado.ESTADO_NO_RESPONDIDO
+                ci.save(update_fields=['estado'])
+
+        # Día -1 mañana: el cron no alcanzó a cerrarlo y sigue PENDIENTE.
+        self._checkin(paciente, orden=1, dias_atras=1, horas_atras=36)
+        # Día -1 tarde: el que se está cerrando ahora.
+        ci_tarde = self._checkin(paciente, orden=2, dias_atras=1, horas_atras=30)
+
+        self.assertEqual(
+            _calcular_racha(paciente, ci_tarde),
+            5,
+            'El turno pendiente por una falla del cron debe ignorarse y el '
+            'conteo continuar: 4 turnos cerrados + el actual = 5.',
+        )
+
 
 class CheckInConcurrenciaTests(TransactionTestCase):
     def test_inicio_del_bot_y_cierre_cron_no_dejan_estado_contradictorio(self):
