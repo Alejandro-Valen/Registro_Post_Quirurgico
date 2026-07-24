@@ -50,7 +50,7 @@ código antes de aceptarlas.
 > Es lo primero que debe leer quien retome el trabajo.
 
 **Última actualización:** 23/07/2026
-**Punto alcanzado:** **Loop B CERRADO, verificado por León y publicado**
+**Punto alcanzado:** **Loop B CERRADO, verificado y publicado**
 (`4673853` en `origin/sprint-5-produccion`). Implementados D2, D3, D6 y el
 hallazgo 2. Se probó y documentó, además, que la suite no es determinista cerca
 de la medianoche de Bogotá (fragilidad de tests, no del sistema): queda anotado
@@ -98,7 +98,7 @@ nada si no se verifica por qué está verde.**
 - [x] **B6** `fix: acotar el bloqueo de filas durante el envio de correo` → hallazgo 2 — `f8fa437`
 - [x] **B7** `docs: operacion, monitoreo y trazabilidad de resolucion` — `4673853`
 - [x] Cierre: **299 tests OK** · `makemigrations --check` limpio · migraciones 0025 y 0026 reversibles (ida y vuelta) · `/salud/` responde 200 y 503
-- [x] **Verificación de León:** corrió él mismo el subconjunto del Loop B (**59 tests OK**) y vio el banner de correos `FALLIDA` en el `/admin/` local
+- [x] **Verifiqué el Loop B yo mismo:** corrí el subconjunto (**59 tests OK**) y vi el banner de correos `FALLIDA` en el `/admin/` local
 - [x] Push a `origin/sprint-5-produccion` (`4673853`) + entrada de BITACORA
 
 **Hallazgo del Loop B (no bloqueante, para el Loop C):** la suite no es
