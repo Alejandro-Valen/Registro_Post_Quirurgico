@@ -1988,8 +1988,17 @@ class WebhookWhatsAppTests(TestCase):
 
     @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
     def test_rate_limit_excedido_informa_sin_procesar_el_mensaje(self):
-        # Más de _LIMITE_MENSAJES_HORA (20) mensajes del mismo número en una
-        # hora: el mensaje no se procesa, pero el paciente recibe orientación.
+        """Superado el límite, el mensaje no se procesa y el paciente recibe
+        orientación.
+
+        POR QUÉ CAMBIÓ (no es un ajuste, cambió el requisito — D2 punto 3):
+        antes la verificación del rate limit ocurría DESPUÉS de reclamar el
+        SID, así que un mensaje limitado dejaba una fila COMPLETADO en
+        RecepcionWebhookTwilio. Ahora la verificación ocurre ANTES de reclamar
+        el SID, de modo que un mensaje limitado no debe dejar fila alguna. La
+        aserción sobre la fila se invirtió para reflejarlo; las de la respuesta
+        al paciente no cambian.
+        """
         from signos_sintomas.views import _LIMITE_MENSAJES_HORA, _MSG_RATE_LIMIT
         telefono = 'whatsapp:+573005556677'
         # Forzar el contador de cache directamente al límite
@@ -2007,13 +2016,68 @@ class WebhookWhatsAppTests(TestCase):
         self.assertEqual(respuesta.status_code, 200)
         self.assertIn(b'<Message>', respuesta.content)
         self.assertIn(_MSG_RATE_LIMIT.encode(), respuesta.content)
-        recepcion = RecepcionWebhookTwilio.objects.get(
-            message_sid='SMratelimit0001',
+        self.assertFalse(
+            RecepcionWebhookTwilio.objects.filter(
+                message_sid='SMratelimit0001',
+            ).exists()
         )
-        self.assertEqual(
-            recepcion.estado,
-            RecepcionWebhookTwilio.ESTADO_COMPLETADO,
-        )
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_webhook_falla_abierto_si_el_cache_no_responde(self):
+        """D2 (punto 1): si el cache no responde, el webhook NO puede dejar sin
+        respuesta al paciente. La firma de Twilio sigue protegiendo la puerta,
+        así que se procesa el mensaje (fallar abierto) en vez de devolver 500.
+        """
+        from unittest.mock import MagicMock, patch
+
+        cache_caido = MagicMock()
+        cache_caido.incr.side_effect = ConnectionError('redis inalcanzable')
+        with patch('signos_sintomas.views.cache', cache_caido), patch(
+            'signos_sintomas.views.procesar_mensaje',
+            return_value='respuesta del bot',
+        ) as procesar:
+            respuesta = self.client.post(
+                self.url,
+                {
+                    'From': 'whatsapp:+573001112299',
+                    'Body': 'hola',
+                    'MessageSid': 'SMcachecaido0001',
+                },
+            )
+
+        self.assertEqual(respuesta.status_code, 200)
+        procesar.assert_called_once()
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_limite_por_hora_permite_mas_de_veinte_mensajes(self):
+        """D2 (punto 4): el límite sube de 20 a 60. 30 mensajes en una hora ya
+        no bloquean al paciente — un cuestionario completo son ~11 mensajes y
+        la población objetivo (personas mayores, recién operadas) reintenta.
+        """
+        from unittest.mock import patch
+
+        from signos_sintomas.views import _MSG_RATE_LIMIT
+
+        telefono = 'whatsapp:+573005556699'
+        clave = 'rl_wh_{}'.format(telefono.replace('+', '').replace(':', ''))
+        cache.set(clave, 30, 3600)
+
+        with patch(
+            'signos_sintomas.views.procesar_mensaje',
+            return_value='respuesta del bot',
+        ) as procesar:
+            respuesta = self.client.post(
+                self.url,
+                {
+                    'From': telefono,
+                    'Body': 'hola',
+                    'MessageSid': 'SMlimite60000001',
+                },
+            )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertNotIn(_MSG_RATE_LIMIT.encode(), respuesta.content)
+        procesar.assert_called_once()
 
 
 class WebhookFlujoCompletoTests(TestCase):
@@ -2406,6 +2470,30 @@ class ReintentarEvaluacionesAlertasCommandTests(TestCase):
         self.assertEqual(
             estados,
             [RegistroDiario.EVALUACION_COMPLETADA, RegistroDiario.EVALUACION_PENDIENTE],
+        )
+
+    def test_no_reintenta_tras_diez_intentos_de_evaluacion(self):
+        """D6: la evaluación de un registro no se reintenta para siempre. Tras
+        10 intentos deja de recogerse — un fallo que sobrevive 10 intentos es
+        de configuración, no transitorio, y reintentar en bucle solo esconde
+        el problema (además evita el desbordamiento del contador).
+        """
+        from django.core.management import call_command
+
+        registro = self._registro('+573002224431')
+        RegistroDiario.objects.filter(pk=registro.pk).update(
+            estado_evaluacion_alertas=RegistroDiario.EVALUACION_ERROR,
+            intentos_evaluacion_alertas=10,
+            ultimo_error_evaluacion_alertas='RuntimeError',
+        )
+
+        call_command('reintentar_evaluaciones_alertas', verbosity=0)
+
+        registro.refresh_from_db()
+        self.assertEqual(registro.intentos_evaluacion_alertas, 10)
+        self.assertEqual(
+            registro.estado_evaluacion_alertas,
+            RegistroDiario.EVALUACION_ERROR,
         )
 
 class PacienteMedicoFKTests(TestCase):
@@ -3015,6 +3103,35 @@ class AlertaEmailNotificacionTests(TestCase):
         self.assertEqual(notificacion.ultimo_error, 'TimeoutError')
         self.assertGreater(notificacion.proximo_intento, timezone.now())
         self.assertNotIn('detalle', notificacion.ultimo_error)
+
+    def test_notificacion_se_marca_fallida_tras_agotar_reintentos(self):
+        """D6: el correo de alerta ALTA no se reintenta para siempre. Tras 10
+        intentos fallidos la notificación queda en estado terminal FALLIDA en
+        vez de reprogramarse — un correo de alerta ALTA que falla de forma
+        permanente es información clínica que no llegó, y debe hacerse visible,
+        no reintentarse en silencio.
+        """
+        from unittest.mock import patch
+
+        from .notificaciones import procesar_notificaciones_pendientes
+
+        alerta = self._crear_alerta_alta()
+        notificacion = NotificacionAlerta.objects.get(alerta=alerta)
+        # Ya acumuló 9 intentos fallidos; el décimo también falla.
+        NotificacionAlerta.objects.filter(pk=notificacion.pk).update(
+            intentos=9,
+            proximo_intento=timezone.now() - timedelta(seconds=1),
+        )
+
+        with patch(
+            'signos_sintomas.notificaciones._enviar',
+            side_effect=TimeoutError('fallo externo persistente'),
+        ):
+            procesar_notificaciones_pendientes()
+
+        notificacion.refresh_from_db()
+        self.assertEqual(notificacion.intentos, 10)
+        self.assertEqual(notificacion.estado, 'FALLIDA')
 
     def test_notificacion_pendiente_se_puede_reintentar(self):
         from django.core import mail

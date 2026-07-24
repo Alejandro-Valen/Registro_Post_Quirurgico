@@ -138,6 +138,31 @@ class ContactoTests(TestCase):
         self.assertFalse(resp.context["mensaje_enviado"])
         self.assertEqual(MensajeContacto.objects.count(), 0)
 
+    def test_contacto_falla_cerrado_si_el_cache_no_responde(self):
+        """D2 (punto 2): el formulario de contacto es la única puerta sin firma
+        —cualquiera en internet puede tocarla— y el rate limit es su único
+        control. Si el cache no responde, debe fallar CERRADO: no se crea el
+        mensaje y se muestra el aviso amable. Lo contrario dejaría el formulario
+        completamente abierto al abuso ante una caída de Redis.
+        """
+        from unittest.mock import MagicMock, patch
+
+        cache_caido = MagicMock()
+        cache_caido.incr.side_effect = ConnectionError('redis inalcanzable')
+        with patch('home.views.cache', cache_caido):
+            resp = self.client.post(
+                reverse("contacto"),
+                {
+                    "nombre": "Ana",
+                    "telefono": "+573000000009",
+                    "mensaje": "Hola",
+                },
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.context["error_rate_limit"])
+        self.assertEqual(MensajeContacto.objects.count(), 0)
+
 
 class MensajeContactoAdminTests(TestCase):
     def setUp(self):
