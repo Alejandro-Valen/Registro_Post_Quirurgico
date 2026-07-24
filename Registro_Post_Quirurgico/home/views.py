@@ -1,4 +1,5 @@
 import ipaddress
+import logging
 import re
 
 from django.conf import settings
@@ -7,6 +8,8 @@ from django.core.cache import cache
 from django.shortcuts import render
 
 from .models import MensajeContacto
+
+logger = logging.getLogger(__name__)
 
 _LIMITE_CONTACTO_HORA = 5   # envíos por IP por hora
 _MAX_NOMBRE  = 100
@@ -32,14 +35,28 @@ def _get_client_ip(request):
 
 
 def _rate_limit_contacto_excedido(ip):
+    """True si la IP superó el límite de envíos por hora.
+
+    Falla CERRADO ante una caída del cache (decisión D2): el formulario es la
+    única puerta sin firma —cualquiera en internet puede tocarla— y el rate
+    limit es su único control. Si el cache no responde, se trata como límite
+    excedido para no dejar el formulario abierto al abuso.
+    """
     if not ip:
         return False
     clave = 'rl_contacto_{}'.format(ip.replace('.', '_').replace(':', '_'))
     try:
         conteo = cache.incr(clave)
     except ValueError:
+        # El cache respondió "no existe la clave": primer envío de la ventana.
         cache.set(clave, 1, 3600)
         conteo = 1
+    except Exception:
+        logger.warning(
+            'Rate limit del formulario degradado: el cache no responde; se '
+            'bloquea el envío (fallo cerrado).'
+        )
+        return True
     return conteo > _LIMITE_CONTACTO_HORA
 
 

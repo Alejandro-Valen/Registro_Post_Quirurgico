@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import timedelta
 
@@ -18,8 +19,14 @@ from twilio.twiml.messaging_response import MessagingResponse
 from .bot import procesar_mensaje
 from .models import RecepcionWebhookTwilio
 
+logger = logging.getLogger(__name__)
+
 # --- Constantes de protección del webhook ---
-_LIMITE_MENSAJES_HORA = 20
+# El límite atrapa un bucle (cientos de mensajes/minuto), no vigila a un humano:
+# un cuestionario completo son ~11 mensajes y un paciente confundido no pasa de
+# ~40 en una hora. Con 60 el bucle se corta igual y el paciente nunca toca el
+# techo (decisión D2, corrección post-auditoría).
+_LIMITE_MENSAJES_HORA = 60
 _MAX_EDAD_PROCESANDO = timedelta(minutes=2)
 _MSG_RATE_LIMIT = (
     'Recibimos varios mensajes en poco tiempo y pausamos temporalmente el '
@@ -45,6 +52,11 @@ def webhook_whatsapp(request):
     texto = request.POST.get('Body', '')[:500]
     token_idempotencia = request.headers.get('I-Twilio-Idempotency-Token', '')[:128]
 
+    # El rate limit se verifica ANTES de reclamar el SID (decisión D2): un
+    # mensaje limitado no debe dejar una fila colgada en RecepcionWebhookTwilio.
+    if _rate_limit_excedido(telefono):
+        return _respuesta_twiml(_MSG_RATE_LIMIT)
+
     recepcion, debe_procesar = _reclamar_recepcion_webhook(
         sid,
         token_idempotencia,
@@ -55,10 +67,6 @@ def webhook_whatsapp(request):
         respuesta = HttpResponse(status=503)
         respuesta['Retry-After'] = '30'
         return respuesta
-
-    if _rate_limit_excedido(telefono):
-        _marcar_recepcion_completada(recepcion)
-        return _respuesta_twiml(_MSG_RATE_LIMIT)
 
     try:
         with transaction.atomic():
@@ -145,15 +153,28 @@ def _respuesta_twiml(mensaje=None):
 
 
 def _rate_limit_excedido(telefono):
-    """A5: True si el número superó el límite de mensajes por hora."""
+    """A5: True si el número superó el límite de mensajes por hora.
+
+    Falla ABIERTO ante una caída del cache (decisión D2): el webhook es la ruta
+    del paciente y la firma de Twilio ya protege la puerta, así que un fallo del
+    cache no debe dejar al paciente sin respuesta. Se registra la degradación
+    para el Arquitecto (no para el médico: es ruido de infraestructura).
+    """
     if not telefono:
         return False
     clave = 'rl_wh_{}'.format(telefono.replace('+', '').replace(':', ''))
     try:
         conteo = cache.incr(clave)
     except ValueError:
+        # El cache respondió "no existe la clave": primer mensaje de la ventana.
         cache.set(clave, 1, 3600)
         conteo = 1
+    except Exception:
+        logger.warning(
+            'Rate limit del webhook degradado: el cache no responde; se procesa '
+            'el mensaje (fallo abierto).'
+        )
+        return False
     return conteo > _LIMITE_MENSAJES_HORA
 
 
