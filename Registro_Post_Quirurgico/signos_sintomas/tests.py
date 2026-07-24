@@ -3392,6 +3392,65 @@ class NotificacionConcurrenciaTests(TransactionTestCase):
         self.assertEqual(self.notificacion.estado, NotificacionAlerta.ESTADO_ENVIADA)
         self.assertEqual(self.notificacion.intentos, 1)
 
+    def test_el_envio_no_bloquea_la_fila_del_paciente(self):
+        """Hallazgo 2: el envío de correo es una llamada de red potencialmente
+        lenta. No debe mantener bloqueada la fila del paciente —sólo la de la
+        notificación (of=('self',))— para no frenar el webhook del paciente,
+        que necesita esa fila. Con el bloqueo del join completo, una transacción
+        concurrente sobre el paciente esperaría a que terminara el envío.
+        """
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Event
+        from unittest.mock import patch
+
+        from django.db import OperationalError
+
+        from .notificaciones import procesar_notificaciones_pendientes
+
+        paciente_pk = self.notificacion.alerta.paciente_id
+
+        iniciado = Event()
+        liberar = Event()
+
+        def enviar_lento(notificacion):
+            iniciado.set()
+            if not liberar.wait(timeout=10):
+                raise TimeoutError('La prueba no liberó el worker.')
+
+        def procesar():
+            close_old_connections()
+            try:
+                return procesar_notificaciones_pendientes(limite=1)
+            finally:
+                close_old_connections()
+
+        paciente_bloqueado = {}
+        with patch(
+            'signos_sintomas.notificaciones._enviar',
+            side_effect=enviar_lento,
+        ):
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                futuro = executor.submit(procesar)
+                self.assertTrue(iniciado.wait(timeout=10))
+                # Envío en curso → la notificación está bloqueada. Otra
+                # transacción intenta bloquear la fila del paciente sin esperar.
+                try:
+                    with transaction.atomic():
+                        Paciente.objects.select_for_update(nowait=True).get(
+                            pk=paciente_pk,
+                        )
+                    paciente_bloqueado['valor'] = False
+                except OperationalError:
+                    paciente_bloqueado['valor'] = True
+                finally:
+                    liberar.set()
+                    futuro.result(timeout=10)
+
+        self.assertFalse(
+            paciente_bloqueado['valor'],
+            'El envío de correo mantuvo bloqueada la fila del paciente.',
+        )
+
 
 class CacheProductionConfigTests(TestCase):
     """D1 — Detecta dependencia redis faltante cuando producción usa RedisCache."""

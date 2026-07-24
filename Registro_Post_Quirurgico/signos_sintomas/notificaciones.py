@@ -134,7 +134,13 @@ def procesar_notificaciones_pendientes(limite=50):
     for notificacion_pk in candidatos:
         with transaction.atomic():
             notificacion = (
-                NotificacionAlerta.objects.select_for_update(skip_locked=True)
+                # of=('self',): el FOR UPDATE bloquea SOLO la fila de la
+                # notificación, no las de alerta/paciente que trae el JOIN
+                # (hallazgo 2). Así la llamada de red del envío no mantiene
+                # bloqueadas filas que el webhook del paciente necesita.
+                NotificacionAlerta.objects.select_for_update(
+                    skip_locked=True, of=('self',),
+                )
                 # medico_responsable es nullable. Incluirlo en select_related
                 # produciría un LEFT JOIN que PostgreSQL no permite bloquear
                 # con FOR UPDATE.
