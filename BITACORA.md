@@ -3400,3 +3400,96 @@ monitoreo externo, `resuelta_por` (D3, migración 0025), límite de reintentos y
 estado `FALLIDA` (D6), y acotar el bloqueo de filas durante el envío de correo
 (hallazgo 2). Se arranca en sesión nueva con el prompt de reanudación del
 documento de decisiones.
+
+---
+
+## Sprint 5 — Corrección post-auditoría, Loop B (trazabilidad y operación)
+**Fecha:** 23/07/2026
+**Responsable:** León (Arquitecto IA) + Claude Code (Opus)
+**Estado:** LOOP B CERRADO ✅ (pendiente de verificación de León y push)
+
+### Verificación de estado al arrancar (manda Git)
+
+Antes de tocar nada se contrastó el documento de decisiones contra Git y la
+suite. Coincidían (Loop A cerrado, D1-D10 documentadas), con **un matiz que se
+rectificó con evidencia**: la primera corrida de la suite falló 1 test a las
+00:08. En vez de etiquetarlo como "flake" y seguir, se **probó** la hipótesis:
+un reloj falso monótono, desplazado para que la medianoche de Bogotá caiga a
+mitad de corrida, hace caer **17 tests** de forma reproducible; sin el cruce,
+los 299 pasan. Se rastreó el mecanismo (p.ej. `test_dos_dias_consecutivos_sin_gases`
+ancla "ayer" y "hoy" con dos llamadas a `now()` que pueden quedar a lados
+distintos de la medianoche, abriendo un hueco fantasma). **El motor está bien**
+(`alert_engine.py:700` usa `timezone.localdate()`; los filtros usan
+`fecha_registro__date`, consciente de zona horaria). Es fragilidad de las
+pruebas, no del sistema → queda para el Loop C (C7).
+
+### Qué se hizo
+
+Método: un test en rojo por comportamiento **antes** del arreglo, verificando
+que cada rojo fuera por su defecto y no por otro. 6 commits (`1207d70` →
+`f8fa437`), commits de código y de docs separados.
+
+- **B1 — tests en rojo (D2 y D6).** 6 pruebas: webhook falla abierto ante caída
+  del cache, formulario falla cerrado, verificación antes de reclamar el SID,
+  límite 60, tope de evaluación, y correo → `FALLIDA`. Cada una falló por su
+  defecto (4 asserts + 2 propagaciones de `ConnectionError`). El test previo del
+  rate limit se **actualizó** (cambió el requisito, con el porqué en su docstring:
+  antes esperaba fila `COMPLETADO`, ahora que no quede fila).
+- **B2 — rate limit (D2).** `_rate_limit_excedido` capturaba solo `ValueError`;
+  con Redis inalcanzable el webhook devolvía 500 a todos. Ahora el webhook
+  **falla abierto** (la firma de Twilio protege la puerta) y registra la
+  degradación; el formulario de contacto **falla cerrado** (única puerta sin
+  firma). La verificación se movió **antes** de reclamar el SID (un mensaje
+  limitado ya no deja fila). Límite 20 → **60** (atrapa un bucle igual; un
+  cuestionario son ~11 mensajes).
+- **B3 — `resuelta_por` (D3).** La acción del Admin usaba `queryset.update()`,
+  que no guardaba **quién** resolvió ni escribía historial. Campo
+  `Alerta.resuelta_por` (migración 0025) poblado en el mismo `.update()` +
+  `log_change` por alerta. Visible en listado y detalle. Sin backfill.
+- **B4 — tope de reintentos y `FALLIDA` (D6).** Correo y evaluación se toparon
+  en **10 intentos**. Estado terminal `FALLIDA` para el correo agotado
+  (migración 0026, que amplía las restricciones `estado_valido` y
+  `envio_coherente`); la evaluación agotada deja de recogerse. El **tablero de
+  triage** avisa de correos `FALLIDA`, también al médico (con scoping), porque
+  un aviso de alerta ALTA que no llegó es información clínica que no debe quedar
+  enterrada.
+- **B5 — `/salud/` (D2).** Endpoint que verifica BD y cache y devuelve 200/503
+  sin detalle. Es la pareja del "fallar abierto": sin monitor externo, una caída
+  silenciosa se volvería pérdida de datos; con la alarma apuntando aquí, se
+  vuelve una alerta al Arquitecto.
+- **B6 — bloqueo de filas (hallazgo 2).** `procesar_notificaciones_pendientes`
+  tomaba el `FOR UPDATE` sobre todo el JOIN, así que la llamada de red del envío
+  bloqueaba la fila del paciente que el webhook necesita.
+  `select_for_update(of=('self',))` limita el lock a la notificación. Test
+  **determinista** (sin depender de tiempos): con el envío en curso, otra
+  transacción bloquea la fila del paciente con `nowait`.
+
+### Decisiones tomadas (ya documentadas en el doc de decisiones)
+
+Ninguna decisión clínica ni de producto se tomó dentro del código: D2, D3 y D6
+estaban aprobadas y razonadas de antemano en
+`docs/decisiones_correccion_auditoria.md`. Ningún umbral clínico cambió.
+
+### Problemas encontrados y resueltos
+
+- **El "flake de medianoche" no era un flake casual.** Se rectificó una
+  afirmación apresurada probándola: es sensibilidad real de las pruebas a la
+  fecha, reproducible a voluntad, y ajena al motor. Documentada, no barrida.
+- **Separar B2-B4 en commits.** `models.py` y `tests.py` mezclaban cambios de
+  B3 y B4; se separaron con `git add -p` (respuestas dirigidas por hunk),
+  verificando después que cada commit tuviera solo lo suyo.
+- **Nueva restricción con `FALLIDA`.** Añadir el estado obligó a ampliar dos
+  `CheckConstraint` (no solo la de estados válidos, también `envio_coherente`,
+  que exige `fecha_envio` NULL para `FALLIDA`). Migración 0026 probada reversible
+  ida y vuelta.
+
+### Cierre
+
+**299 tests OK**, `makemigrations --check` limpio, migraciones 0025 y 0026
+reversibles. Las 5 advertencias de `check --deploy` local son de los settings de
+desarrollo (DEBUG=True, CSRF_COOKIE_SECURE) y ninguna la introdujo el Loop B.
+
+**Pendiente inmediato:** **Loop C** (coherencia e higiene, el último antes del
+PR): hallazgos 6, 7, 8, 11; D7 (consulta de solo lectura en Railway sobre 0020);
+D8-D10; recorte de CLAUDE.md; y el blindaje de los tests de medianoche (C7). Solo
+al cerrarlo se prepara el PR hacia `Desarrollo`.

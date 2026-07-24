@@ -49,12 +49,14 @@ código antes de aceptarlas.
 > **Se actualiza en CADA cierre de sesión, aunque quede a mitad de un loop.**
 > Es lo primero que debe leer quien retome el trabajo.
 
-**Última actualización:** 22/07/2026
-**Punto alcanzado:** **Loop A CERRADO y publicado.** Se agregaron D8, D9 y D10
-(hallazgos del ejercicio de documentación, todos para el Loop C). Siguiente:
-Loop B, en sesión nueva, empezando por el commit B1 (test en rojo).
+**Última actualización:** 23/07/2026
+**Punto alcanzado:** **Loop B CERRADO** (pendiente de verificación de León y
+push). Implementados D2, D3, D6 y el hallazgo 2 en 6 commits (`1207d70` →
+`f8fa437`). Se probó y documentó, además, que la suite no es determinista cerca
+de la medianoche de Bogotá (fragilidad de tests, no del sistema): queda anotado
+para el Loop C (C7). Siguiente: **Loop C**, en sesión nueva.
 **Rama:** `sprint-5-produccion` · **Restauración segura:** `fbf62a8`
-**Línea base de la suite:** 286 tests OK
+**Línea base de la suite:** 299 tests OK
 
 ### Loop A — Corrección clínica *(bloquea el merge)*
 
@@ -88,14 +90,24 @@ nada si no se verifica por qué está verde.**
 
 ### Loop B — Trazabilidad y operación
 
-- [ ] **B1** `test: cubrir degradacion de cache y agotamiento de reintentos` *(debe fallar)*
-- [ ] **B2** `fix: degradar el rate limit sin bloquear al paciente` → D2 (1-4)
-- [ ] **B3** `feat: registrar quien resuelve cada alerta` → D3 + migración 0025
-- [ ] **B4** `feat: limitar reintentos y exponer entregas fallidas` → D6
-- [ ] **B5** `feat: endpoint de salud para monitoreo externo` → D2 (5)
-- [ ] **B6** `fix: acotar el bloqueo de filas durante el envio de correo` → hallazgo 2
-- [ ] **B7** `docs: operacion, monitoreo y trazabilidad de resolucion`
-- [ ] Cierre: suite · migración reversible · `/salud/` responde 200 y 503
+- [x] **B1** `test: cubrir degradacion de cache y agotamiento de reintentos` — `1207d70` (6 rojos, cada uno por su defecto)
+- [x] **B2** `fix: degradar el rate limit sin bloquear al paciente` → D2 (1-4) — `e8acc33`
+- [x] **B3** `feat: registrar quien resuelve cada alerta` → D3 + migración 0025 — `e143336`
+- [x] **B4** `feat: limitar reintentos y exponer entregas fallidas` → D6 (+ FALLIDA, migración 0026, aviso en tablero) — `e75ba83`
+- [x] **B5** `feat: endpoint de salud para monitoreo externo` → D2 (5) — `74da9ee`
+- [x] **B6** `fix: acotar el bloqueo de filas durante el envio de correo` → hallazgo 2 — `f8fa437`
+- [ ] **B7** `docs: operacion, monitoreo y trazabilidad de resolucion` — en curso
+- [x] Cierre: **299 tests OK** · `makemigrations --check` limpio · migraciones 0025 y 0026 reversibles (ida y vuelta) · `/salud/` responde 200 y 503
+- [ ] **Verificación de León** (antes de pasar al Loop C)
+- [ ] Push a `origin/sprint-5-produccion` + entrada de BITACORA
+
+**Hallazgo del Loop B (no bloqueante, para el Loop C):** la suite no es
+determinista cerca de la medianoche de Bogotá. Forzando el cruce de día a mitad
+de corrida (reloj falso monótono desplazado) caen **17 tests** que arman
+fixtures de varios días con dos llamadas a `now()` que pueden quedar a lados
+distintos de la medianoche. El **motor está bien** (usa `timezone.localdate()` y
+`fecha_registro__date`); es fragilidad de las pruebas. Blindaje en C7 (anclar
+los fixtures a un único `now()` de referencia, o `freezegun`).
 
 ### Loop C — Coherencia e higiene
 

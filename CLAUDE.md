@@ -264,6 +264,10 @@ fecha_resolucion      DateTimeField null=True blank=True
 motivo_resolucion     CharField choices=[CONTACTO,URGENCIAS,MEDICACION,FP_MEDICION,FP_RANGO,ESPONTANEO,OTRO,LEGACY] null=True blank=True
                       # Bloque A — obligatorio al resolver (vía formulario intermedio del Admin)
 motivo_resolucion_detalle CharField(500) null=True blank=True  # requerido solo si motivo=OTRO
+resuelta_por          ForeignKey(User, SET_NULL, null=True, related_name='alertas_resueltas')
+                      # D3 (Loop B) — QUIÉN resolvió. Lo puebla la acción del Admin
+                      # (mismo .update() + log_change). Sin backfill: cierres
+                      # previos quedan NULL. Migración 0025.
 ```
 
 **Agrupación de alertas por problema (decisión Arquitecto, 10/07/2026):** el
@@ -295,6 +299,18 @@ una línea. La acumulación es idempotente porque
 al médico solo cuando la alerta **alcanza ALTA por primera vez** (creación ALTA
 o **escalada** a ALTA, marcada por `_escalo_a_alta` desde el engine), **no** en
 cada recurrencia diaria del mismo problema.
+
+**Tope de reintentos y estado FALLIDA (decisión D6, Loop B):** el correo
+(`NotificacionAlerta`) y la evaluación de un registro se reintentan **como
+máximo 10 veces** (≈39 h con el backoff actual). Un correo agotado pasa al
+estado terminal **`FALLIDA`** (nuevo choice de `NotificacionAlerta`, migración
+0026 que amplía las restricciones `estado_valido` y `envio_coherente`); una
+evaluación agotada deja de recogerse (filtro `intentos < 10` en
+`reintentar_evaluaciones_alertas`). El **tablero de triage** avisa cuando hay
+correos `FALLIDA` —también al médico, con scoping por médico— porque un aviso de
+alerta ALTA que no llegó es información clínica que no debe quedar enterrada. El
+envío usa `select_for_update(of=('self',))` para no bloquear las filas de
+paciente/alerta durante la llamada de red (hallazgo 2).
 
 **Motivo de resolución (Bloque A, 02/07/2026):** el médico debe elegir un
 motivo al marcar una alerta como resuelta — la acción "Marcar como resuelta"
@@ -463,7 +479,7 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 variables nuevas del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos (A1–A6, B1–B7, C1–C7, D1–D5), 103 tests OK, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo — 6 bloques, 135 tests OK |
-| Sprint 5 | Producción, despliegue y cierre pre-merge (RAG diferido a Sprint 6) | ⏳ En corrección post-auditoría — Bloques 1-7 + A/B y Loops 1-6 completados; **auditoría independiente del 22/07/2026 entregada con 14 hallazgos y veredicto BLOQUEADO para el PR**. El único bloqueante (escalera de alertas SILENCIO que nunca escalaba) quedó corregido y verificado en el **Loop A**; faltan los Loops B y C. **286 tests OK**. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y cierre pre-merge (RAG diferido a Sprint 6) | ⏳ En corrección post-auditoría — Bloques 1-7 + A/B y Loops 1-6 completados; **auditoría independiente del 22/07/2026 entregada con 14 hallazgos y veredicto BLOQUEADO para el PR**. **Loop A** (bloqueante SILENCIO) y **Loop B** (D2, D3, D6 y hallazgo 2) cerrados; falta el **Loop C**. **299 tests OK**. Rama `sprint-5-produccion` |
 
 **Punto actual (22/07/2026):** el Sprint 5 pasó de "cierre técnico" a
 "corrección post-auditoría". La auditoría independiente sobre `fbf62a8` confirmó
@@ -487,15 +503,34 @@ bloqueante.
   racha de SILENCIO corregida con escalera 1/2/4 (D1), umbral de fiebre retirado
   del mensaje al paciente (D4) y signos concurrentes de íleo conservados en el
   detalle (D5). Verificado por el Arquitecto ejecutando él mismo la comprobación.
+- **Loop B cerrado (23/07/2026)** — trazabilidad y operación, 6 commits sobre
+  `1207d70`:
+  - **B1** (`1207d70`): 6 tests en rojo (D2 y D6) antes de los arreglos.
+  - **B2** (`e8acc33`, D2): rate limit degrada sin bloquear — webhook **falla
+    abierto** ante caída del cache (la firma de Twilio sigue protegiendo),
+    formulario de contacto **falla cerrado** (única puerta sin firma); la
+    verificación se movió **antes** de reclamar el SID; límite 20 → **60**.
+  - **B3** (`e143336`, D3): campo `Alerta.resuelta_por` + `log_change` +
+    migración 0025, sin backfill.
+  - **B4** (`e75ba83`, D6): tope de **10 reintentos** en correo y evaluación;
+    estado terminal `FALLIDA` (migración 0026) con aviso en el tablero
+    (también al médico, con scoping).
+  - **B5** (`74da9ee`, D2 punto 5): endpoint `/salud/` que verifica BD y cache
+    (200/503 sin detalle) para el monitor externo.
+  - **B6** (`f8fa437`, hallazgo 2): `select_for_update(of=('self',))` para no
+    bloquear paciente/alerta durante el envío de correo.
+  - Cierre: **299 tests OK**, `makemigrations --check` limpio, migraciones 0025
+    y 0026 reversibles (probado ida y vuelta).
 - **Método de trabajo:** decidir → documentar → **test en rojo** → implementar →
-  verificación del Arquitecto → un loop por sesión. Durante el propio Loop A
-  aparecieron dos pruebas defectuosas (una dependía de la hora del día, otra
-  pasaba en verde por el camino equivocado); ambas se detectaron por ejecutarlas
-  en rojo antes del arreglo.
-- **Pendiente:** Loop B (rate limit y caída de Redis, `/salud/`, `resuelta_por`
-  con migración 0025, límite de reintentos, bloqueo de filas en el envío de
-  correo) y Loop C (coherencia e higiene, incluida la consulta D7 sobre la
-  migración 0020). El PR sigue detenido hasta cerrarlos.
+  verificación del Arquitecto → un loop por sesión. En el Loop A aparecieron dos
+  pruebas defectuosas (una dependía de la hora del día); en el Loop B se **probó
+  y documentó** que la suite no es determinista cerca de la medianoche de Bogotá
+  (forzando el cruce de día a mitad de corrida caen 17 tests que construyen
+  fixtures con dos llamadas a `now()`; el motor usa `localdate()` y no tiene el
+  bug). Es fragilidad de las pruebas, no del sistema — queda para el Loop C (C7).
+- **Pendiente:** Loop C (coherencia e higiene: hallazgos 6, 7, 8, 11, D7-D10,
+  recorte de CLAUDE.md y el blindaje de los tests de medianoche). El PR sigue
+  detenido hasta cerrarlo.
 
 URL: `registropostquirurgico-production-1f96.up.railway.app`.
 - **Pausa segura y documentación:** `docs/README.md` clasifica fuentes vigentes,
@@ -589,20 +624,27 @@ URL: `registropostquirurgico-production-1f96.up.railway.app`.
   fue probada por el Arquitecto, conserva `staff=True`, `superuser=False` y el
   correo `seguimientolionalejo@gmail.com`; los pacientes ficticios del Loop 6
   ya fueron eliminados.
-**Próximo paso exacto (al retomar):** iniciar el **Loop B** de corrección. Leer
-completos `docs/decisiones_correccion_auditoria.md` (fichas D1-D7, método de
-trabajo, estado de avance y prompt de reanudación) y este archivo; verificar el
-estado real contra `git log` y la suite antes de proponer nada. La auditoría ya
-se ejecutó — **no repetirla**: sus 14 hallazgos y el reparto por loop están en
-el documento de decisiones. Loop B implementa D2, D3, D6 y el hallazgo 2;
-Loop C, la coherencia y la consulta D7. Solo al cerrar los tres se prepara el PR
-hacia `Desarrollo`, se revisa el diff y se decide el merge. Al mejorar el plan
-Railway, crear `cron-operativo` como servicio separado y restaurar `cron-tarde`
-a su horario original. Después: **datos reales del médico** (reemplazar
-`[corchetes]`, subir logo/colores, `MOSTRAR_AVISO_BOCETO=False`) y los
-requisitos del piloto real en `ROADMAP_MONITOREO_POSQUIRURGICO.md`, sección
-"Requisitos para un PILOTO REAL con pacientes" (plan Railway, WhatsApp Business,
-HABEAS DATA, validación médica de las respuestas del bot).
+**Próximo paso exacto (al retomar):** iniciar el **Loop C** de corrección
+(coherencia e higiene, el último antes del PR). Leer completos
+`docs/decisiones_correccion_auditoria.md` (fichas D1-D10, método de trabajo,
+estado de avance) y este archivo; verificar el estado real contra `git log` y la
+suite (línea base **299 tests OK**) antes de proponer nada. La auditoría ya se
+ejecutó — **no repetirla**. Loop C implementa: hallazgos 6 (cabeceras de proxy),
+7 (estado de error del motor en la ruta del bot), 8 (filtros que exponen otras
+cuentas), 11 (variables de entorno vacías al arrancar), D7 (consulta de solo
+lectura en Railway sobre la migración 0020), **D8-D10** (redacción de "días con
+datos", `help_text` obsoleto de `fecha_ultimo_registro`, y fijar la condición
+MEDIA de hinchazón sin cambiar comportamiento), el **recorte de CLAUDE.md**
+(supera 40.000 chars; ~36% es cronología duplicada de BITACORA) y el **blindaje
+de los tests de medianoche** (anclar fixtures a un solo `now()` o freezegun).
+Solo al cerrarlo se prepara el PR hacia `Desarrollo`, se revisa el diff y se
+decide el merge. Al mejorar el plan Railway, crear `cron-operativo` como servicio
+separado y restaurar `cron-tarde` a su horario original. Después: **datos reales
+del médico** (reemplazar `[corchetes]`, subir logo/colores,
+`MOSTRAR_AVISO_BOCETO=False`) y los requisitos del piloto real en
+`ROADMAP_MONITOREO_POSQUIRURGICO.md`, sección "Requisitos para un PILOTO REAL con
+pacientes" (plan Railway, WhatsApp Business, HABEAS DATA, validación médica de
+las respuestas del bot).
 
 **Nota cron (08/07/2026):** en Railway, encadenar comandos con `&&` en el
 Custom Start Command **solo corre el primero** → se creó el comando único
