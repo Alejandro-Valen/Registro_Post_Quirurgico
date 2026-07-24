@@ -164,6 +164,41 @@ class ContactoTests(TestCase):
         self.assertEqual(MensajeContacto.objects.count(), 0)
 
 
+class SaludCheckTests(TestCase):
+    """D2 (punto 5): endpoint /salud/ para un monitor externo.
+
+    Verifica base de datos y cache; devuelve 200 o 503 SIN detalle en el cuerpo
+    (no filtra qué falló ni la topología interna a quien lo consulte).
+    """
+
+    def test_salud_ok_devuelve_200_sin_detalle(self):
+        resp = self.client.get('/salud/')
+        self.assertEqual(resp.status_code, 200)
+        # Sin detalle: no revela qué se comprobó ni el estado interno.
+        self.assertNotIn(b'base de datos', resp.content.lower())
+        self.assertNotIn(b'cache', resp.content.lower())
+
+    def test_salud_cache_caido_devuelve_503(self):
+        from unittest.mock import MagicMock, patch
+
+        cache_caido = MagicMock()
+        cache_caido.set.side_effect = ConnectionError('redis inalcanzable')
+        with patch('home.views.cache', cache_caido):
+            resp = self.client.get('/salud/')
+
+        self.assertEqual(resp.status_code, 503)
+
+    def test_salud_bd_caida_devuelve_503(self):
+        from unittest.mock import MagicMock, patch
+
+        conexion_caida = MagicMock()
+        conexion_caida.cursor.side_effect = Exception('base de datos inalcanzable')
+        with patch('home.views.connection', conexion_caida):
+            resp = self.client.get('/salud/')
+
+        self.assertEqual(resp.status_code, 503)
+
+
 class MensajeContactoAdminTests(TestCase):
     def setUp(self):
         from django.contrib.auth.models import Group

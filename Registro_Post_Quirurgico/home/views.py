@@ -5,6 +5,8 @@ import re
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.db import connection
+from django.http import HttpResponse
 from django.shortcuts import render
 
 from .models import MensajeContacto
@@ -76,6 +78,26 @@ def _medico_destinatario_contacto():
 # marcadores [entre corchetes] + un aviso de "boceto". Para pasar a producción
 # final (datos reales cargados), poner MOSTRAR_AVISO_BOCETO = False.
 MOSTRAR_AVISO_BOCETO = True
+
+
+def salud(request):
+    """Health check para monitoreo externo (D2, punto 5).
+
+    Verifica base de datos y cache. Devuelve 200 si ambos responden, 503 si
+    alguno falla. El cuerpo NO lleva detalle: quien consulta el endpoint no
+    debe conocer la topología interna ni qué componente falló.
+    """
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT 1')
+            cursor.fetchone()
+        cache.set('salud_check', '1', 10)
+        if cache.get('salud_check') != '1':
+            raise RuntimeError('cache no confirmó la escritura')
+    except Exception:
+        logger.warning('Health check /salud/ falló: base de datos o cache no responde.')
+        return HttpResponse(status=503)
+    return HttpResponse(status=200)
 
 
 def index(request):
