@@ -518,7 +518,7 @@ class DeteccionAlertaInline(admin.TabularInline):
 @admin.register(Alerta)
 class AlertaAdmin(admin.ModelAdmin):
     list_display = ['paciente', 'tipo', 'severidad_badge', 'recurrencia',
-                    'resuelta', 'fecha_alerta', 'mensaje_corto']
+                    'resuelta', 'resuelta_por', 'fecha_alerta', 'mensaje_corto']
     list_filter = ['tipo', 'severidad', 'resuelta']
     search_fields = ['paciente__nombre_completo']
     actions = ['marcar_resuelta']
@@ -628,12 +628,25 @@ class AlertaAdmin(admin.ModelAdmin):
 
         motivo = form.cleaned_data['motivo_resolucion']
         detalle = form.cleaned_data['motivo_resolucion_detalle']
+        # Capturar las alertas antes del update para poder registrarlas en el
+        # historial una por una (queryset.update() no dispara log_change).
+        pendientes = list(queryset.filter(resuelta=False))
         actualizadas = queryset.filter(resuelta=False).update(
             resuelta=True,
             fecha_resolucion=timezone.now(),
             motivo_resolucion=motivo,
             motivo_resolucion_detalle=detalle or None,
+            resuelta_por=request.user,
         )
+        # D3: el historial de Django no se escribe con queryset.update(). Se
+        # registra explícitamente para que el botón "Historial" de cada alerta
+        # funcione y quede constancia de quién resolvió.
+        for alerta in pendientes:
+            self.log_change(
+                request,
+                alerta,
+                f'Marcada como resuelta (motivo: {motivo}).',
+            )
         self.message_user(
             request,
             f'{actualizadas} alerta(s) marcadas como resueltas.',

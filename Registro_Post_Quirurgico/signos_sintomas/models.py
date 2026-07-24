@@ -415,6 +415,18 @@ class Alerta(models.Model):
         verbose_name='Detalle del motivo',
         help_text='Solo requerido cuando el motivo es "Otro".',
     )
+    # Quién resolvió la alerta (D3, corrección post-auditoría). SET_NULL para no
+    # bloquear el borrado de una cuenta médica; null también en cierres previos a
+    # esta versión (sin backfill: rellenar sería fabricar una atribución clínica).
+    resuelta_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='alertas_resueltas',
+        verbose_name='Resuelta por',
+        help_text='Médico que marcó esta alerta como resuelta.',
+    )
 
     class Meta:
         verbose_name = "Alerta"

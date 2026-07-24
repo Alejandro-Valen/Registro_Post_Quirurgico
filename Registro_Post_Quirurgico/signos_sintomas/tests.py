@@ -3011,6 +3011,44 @@ class AlertaMotivoResolucionTests(TestCase):
         self.alerta.refresh_from_db()
         self.assertFalse(self.alerta.resuelta)
 
+    def test_resolver_registra_quien_resolvio(self):
+        """D3: al resolver, la alerta guarda QUIÉN la resolvió. Sin este dato,
+        una decisión clínica (p.ej. marcar una fuga como falso positivo) queda
+        sin atribución el día que entre un segundo médico o se transfiera el
+        sistema — datos que no se capturan no son recuperables.
+        """
+        self.client.force_login(self.medico)
+        self._post_accion({
+            'aplicar': '1',
+            'motivo_resolucion': Alerta.MOTIVO_CONTACTO,
+            'motivo_resolucion_detalle': '',
+        })
+        self.alerta.refresh_from_db()
+        self.assertTrue(self.alerta.resuelta)
+        self.assertEqual(self.alerta.resuelta_por, self.medico)
+
+    def test_resolver_escribe_en_el_historial_del_admin(self):
+        """D3: la resolución deja una entrada en el historial de Django (el
+        botón "Historial" de la alerta), imposible con queryset.update() a
+        secas. Se registra con el usuario que resolvió.
+        """
+        from django.contrib.admin.models import LogEntry
+        from django.contrib.contenttypes.models import ContentType
+
+        self.client.force_login(self.medico)
+        self._post_accion({
+            'aplicar': '1',
+            'motivo_resolucion': Alerta.MOTIVO_CONTACTO,
+            'motivo_resolucion_detalle': '',
+        })
+        ct = ContentType.objects.get_for_model(Alerta)
+        entradas = LogEntry.objects.filter(
+            content_type=ct,
+            object_id=str(self.alerta.pk),
+            user=self.medico,
+        )
+        self.assertTrue(entradas.exists())
+
 
 class AlertaEmailNotificacionTests(TestCase):
     """Bandeja durable para avisar al médico por una alerta ALTA."""
