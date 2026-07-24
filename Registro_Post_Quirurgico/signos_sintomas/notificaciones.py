@@ -11,6 +11,14 @@ from django.utils import timezone
 from .models import NotificacionAlerta
 
 
+# Tope de reintentos (D6). Con el backoff (5, 15, 45, 135 min, luego cada 6 h),
+# 10 intentos son ≈39 horas: generoso para un fallo transitorio. Si a las 39 h
+# sigue fallando, la causa es configuración (API key, destinatario) y ninguna
+# cantidad de reintentos la resuelve. Como efecto colateral, el tope elimina el
+# riesgo de desbordamiento del contador.
+MAX_INTENTOS_NOTIFICACION = 10
+
+
 class DestinatarioNoConfigurado(Exception):
     pass
 
@@ -148,15 +156,25 @@ def procesar_notificaciones_pendientes(limite=50):
             except Exception as exc:
                 errores += 1
                 notificacion.ultimo_error = type(exc).__name__[:100]
-                notificacion.proximo_intento = timezone.now() + timedelta(
-                    minutes=_minutos_reintento(notificacion.intentos)
-                )
-                notificacion.save(update_fields=[
-                    'intentos',
-                    'fecha_ultimo_intento',
-                    'ultimo_error',
-                    'proximo_intento',
-                ])
+                if notificacion.intentos >= MAX_INTENTOS_NOTIFICACION:
+                    # Se agotaron los reintentos: estado terminal visible (D6).
+                    notificacion.estado = NotificacionAlerta.ESTADO_FALLIDA
+                    notificacion.save(update_fields=[
+                        'estado',
+                        'intentos',
+                        'fecha_ultimo_intento',
+                        'ultimo_error',
+                    ])
+                else:
+                    notificacion.proximo_intento = timezone.now() + timedelta(
+                        minutes=_minutos_reintento(notificacion.intentos)
+                    )
+                    notificacion.save(update_fields=[
+                        'intentos',
+                        'fecha_ultimo_intento',
+                        'ultimo_error',
+                        'proximo_intento',
+                    ])
             else:
                 enviadas += 1
                 notificacion.estado = NotificacionAlerta.ESTADO_ENVIADA

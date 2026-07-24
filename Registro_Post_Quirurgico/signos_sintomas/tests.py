@@ -5070,6 +5070,48 @@ class PanelTriageExperienciaTests(TestCase):
         self.assertNotContains(resp, 'Contacto sin asignar invisible')
         self.assertNotContains(resp, 'Contenido sensible que no va en el tablero')
 
+    def test_avisa_de_correos_de_alerta_sin_entregar_propios(self):
+        """D6: un correo de alerta ALTA que agotó los reintentos (FALLIDA) es
+        información clínica que no llegó. El tablero debe avisarlo —también al
+        médico— en vez de que el fallo quede enterrado en la bandeja.
+        """
+        propio = self._paciente(
+            'Paciente correo fallido', '+573040000030', 'PANEL-030',
+        )
+        alerta = self._alerta(propio, 1, timezone.now())
+        NotificacionAlerta.objects.update_or_create(
+            alerta=alerta,
+            defaults={
+                'estado': NotificacionAlerta.ESTADO_FALLIDA,
+                'intentos': 10,
+            },
+        )
+
+        resp = self.client.get('/admin/')
+
+        self.assertContains(resp, 'Correos de alerta sin entregar')
+
+    def test_no_avisa_de_correos_fallidos_de_pacientes_ajenos(self):
+        """El aviso de FALLIDA respeta el scoping por médico: un correo fallido
+        de un paciente de otro médico no aparece en este tablero.
+        """
+        ajeno = self._paciente(
+            'Paciente ajeno correo', '+573040000031', 'PANEL-031',
+            medico=self.otro_medico,
+        )
+        alerta = self._alerta(ajeno, 1, timezone.now())
+        NotificacionAlerta.objects.update_or_create(
+            alerta=alerta,
+            defaults={
+                'estado': NotificacionAlerta.ESTADO_FALLIDA,
+                'intentos': 10,
+            },
+        )
+
+        resp = self.client.get('/admin/')
+
+        self.assertNotContains(resp, 'Correos de alerta sin entregar')
+
 
 class PacienteAdminHistorialCambiosTests(TestCase):
     """Loop 3: el historial distingue activación y desactivación."""

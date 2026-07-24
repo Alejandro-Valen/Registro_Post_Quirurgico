@@ -12,7 +12,12 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from home.models import MensajeContacto
-from signos_sintomas.models import Alerta, CheckInProgramado, Paciente
+from signos_sintomas.models import (
+    Alerta,
+    CheckInProgramado,
+    NotificacionAlerta,
+    Paciente,
+)
 
 register = template.Library()
 
@@ -46,6 +51,11 @@ def panel_triage(context):
     alertas = Alerta.objects.all()
     checkins = CheckInProgramado.objects.filter(fecha_dia=hoy)
     mensajes_contacto = MensajeContacto.objects.filter(revisado=False)
+    # Correos de alerta ALTA que agotaron los reintentos (D6): información
+    # clínica que no llegó. Se avisa en el tablero, también al médico.
+    fallidas = NotificacionAlerta.objects.filter(
+        estado=NotificacionAlerta.ESTADO_FALLIDA,
+    )
 
     # Scoping por médico: el no-superusuario solo ve lo suyo.
     if not user.is_superuser:
@@ -53,6 +63,7 @@ def panel_triage(context):
         alertas = alertas.filter(paciente__medico_responsable=user)
         checkins = checkins.filter(paciente__medico_responsable=user)
         mensajes_contacto = mensajes_contacto.filter(medico_destinatario=user)
+        fallidas = fallidas.filter(alerta__paciente__medico_responsable=user)
 
     activos = pacientes.filter(activo=True)
     pendientes = alertas.filter(resuelta=False)
@@ -150,6 +161,7 @@ def panel_triage(context):
         'silencios': silencios,
         'contactos': contactos,
         'total_mensajes_contacto': total_mensajes_contacto,
+        'notificaciones_fallidas': fallidas.count(),
         'pacientes': pacientes_tabla,
         'hoy': hoy,
         'es_super': user.is_superuser,

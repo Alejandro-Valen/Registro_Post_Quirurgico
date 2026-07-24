@@ -515,9 +515,15 @@ class NotificacionAlerta(models.Model):
 
     ESTADO_PENDIENTE = 'PENDIENTE'
     ESTADO_ENVIADA = 'ENVIADA'
+    ESTADO_FALLIDA = 'FALLIDA'
     ESTADO_CHOICES = [
         (ESTADO_PENDIENTE, 'Pendiente'),
         (ESTADO_ENVIADA, 'Enviada'),
+        # Estado terminal (D6): se agotaron los reintentos sin entregar. Un
+        # correo de alerta ALTA que falla de forma permanente es información
+        # clínica que no llegó, y debe hacerse visible en vez de reintentarse
+        # en silencio para siempre.
+        (ESTADO_FALLIDA, 'Fallida'),
     ]
 
     alerta = models.OneToOneField(
@@ -551,13 +557,15 @@ class NotificacionAlerta(models.Model):
         ]
         constraints = [
             CheckConstraint(
-                condition=Q(estado__in=['PENDIENTE', 'ENVIADA']),
+                condition=Q(estado__in=['PENDIENTE', 'ENVIADA', 'FALLIDA']),
                 name='notificacion_alerta_estado_valido',
             ),
             CheckConstraint(
                 condition=(
                     Q(estado='PENDIENTE', fecha_envio__isnull=True)
                     | Q(estado='ENVIADA', fecha_envio__isnull=False)
+                    # FALLIDA nunca llegó a enviarse: sin fecha_envio.
+                    | Q(estado='FALLIDA', fecha_envio__isnull=True)
                 ),
                 name='notificacion_alerta_envio_coherente',
             ),

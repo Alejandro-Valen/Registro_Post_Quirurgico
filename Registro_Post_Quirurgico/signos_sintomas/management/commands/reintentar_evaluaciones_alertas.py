@@ -4,6 +4,12 @@ from django.db import transaction
 from signos_sintomas.evaluacion_alertas import evaluar_registro_con_estado
 from signos_sintomas.models import RegistroDiario
 
+# Tope de reintentos de evaluación (D6). Un registro cuya evaluación falla 10
+# veces no se recupera reintentando: la causa es un defecto reproducible, no un
+# fallo transitorio. Dejar de recogerlo evita el bucle silencioso y el
+# desbordamiento del contador de intentos.
+MAX_INTENTOS_EVALUACION = 10
+
 
 class Command(BaseCommand):
     help = 'Reintenta registros cuya evaluación de alertas quedó pendiente o falló.'
@@ -28,6 +34,7 @@ class Command(BaseCommand):
         candidatos = list(
             RegistroDiario.objects.filter(
                 estado_evaluacion_alertas__in=estados_reintentables,
+                intentos_evaluacion_alertas__lt=MAX_INTENTOS_EVALUACION,
             )
             .order_by('fecha_registro', 'pk')
             .values_list('pk', flat=True)[:limite]
