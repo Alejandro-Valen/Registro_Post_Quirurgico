@@ -1,87 +1,97 @@
-# Mapa y estado de la documentacion
+# Mapa y estado de la documentación
 
-> Ultima revision integral: 21/07/2026. Rama `sprint-5-produccion`.
+> Última revisión integral: 24/07/2026. Rama `sprint-5-produccion`.
 
-Este indice distingue la documentacion vigente de los registros historicos. Si
-dos documentos parecen contradecirse, usa el orden de autoridad indicado abajo
-y verifica siempre el codigo real.
+Este índice distingue la documentación vigente de los registros históricos. Si
+dos documentos parecen contradecirse, usa el **orden de autoridad** de abajo y
+verifica siempre el código real.
 
-## Fuentes vigentes
+**Cómo está organizada y por qué:** `docs/arquitectura_documentacion.md`. En una
+línea: cada hecho vive en un solo archivo, y ese archivo se actualiza en el
+mismo commit que el código que describe.
 
-1. `CLAUDE.md`: memoria operativa, arquitectura actual, protocolo de cierre y
-   punto exacto de reanudacion.
-2. `ROADMAP_MONITOREO_POSQUIRURGICO.md`: decisiones de producto, checklists y
-   requisitos separados para merge y para piloto real.
-3. `AUDITORIA_PRE_MERGE_LOOPS_1_6.md`: instruccion obligatoria para la segunda
-   opinion de Claude Code antes del PR a `Desarrollo`.
-4. `docs/decisiones_correccion_auditoria.md`: decisiones D1-D7 tomadas por el
-   Arquitecto para corregir los hallazgos de esa auditoria, con su razonamiento
-   y el plan de los tres loops. Se consulta por tema, no por fecha.
-5. `docs/railway_deploy.md`: topologia, variables y despliegue actual.
-6. `docs/cron_setup.md`: programacion y limitaciones operativas de los cron.
-7. `docs/transferencia_cuentas.md`: propiedad y entrega futura de servicios y
-   credenciales.
-8. `Registro_Post_Quirurgico/.env.example`: nombres de variables y ejemplos no
-   secretos. Nunca es un archivo listo para copiar en produccion sin revisar.
+## Orden de autoridad
 
-`BITACORA.md` es la cronologia de ejecucion. Es acumulativa: las afirmaciones de
-una sesion antigua describen el estado de ese momento y pueden haber sido
-superadas por entradas posteriores. La entrada mas reciente manda para el
-estado operativo, pero no reemplaza la verificacion del codigo.
+1. **El código.** Cualquier documento puede quedar desfasado; el código es lo
+   que corre.
+2. **El documento dueño del tema** (las "fuentes únicas" de abajo).
+3. **`CLAUDE.md`**, para el estado del proyecto y cómo se trabaja aquí.
+4. **`BITACORA.md`** describe el momento en que se escribió: nunca es fuente de
+   verdad sobre el estado actual.
 
-## Material historico o de referencia
+Al encontrar una contradicción, corrígela en el mismo commit en vez de anotarla
+para después.
 
-- `AUDITORIA_SPRINT3_CIERRE.md` conserva el diagnostico previo al hardening. Sus
+## Fuentes únicas (el documento dueño de cada tema)
+
+| Documento | Es dueño de |
+|-----------|-------------|
+| `docs/reglas_clinicas.md` | Las 8 reglas del `alert_engine`, la regla operativa SILENCIO y las variables clínicas que captura el sistema |
+| `docs/modelos_datos.md` | Los modelos de `models.py`: qué guarda cada campo y por qué |
+| `docs/bot_whatsapp.md` | La máquina de estados del bot, sus reglas de diseño no negociables y las respuestas predefinidas |
+| `docs/railway_deploy.md` | Topología de producción, variables de entorno y despliegue |
+| `docs/cron_setup.md` | Programación de los management commands y límites operativos |
+| `docs/transferencia_cuentas.md` | Propiedad y entrega futura de servicios y credenciales |
+| `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` | El documento legal (Ley 1581/2012) |
+| `Registro_Post_Quirurgico/.env.example` | Nombres de variables y ejemplos no secretos. Nunca es un archivo listo para copiar a producción sin revisar |
+
+## Contexto y decisiones
+
+| Documento | Qué responde |
+|-----------|--------------|
+| `CLAUDE.md` | Qué es el proyecto, cómo se trabaja, dónde vamos y el mapa de todo lo demás. Es la puerta de entrada |
+| `ROADMAP_MONITOREO_POSQUIRURGICO.md` | Decisiones de producto (P-1 a P-15), checklists y requisitos separados para merge y para piloto real |
+| `docs/arquitectura_documentacion.md` | Cómo se organiza esta documentación y por qué. Dónde escribir algo nuevo |
+| `docs/decisiones_correccion_auditoria.md` | Fichas D1-D10 con el razonamiento de cada corrección post-auditoría, más el estado de avance por commit. Se consulta por tema, no por fecha |
+| `docs/trampas_conocidas.md` | Errores que ya costaron horas: cron, despliegue, Twilio, correo. Léelo antes de tocar esas áreas |
+| `docs/resumen_sprints.md` | Qué entregó cada sprint, bloque y loop — el mapa compacto de la BITÁCORA |
+| `BITACORA.md` | La cronología completa: qué se hizo cada sesión, qué falló y cómo se resolvió |
+
+## Material histórico o de referencia
+
+- `AUDITORIA_PRE_MERGE_LOOPS_1_6.md` es la **instrucción** que se usó para la
+  auditoría independiente previa al PR. La auditoría **ya se ejecutó** (22/07);
+  sus 14 hallazgos y su informe están en la entrada de `BITACORA.md` de esa
+  fecha y su corrección en `docs/decisiones_correccion_auditoria.md`. No debe
+  volver a ejecutarse.
+- `AUDITORIA_SPRINT3_CIERRE.md` conserva el diagnóstico previo al hardening. Sus
   hallazgos no deben reportarse como actuales sin volver a reproducirlos.
-- `docs/auditoria_literatura/` conserva analisis clinicos de junio de 2026. Las
-  frases "pendiente" dentro de esos analisis pertenecen a la sesion original;
-  las decisiones vigentes estan en `CLAUDE.md` y el roadmap.
+- `docs/auditoria_literatura/` conserva los análisis clínicos de junio de 2026.
+  Las frases "pendiente" dentro de esos análisis pertenecen a la sesión
+  original; las decisiones vigentes están en `docs/reglas_clinicas.md`.
 - `Registro_Post_Quirurgico/signos_sintomas/knowledge_base.md` es un placeholder
-  para Sprint 6. No es un corpus RAG activo ni sustituye validacion medica.
+  para Sprint 6. No es un corpus RAG activo ni sustituye validación médica.
 - `Chart.js-LICENSE.md` es una licencia de proveedor y no se edita como memoria
   del proyecto.
 
-## Documento legal canonico
+## Documento legal canónico
 
-La version rastreada y canonica es
+La versión rastreada y canónica es
 `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md`. Sigue requiriendo completar los
-campos entre corchetes, revision final del responsable y firma de cada paciente
+campos entre corchetes, revisión final del responsable y firma de cada paciente
 antes del uso real.
 
-Existe localmente una copia raiz no rastreada con el mismo nombre. Al cierre del
-21/07/2026 ambas copias tenian el mismo SHA-256, pero la copia raiz no forma
-parte del repositorio y no debe agregarse automaticamente a commits o PR.
+Existe localmente una copia raíz no rastreada con el mismo nombre. Al cierre del
+21/07/2026 ambas copias tenían el mismo SHA-256, pero la copia raíz no forma
+parte del repositorio y no debe agregarse automáticamente a commits o PR.
 
-## Punto seguro de pausa
+## Estado al cierre de esta revisión
 
-- Rama: `sprint-5-produccion`, sincronizada con `origin` antes de este barrido.
-- Punto funcional desplegado: `0d12d88`.
-- Cierre documental preexistente: `998403a`; este barrido es solo documental.
-- Ultima suite funcional: 280/280 tests OK con Requests 2.33.0.
-- `makemigrations --check`, `manage.py check`, `check --deploy` y `pip-audit`
-  quedaron limpios en el cierre del Loop 6.
-- Flujos reales NORMAL, MEDIA y ALTA verificados en el Sandbox; datos ficticios
-  de esas pruebas eliminados.
-- No existe PR a `Desarrollo` ni autorizacion de merge.
+- Rama: `sprint-5-produccion`. Punto funcional desplegado en Railway: `0d12d88`.
+- La auditoría independiente del 22/07/2026 dejó el PR **bloqueado** con 14
+  hallazgos. La corrección va por loops: **A y B cerrados y verificados**, C en
+  curso.
+- No existe PR a `Desarrollo` ni autorización de merge.
+- Todavía no apto para pacientes reales: ver los requisitos del piloto en el
+  ROADMAP y en `CLAUDE.md`, sección "Por resolver antes del piloto real".
 
-## Siguiente sesion
+## Siguiente sesión
 
-1. Abrir el repositorio en la rama `sprint-5-produccion` y traer cambios de
-   origin sin mezclar otras ramas.
-2. Leer este indice, `CLAUDE.md` y
-   `AUDITORIA_PRE_MERGE_LOOPS_1_6.md` completos.
-3. Pedir a Claude Code que ejecute la auditoria sin editar, commitear, publicar
-   ni fusionar.
-4. Volver con el informe completo para clasificar hallazgos junto con Codex.
-5. Resolver y probar los bloqueantes. Solo despues preparar el PR.
-
-## Todavia no apto para pacientes reales
-
-Aunque la rama puede ser candidata a merge tras la auditoria, el piloto real
-sigue bloqueado por WhatsApp Business y el envio saliente de recordatorios, un
-dominio propio autenticado en Resend, monitoreo externo del cron/web, separacion
-del cron operativo al mejorar el plan Railway, consentimiento completado y
-firmado, y datos definitivos del medico en la landing.
-
-No guardar claves, tokens, contrasenas, numeros reales de pacientes ni contenido
-clinico en esta documentacion, commits, chats o informes de auditoria.
+1. Abrir el repositorio en `sprint-5-produccion` y traer cambios de origin sin
+   mezclar otras ramas.
+2. Leer `CLAUDE.md` completo y el "Estado de avance" de
+   `docs/decisiones_correccion_auditoria.md`.
+3. Verificar el estado real contra `git log` y la suite **antes** de proponer
+   nada. Si el documento contradice a Git, manda Git.
+4. Continuar por donde diga ese estado de avance. La auditoría ya se ejecutó:
+   no repetirla.
