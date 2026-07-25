@@ -5390,3 +5390,177 @@ class GraficaSignosVitalesTests(TestCase):
         self.assertContains(resp, '<strong>10 días</strong>', html=False)
         datos = self._extraer_datos(resp.content.decode())
         self.assertEqual(set(datos.keys()), {'3', '7', '10'})
+
+
+class BotEstadoEvaluacionMotorTests(TestCase):
+    """Hallazgo 7 — un fallo del motor en la ruta del bot debe quedar registrado.
+
+    `evaluar_registro_con_estado` guarda con cuidado el estado ERROR, el nombre
+    de la excepción y el intento consumido, y RECIÉN DESPUÉS relanza. Pero en
+    `bot._crear_registro` esa llamada vive dentro de un savepoint defensivo: la
+    excepción sale de ese `atomic`, el savepoint se revierte y se lleva consigo
+    las tres cosas. El registro queda como si el motor nunca se hubiera
+    ejecutado.
+
+    Lo que se pierde no es el reporte del paciente (ese está a salvo, y esa
+    parte se verifica aquí también) sino el rastro del fallo: en el Admin el
+    registro se ve PENDIENTE, igual que uno que todavía no ha pasado por el
+    motor, y `ultimo_error_evaluacion_alertas` queda vacío.
+    """
+
+    TELEFONO = "+573001119977"
+    TELEFONO_TWILIO = "whatsapp:+573001119977"
+
+    def setUp(self):
+        self.paciente = Paciente.objects.create(
+            nombre_completo="Paciente Estado Motor",
+            telefono_whatsapp=self.TELEFONO,
+            fecha_cirugia=timezone.localdate() - timedelta(days=3),
+            consentimiento_informado=True,
+        )
+        self.checkin = CheckInProgramado.objects.create(
+            paciente=self.paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now(),
+        )
+
+    def _completar_flujo(self):
+        """Recorre las 10 preguntas sin drenaje. Devuelve la respuesta final."""
+        env = lambda t: bot.procesar_mensaje(self.TELEFONO_TWILIO, t)
+        env("hola")     # -> temperatura
+        env("37.0")     # -> dolor
+        env("3")        # -> tiene_drenaje
+        env("no")       # -> gases/náuseas (omite aspecto y cantidad)
+        env("sí, 0")    # -> hinchazón
+        env("nada")     # -> frecuencia cardíaca
+        env("78")       # -> frecuencia respiratoria
+        env("16")       # -> tolerancia líquidos
+        return env("sí")
+
+    def test_fallo_del_motor_deja_el_registro_marcado_como_error(self):
+        from unittest.mock import patch
+
+        with patch(
+            'signos_sintomas.evaluacion_alertas.evaluar_registro',
+            side_effect=RuntimeError('temperatura 39.1 del paciente'),
+        ):
+            respuesta = self._completar_flujo()
+
+        registro = RegistroDiario.objects.get(paciente=self.paciente)
+        self.assertEqual(
+            registro.estado_evaluacion_alertas,
+            RegistroDiario.EVALUACION_ERROR,
+        )
+        self.assertEqual(registro.intentos_evaluacion_alertas, 1)
+        self.assertEqual(registro.ultimo_error_evaluacion_alertas, 'RuntimeError')
+        self.assertNotIn('39.1', registro.ultimo_error_evaluacion_alertas)
+        self.assertIsNotNone(registro.fecha_ultima_evaluacion_alertas)
+
+        # El reporte del paciente nunca se pierde por un fallo del motor.
+        self.checkin.refresh_from_db()
+        self.assertEqual(self.checkin.estado, CheckInProgramado.ESTADO_COMPLETADO)
+        self.assertEqual(self.checkin.registro_id, registro.pk)
+        self.assertEqual(respuesta, bot.MSG_CONFIRMACION)
+
+    def test_registro_fallido_en_el_bot_se_recupera_con_el_command(self):
+        """El motor no evaluó nada, así que el registro debe volver a la cola.
+
+        Nace en verde: hoy el registro queda PENDIENTE, que el command también
+        recoge. Está aquí para que la corrección del estado ERROR no rompa la
+        recuperación — es la mitad del hallazgo que NO debe cambiar.
+        """
+        from unittest.mock import patch
+
+        from django.core.management import call_command
+
+        with patch(
+            'signos_sintomas.evaluacion_alertas.evaluar_registro',
+            side_effect=RuntimeError('fallo transitorio del motor'),
+        ):
+            self._completar_flujo()
+
+        call_command('reintentar_evaluaciones_alertas', verbosity=0)
+
+        registro = RegistroDiario.objects.get(paciente=self.paciente)
+        self.assertEqual(
+            registro.estado_evaluacion_alertas,
+            RegistroDiario.EVALUACION_COMPLETADA,
+        )
+        self.assertEqual(registro.ultimo_error_evaluacion_alertas, '')
+
+
+class AdminFiltrosNoExponenOtrasCuentasTests(TestCase):
+    """Hallazgo 8 — el filtro lateral no debe revelar las demás cuentas médicas.
+
+    El aislamiento por médico resistió las 15 comprobaciones de la auditoría:
+    ningún dato de paciente se filtra. La fuga es de otra naturaleza y menor —
+    `PacienteAdmin.list_filter` incluye `medico_responsable`, y ese filtro se
+    construye con TODOS los usuarios de la base, no con los que el médico puede
+    ver. Un médico lee ahí los nombres de usuario de sus colegas y del
+    superusuario.
+    """
+
+    def setUp(self):
+        from django.contrib.auth.models import Permission
+        from django.contrib.contenttypes.models import ContentType
+
+        User = get_user_model()
+        self.medico_a = User.objects.create_user(
+            username='dr_filtro_a', password='pass', is_staff=True
+        )
+        self.medico_b = User.objects.create_user(
+            username='dr_filtro_b', password='pass', is_staff=True
+        )
+        self.superuser = User.objects.create_superuser(
+            username='super_filtro', password='pass'
+        )
+        ct = ContentType.objects.get_for_model(Paciente)
+        for medico in (self.medico_a, self.medico_b):
+            medico.user_permissions.add(*Permission.objects.filter(content_type=ct))
+
+        for indice, medico in enumerate((self.medico_a, self.medico_b), start=1):
+            Paciente.objects.create(
+                nombre_completo="Paciente del filtro {}".format(indice),
+                telefono_whatsapp="+57301999000{}".format(indice),
+                cedula="FILTRO-000{}".format(indice),
+                fecha_cirugia=timezone.localdate(),
+                medico_responsable=medico,
+            )
+
+    def _url_listado(self):
+        return reverse('admin:signos_sintomas_paciente_changelist')
+
+    def test_medico_no_ve_en_el_filtro_las_cuentas_de_los_demas(self):
+        self.client.force_login(self.medico_a)
+
+        resp = self.client.get(self._url_listado())
+
+        contenido = resp.content.decode()
+        # El marcador ancla el fallo al filtro lateral y no a otra parte de la
+        # página: es el querystring que arma RelatedFieldListFilter.
+        self.assertNotIn('medico_responsable__id__exact', contenido)
+        self.assertNotIn('dr_filtro_b', contenido)
+        self.assertNotIn('super_filtro', contenido)
+
+    def test_superusuario_conserva_el_filtro_por_medico(self):
+        """El filtro es útil para el superusuario: la corrección no debe borrarlo."""
+        self.client.force_login(self.superuser)
+
+        resp = self.client.get(self._url_listado())
+
+        contenido = resp.content.decode()
+        self.assertIn('medico_responsable__id__exact', contenido)
+        self.assertIn('dr_filtro_a', contenido)
+        self.assertIn('dr_filtro_b', contenido)
+
+    def test_medico_sigue_viendo_solo_sus_pacientes(self):
+        """Nace en verde: es el aislamiento que ya funciona y no debe romperse."""
+        self.client.force_login(self.medico_a)
+
+        resp = self.client.get(self._url_listado())
+
+        contenido = resp.content.decode()
+        self.assertIn('Paciente del filtro 1', contenido)
+        self.assertNotIn('Paciente del filtro 2', contenido)
