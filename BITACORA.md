@@ -3493,3 +3493,164 @@ desarrollo (DEBUG=True, CSRF_COOKIE_SECURE) y ninguna la introdujo el Loop B.
 PR): hallazgos 6, 7, 8, 11; D7 (consulta de solo lectura en Railway sobre 0020);
 D8-D10; recorte de CLAUDE.md; y el blindaje de los tests de medianoche (C7). Solo
 al cerrarlo se prepara el PR hacia `Desarrollo`.
+
+---
+
+## Sprint 5 — Corrección post-auditoría, Loop C (coherencia e higiene)
+**Fecha:** 24-25/07/2026
+**Responsable:** León (Arquitecto IA) + Claude Code (Opus)
+**Estado:** LOOP C IMPLEMENTADO ✅ — pendiente de la verificación de León y de
+la consulta D7 en Railway. Es el último loop antes del PR.
+
+### Qué se hizo
+
+El tercer y último loop de la corrección post-auditoría. Cierra los hallazgos
+técnicos que quedaban (6, 7, 8, 11), las tres decisiones que salieron del
+ejercicio de documentación (D8, D9, D10), el hallazgo 9, el hallazgo 14, el
+blindaje de las pruebas frágiles a la medianoche, y una reestructuración de toda
+la documentación del proyecto.
+
+**Las pruebas en rojo primero (`ad7a93d`).** Un solo commit con 15 casos
+nuevos; **9 fallaron** contra el código de entonces y 6 nacieron verdes como
+guardas declaradas en su docstring. Cada rojo, con su evidencia:
+
+- **Hallazgo 6:** `USE_X_FORWARDED_HOST` y `SECURE_PROXY_SSL_HEADER` estaban
+  activos en la configuración **base**, o sea en todo despliegue incluido el
+  local. Django creía lo que dijeran `X-Forwarded-Host` y `X-Forwarded-Proto`
+  viniera de donde viniera, mientras la IP del cliente sí exigía declarar la
+  confianza. Tres cabeceras del mismo proxy, dos criterios distintos.
+- **Hallazgo 7:** `'PENDIENTE' != 'ERROR'`. El motor guardaba con cuidado el
+  estado de error antes de relanzar, pero el savepoint defensivo del bot lo
+  revertía al salir la excepción. El registro quedaba idéntico a uno que nunca
+  pasó por el motor.
+- **Hallazgo 8:** `dr_filtro_b` y `super_filtro` aparecían en el HTML del
+  listado de otro médico. Se confirmó leyendo el HTML renderizado, no
+  deduciéndolo: el filtro lateral se arma con todos los usuarios de la base.
+- **Hallazgo 11:** `SECRET_KEY` vacía, `SECRET_KEY=<placeholder>`, `DB_NAME` en
+  blanco, `RESEND_API_KEY` y `CSRF_TRUSTED_ORIGINS` vacías — las cinco
+  arrancaban sin decir nada.
+
+**Las correcciones,** un commit por hallazgo: `5ad976f` (7), `b2eaa17` (8),
+`ec02ef4` (6), `7b7454d` (11).
+
+**D10 en dos pasos, en ese orden.** Primero `21b8d79`, cinco pruebas de
+caracterización que **nacen verdes a propósito**: retratan cuándo dispara hoy la
+condición MEDIA de hinchazón, incluido el caso sin dato de ayer. Después
+`922e13c`, la reescritura legible. La equivalencia se verificó por dos vías
+independientes: las cinco pruebas siguen pasando, y una comparación exhaustiva
+de la expresión vieja contra la nueva sobre las **64 combinaciones** de
+(antier, ayer, hoy) dio **cero diferencias**.
+
+**El blindaje de medianoche (`cc84037`).** Se reprodujo el rojo de forma
+determinista con un arnés temporal que corrió las clases **reales** bajo un
+reloj falso que adelanta 50 ms por lectura y arranca a distintas distancias de
+la medianoche, de modo que el cruce cayera en la 2.ª, 4.ª o 10.ª lectura del
+escenario. Cayeron **14 pruebas de cinco clases**. El blindaje congela el reloj
+de esas clases en el peor instante del día —un segundo antes de la medianoche—
+y ninguna prueba cambió de contenido: solo se les agregó el decorador. El arnés
+no se commiteó; era instrumento de medición.
+
+**La documentación.** `c5174c1` (hallazgo 9 y D9), `e7155cb` (D8), `f82a973`
+(hallazgo 14 y despliegue) y `27b1960` (la reestructuración completa).
+
+### Decisiones tomadas
+
+**Reestructurar la documentación con un archivo dueño por tema.** Es la única
+decisión nueva del loop, y quedó documentada con su razonamiento en
+`docs/arquitectura_documentacion.md`. El motivo: `CLAUDE.md` había llegado a
+54.742 caracteres mezclando referencia clínica (44%), cronología duplicada de
+esta bitácora (38%), instrucciones y contexto. Y las tablas de reglas estaban
+copiadas en `CLAUDE.md` **y** en el ROADMAP, así que cada cambio de umbral había
+que hacerlo dos veces.
+
+Ahora `CLAUDE.md` es la puerta de entrada (17.700 caracteres) y cada tema tiene
+un archivo dueño: `docs/reglas_clinicas.md`, `docs/modelos_datos.md`,
+`docs/bot_whatsapp.md`, `docs/trampas_conocidas.md`, `docs/resumen_sprints.md`.
+Las reglas clínicas se cargan solas con `CLAUDE.md`, porque el riesgo de que un
+agente no las lea es que invente un umbral; el resto se lee bajo demanda y el
+mapa dice cuándo.
+
+El requisito que ordenó la decisión fue de León: **que el proyecto siga adelante
+sin importar qué agente lo desarrolle.** De ahí que el conocimiento viva en
+markdown neutral dentro de `docs/` y no en `.claude/`, que Codex no lee.
+
+**D9 se implementó apartándose de la letra de su ficha.** La ficha pedía marcar
+el campo obsoleto en su `help_text` y explícitamente "sin migración". Pero
+cambiar un `help_text` genera una migración `AlterField`. Se conservó la
+intención (no arrastrar una migración) usando un comentario en el código: el
+modelo no está registrado en el Admin, así que el único lector posible de ese
+texto es quien lee el archivo. Queda anotado por si León prefiere lo contrario.
+
+**Ningún umbral clínico cambió en todo el loop.** D8 y D10 son precisamente lo
+contrario: D8 corrige la documentación para que diga lo que el código hace
+("días con datos", no "días calendario"), y D10 reescribe una expresión sin
+tocar cuándo dispara.
+
+### Problemas encontrados y resueltos
+
+- **La validación del hallazgo 11 rompió una prueba existente.** `settings_production`
+  pasó a exigir `CSRF_TRUSTED_ORIGINS` y `REDIS_URL` al cargarse, y el `.env` de
+  desarrollo no las tiene: `test_produccion_aplica_csp_sin_scripts_inline` empezó
+  a fallar al importar el módulo. Se ajustó para cargarlo con un entorno de
+  producción mínimo y válido, y el porqué quedó escrito en su docstring. Fue la
+  primera señal útil de la validación nueva: el fallo aparece al cargar y no
+  mucho después.
+- **El recorte del ROADMAP abortó a propósito la primera vez.** El script de
+  de-duplicación verifica, antes de borrar, que cada línea exista en el destino.
+  Se detuvo con tres divergencias. Al revisarlas una por una resultó que **las
+  copias del ROADMAP estaban desactualizadas**: no nombraban las cinco variables
+  del núcleo clínico, omitían el porqué del criterio de FC y la atribución de la
+  decisión sobre FR. El destino conservaba más información en los tres casos. La
+  excepción quedó escrita y justificada en el script, no silenciada.
+- **Verificar que la reestructuración no perdiera nada.** Además del movimiento
+  textual por script, se comprobó automáticamente que los datos duros del
+  `CLAUDE.md` anterior siguieran teniendo documento: 15 hashes de commit, 6
+  migraciones, 9 cifras de tests, 108 identificadores de código y 12
+  identificadores de decisión. Cero sin hogar. Las 96 líneas que la comprobación
+  literal marcó como "huérfanas" eran prosa reescrita del estado del proyecto,
+  no hechos perdidos.
+- **Dos corridas de la suite murieron y dejaron la base de pruebas a medias.**
+  Las siguientes se quedaban esperando el prompt de borrado y devolvían un
+  críptico `exit code 2` sin salida. Se resolvió corriendo con `--noinput`, que
+  quedó documentado en los comandos esenciales de `CLAUDE.md`.
+- **El barrido del hallazgo 14 encontró más de lo buscado.** Su texto no estaba
+  transcrito en ningún documento, así que se revisó la documentación de
+  despliegue contra el código: aparecieron **seis** discrepancias. La peor, el
+  crontab de ejemplo invocaba `manage.py` desde la raíz del contenedor cuando en
+  este repo vive un nivel debajo — copiado tal cual, cada corrida habría fallado.
+
+### Cierre
+
+**319 tests OK** (299 de línea base + 20 nuevas). `makemigrations --check` sin
+cambios, `manage.py check` sin issues, `check --deploy` con configuración de
+producción **sin issues**, y `pip-audit` sobre `requirements-runtime.txt` sin
+vulnerabilidades conocidas.
+
+`freezegun` se agregó **solo** a `requirements.txt` (desarrollo). No está en
+`requirements-runtime.txt`, que es el que instala el Dockerfile: Railway no la
+ve y producción no cambia.
+
+### Acciones requeridas en Railway antes de desplegar
+
+Ninguna la detecta `check --deploy`:
+
+1. **`TRUST_RAILWAY_PROXY=True`** en el servicio web. Sin él, Django ve HTTP
+   detrás del edge y `SECURE_SSL_REDIRECT` entra en bucle de redirecciones.
+2. **`CSRF_TRUSTED_ORIGINS` y `REDIS_URL`** presentes y no vacías, o el
+   contenedor no arranca. Fallar rápido nombrando la variable es el objetivo del
+   hallazgo 11, pero conviene verificarlo antes del deploy.
+
+En desarrollo con ngrok hay que agregar `TRUST_RAILWAY_PROXY=True` al `.env`
+local, o la firma de Twilio deja de validar.
+
+### Pendiente inmediato
+
+1. **Verificación de León** sobre el Loop C, como en los dos anteriores.
+2. **D7:** la consulta de solo lectura en Railway sobre la migración 0020
+   (contar registros `COMPLETADA` con `intentos = 0`; se espera cero). Es lo
+   único del Loop C que no se ejecuta desde el repositorio.
+3. Solo después: **revisión del diff completo contra `Desarrollo` y PR.**
+
+Queda decidido pero **no ejecutado**, para después del merge y en rama propia:
+`AGENTS.md` para que Codex lea lo mismo sin depender de `CLAUDE.md`, y separar
+`.claude/settings.json` compartido de `settings.local.json` personal.

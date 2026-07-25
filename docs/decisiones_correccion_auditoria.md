@@ -49,14 +49,14 @@ código antes de aceptarlas.
 > **Se actualiza en CADA cierre de sesión, aunque quede a mitad de un loop.**
 > Es lo primero que debe leer quien retome el trabajo.
 
-**Última actualización:** 23/07/2026
-**Punto alcanzado:** **Loop B CERRADO, verificado y publicado**
-(`4673853` en `origin/sprint-5-produccion`). Implementados D2, D3, D6 y el
-hallazgo 2. Se probó y documentó, además, que la suite no es determinista cerca
-de la medianoche de Bogotá (fragilidad de tests, no del sistema): queda anotado
-para el Loop C (C7). Siguiente: **Loop C**, en sesión nueva.
+**Última actualización:** 24/07/2026
+**Punto alcanzado:** **Loop C implementado, pendiente de verificación del
+Arquitecto y de la consulta D7 en Railway.** Cerrados los hallazgos 6, 7, 8, 11,
+9 y 14, las decisiones D8, D9 y D10, el blindaje de los tests de medianoche y la
+reestructuración de la documentación. Falta **C6 (D7)**, que se ejecuta contra
+Railway y no desde aquí.
 **Rama:** `sprint-5-produccion` · **Restauración segura:** `fbf62a8`
-**Línea base de la suite:** 299 tests OK
+**Línea base de la suite:** 319 tests OK (299 + 20 del Loop C)
 
 ### Loop A — Corrección clínica *(bloquea el merge)*
 
@@ -111,14 +111,57 @@ los fixtures a un único `now()` de referencia, o `freezegun`).
 
 ### Loop C — Coherencia e higiene
 
-- [ ] **C1** `fix: condicionar la confianza en cabeceras de proxy` → hallazgo 6
-- [ ] **C2** `fix: conservar el estado de error del motor en la ruta del bot` → hallazgo 7
-- [ ] **C3** `fix: no exponer otras cuentas medicas en los filtros` → hallazgo 8
-- [ ] **C4** `fix: validar variables de entorno vacias al arrancar` → hallazgo 11
-- [ ] **C5** `docs: corregir CLAUDE.md, comentarios de migracion y despliegue` → hallazgos 9, 14 · **D8** (redacción "días con datos", no "días calendario") · **D9** (`help_text` obsoleto) · recorte de CLAUDE.md (supera el umbral de 40.000 chars; ~36% es cronología duplicada de BITACORA)
-- [ ] **C6** D7 — consulta de solo lectura en Railway y anotación en BITACORA
-- [ ] **C7** `test: fijar y simplificar la condicion MEDIA de hinchazon` → **D10** (pruebas primero, expresión legible, **sin cambiar comportamiento**)
-- [ ] Cierre: suite · `check --deploy` · `pip-audit` · documentación sin contradicciones
+- [x] **C1** `test: cubrir cabeceras de proxy, estado del motor, filtros y arranque` — `ad7a93d` (9 rojos de 15 casos, cada uno por su defecto)
+- [x] **C2** `fix: conservar el estado de error del motor en la ruta del bot` → hallazgo 7 — `5ad976f`
+- [x] **C3** `fix: no exponer otras cuentas medicas en los filtros` → hallazgo 8 — `b2eaa17`
+- [x] **C4** `fix: condicionar la confianza en cabeceras de proxy` → hallazgo 6 — `ec02ef4`
+- [x] **C5** `fix: validar variables de entorno vacias al arrancar` → hallazgo 11 — `7b7454d` (+ `9483913`, ajuste de la prueba de CSP que cargaba producción)
+- [x] **C6** D10 en dos pasos: `21b8d79` (caracterización, verde a propósito) y `922e13c` (expresión legible, comportamiento idéntico)
+- [x] **C7** `test: blindar contra la medianoche las pruebas de escenarios de varios dias` — `cc84037` (freezegun, solo en `requirements.txt`)
+- [x] **C8** Documentación: `c5174c1` (hallazgo 9 + D9), `e7155cb` (D8), `f82a973` (hallazgo 14 + despliegue), `27b1960` (reestructuración documental)
+- [ ] **C9** D7 — consulta de solo lectura en Railway y anotación en BITACORA · **la ejecuta el Arquitecto**
+- [ ] Cierre: suite · `check --deploy` · `pip-audit` · verificación del Arquitecto
+
+**Numeración:** el plan original nombraba C1-C6 por hallazgo. Al aplicar el
+método, la primera posición la ocupó el commit de pruebas en rojo (como `A1` y
+`B1`) y el resto se corrió una posición. El contenido es el mismo.
+
+**Resultado de C1 (evidencia de los hallazgos).** De 15 casos nuevos, **9
+fallaron** contra el código anterior y 6 nacieron verdes como guardas
+declaradas:
+
+| Hallazgo | Evidencia del rojo |
+|---|---|
+| 6 — cabeceras de proxy | `USE_X_FORWARDED_HOST` era `True` en **toda** configuración; `TRUST_RAILWAY_PROXY` ni existía en la base |
+| 7 — estado del motor | `'PENDIENTE' != 'ERROR'`: el savepoint del bot revertía la constancia del fallo |
+| 8 — filtros | `dr_filtro_b` y `super_filtro` aparecían en el HTML del listado de otro médico |
+| 11 — variables vacías | `SECRET_KEY=''`, `SECRET_KEY=<placeholder>`, `DB_NAME='   '`, `RESEND_API_KEY=''` y `CSRF_TRUSTED_ORIGINS=''` arrancaban sin error |
+
+**Nota sobre D10.** Sus pruebas **nacen en verde a propósito**: son de
+caracterización, retratan el comportamiento actual para que la reescritura no
+pueda cambiarlo. Se verificó por dos vías independientes: las cinco pruebas
+siguen pasando, y una comparación exhaustiva de la expresión vieja contra la
+nueva sobre las **64 combinaciones** de (antier, ayer, hoy) en {sin dato, nada,
+algo, mucho} dio **cero diferencias**.
+
+**Nota sobre C7.** El rojo se reprodujo de forma determinista con un arnés
+temporal que corrió las clases **reales** bajo un reloj falso que adelanta 50 ms
+por lectura, arrancando a distintas distancias de la medianoche: cayeron **14
+pruebas de cinco clases** (el Loop B había contado 17 con otro arnés). Con el
+blindaje puesto, el mismo arnés pasa en las cuatro profundidades de cruce
+probadas. El arnés no se commiteó: era instrumento de medición.
+
+**Acciones requeridas en Railway antes de desplegar** (no las detecta
+`check --deploy`):
+
+1. `TRUST_RAILWAY_PROXY=True` en el servicio web. Sin él, Django ve HTTP detrás
+   del edge y `SECURE_SSL_REDIRECT` entra en bucle de redirecciones.
+2. `CSRF_TRUSTED_ORIGINS` y `REDIS_URL` presentes y no vacías, o el contenedor
+   no arranca. Fallar rápido y nombrando la variable es el objetivo del
+   hallazgo 11, pero conviene verificarlo antes del deploy.
+
+En desarrollo con ngrok hay que agregar `TRUST_RAILWAY_PROXY=True` al `.env`
+local, o la firma de Twilio deja de validar.
 
 ### Después de los tres loops
 
