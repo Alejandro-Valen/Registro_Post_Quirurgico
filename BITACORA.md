@@ -3654,3 +3654,51 @@ local, o la firma de Twilio deja de validar.
 Queda decidido pero **no ejecutado**, para después del merge y en rama propia:
 `AGENTS.md` para que Codex lea lo mismo sin depender de `CLAUDE.md`, y separar
 `.claude/settings.json` compartido de `settings.local.json` personal.
+
+### Incidente en producción durante el cierre del Loop C (25/07/2026)
+
+**Los dos servicios cron dejaron de arrancar tras el deploy.** El push del Loop C
+disparó el auto-deploy de Railway y, en su siguiente arranque, ambos cron
+murieron con `ImproperlyConfigured: La variable de entorno CSRF_TRUSTED_ORIGINS
+es obligatoria y está vacía o sin definir.`
+
+**Causa.** La validación del hallazgo 11 volvió obligatorias
+`CSRF_TRUSTED_ORIGINS` y `REDIS_URL`. El servicio web siempre las tuvo —las
+necesita para el login del médico y para el cache compartido— pero los cron no,
+porque hasta entonces ambas tenían valor por defecto y su ausencia era
+invisible. Cada servicio de Railway tiene su propio entorno, y los tres cargan
+el mismo módulo de configuración de producción.
+
+**Error de anticipación.** Al cerrar el Loop C se advirtió "verificar estas
+variables en Railway antes de desplegar", pensando únicamente en el servicio
+web. No se consideró que los cron tienen entorno propio ni que uno de ellos
+jamás atiende HTTP, de modo que exigirle orígenes CSRF es pedirle configuración
+que no usa.
+
+**Detección.** Railway envió la notificación de fallo al correo. El servicio web
+siguió verde todo el tiempo (endpoint de salud en 200), que es justo lo engañoso
+del caso: **un cron caído no avisa a nadie por sí mismo.** Es exactamente el
+escenario que el monitoreo externo pendiente debe cubrir antes del piloto real.
+
+**Decisión del Arquitecto — entorno único para todo el proyecto.** Los tres
+servicios llevan la misma configuración completa, aunque un cron no use orígenes
+CSRF. Se descartó la alternativa de que el código detectara si el proceso
+atiende HTTP: esa detección es implícita y sorprende a quien la lea meses
+después. Se prefiere una regla explícita, documentada y sostenida por las Shared
+Variables del proyecto, en vez de por la memoria de alguien.
+
+**Resolución.** Se agregaron las dos variables en `cron-manana` y `cron-tarde`,
+copiando los valores del servicio web, y se redesplegaron ambos. La corrida de
+`cron-tarde` de las 00:35 completó las tres tareas sin traceback y con todo en
+cero: ningún check-in vencido sin cerrar, ninguna evaluación atascada, ninguna
+notificación represada. **La caída no dejó trabajo pendiente**, que era la
+promesa del diseño idempotente del Loop 2 y del outbox del Loop 4.
+
+**Lo que el incidente confirma del propio hallazgo 11.** El error nombró la
+variable exacta y detuvo el arranque en el acto, en vez de dejar el servicio
+corriendo roto para fallar mucho después y lejos de la causa. Costó un susto y
+media hora; la alternativa habría sido un cron aparentemente sano que dejara de
+cerrar check-ins sin que nadie se enterara.
+
+Trampa registrada en `docs/trampas_conocidas.md` y regla en
+`docs/railway_deploy.md`.

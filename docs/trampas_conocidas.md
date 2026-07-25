@@ -10,6 +10,36 @@
 
 ## Cron y despliegue en Railway
 
+**Cada servicio de Railway tiene su PROPIO entorno, y pueden divergir sin que
+nadie lo note (incidente 25/07/2026).** El servicio web, `cron-manana` y
+`cron-tarde` cargan el mismo `settings_production`, pero sus variables se
+configuran por separado. Mientras una variable tuvo valor por defecto, la
+diferencia fue invisible; el día que se volvió obligatoria (hallazgo 11), el
+web siguió arrancando —siempre tuvo `CSRF_TRUSTED_ORIGINS`, la necesita para el
+login— y **los cron dejaron de arrancar**, con este error:
+
+```
+ImproperlyConfigured: La variable de entorno CSRF_TRUSTED_ORIGINS es
+obligatoria y está vacía o sin definir.
+```
+
+**Regla del proyecto: entorno único.** Los tres servicios llevan la misma
+configuración completa, aunque un cron no atienda HTTP y no use orígenes CSRF.
+Se prefiere una regla explícita y aburrida antes que código que adivine en qué
+proceso está corriendo. Al agregar una variable obligatoria, **se agrega en
+TODOS los servicios**, y la forma segura de hacerlo es copiar el valor desde el
+servicio web en vez de escribirlo a mano.
+
+**Cómo se detecta:** el servicio web puede seguir verde mientras los cron están
+caídos. `/salud/` solo mide el web. Un cron que no arranca no avisa a nadie —
+es exactamente el caso que el monitoreo externo pendiente debe cubrir antes del
+piloto real.
+
+**Un `succeeded` en la tarjeta de un cron diario no prueba el deploy actual.**
+`cron-manana` corre una vez al día: tras un deploy, su último estado puede ser
+de la corrida anterior, con el código anterior. Verificar el log posterior al
+deploy, o revisar directamente que tenga las variables.
+
 **Nota cron (08/07/2026):** en Railway, encadenar comandos con `&&` en el
 Custom Start Command **solo corre el primero** → se creó el comando único
 `cron_matutino` (corre **6 tareas** en orden con `call_command`, incluidas la

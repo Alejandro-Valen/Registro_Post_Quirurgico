@@ -54,6 +54,32 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 > arranque importa `settings_production`, por lo que las variables deben existir
 > antes del primer deploy: **primero variables, luego deploy.**
 
+> ## ⚠️ Entorno único: las variables van en LOS TRES servicios
+>
+> **`web`, `cron-manana` y `cron-tarde` tienen entornos separados** y cargan el
+> mismo `settings_production`. Una variable que falte en un cron no se nota
+> mientras tenga valor por defecto — y tumba ese servicio el día que se vuelva
+> obligatoria. Pasó el 25/07/2026: el web siguió en pie y ambos cron dejaron de
+> arrancar por `CSRF_TRUSTED_ORIGINS` (ver `docs/trampas_conocidas.md`).
+>
+> **Regla:** al agregar o cambiar una variable obligatoria, se agrega en los
+> tres servicios, **copiando el valor desde el servicio web** para que no
+> diverjan. Los cron necesitan `CSRF_TRUSTED_ORIGINS` y `REDIS_URL` aunque no
+> atiendan HTTP: se prefiere una regla explícita a que el código adivine en qué
+> proceso está corriendo.
+>
+> **Forma recomendada de cumplirla:** definir esas variables como **Shared
+> Variables del proyecto** (nivel proyecto, no servicio) y referenciarlas desde
+> los tres. Así hay un solo valor que mantener y la divergencia deja de ser
+> posible, en vez de depender de que alguien recuerde copiarlo. El código ya
+> está unificado —los tres servicios cargan el mismo `settings_production`—; lo
+> que falta unificar es la configuración, y Railway lo resuelve ahí. Las
+> credenciales de base de datos ya funcionan así, vía `${{Postgres.*}}`.
+>
+> Tras cambiar variables de un servicio cron, **redesplegarlo**. Y recordar que
+> un `succeeded` en la tarjeta de un cron diario puede ser de la corrida
+> anterior al deploy: se confirma leyendo su log posterior.
+
 | Variable | Valor / de dónde sale |
 |----------|----------------------|
 | `DJANGO_SETTINGS_MODULE` | `Registro_Post_Quirurgico.settings_production` |
