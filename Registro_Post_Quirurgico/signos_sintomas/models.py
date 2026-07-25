@@ -742,7 +742,17 @@ class ConversacionWhatsApp(models.Model):
     )
     temp_tolero_liquidos = models.BooleanField(null=True, blank=True)
 
-    # --- Control "un registro por día" ---
+    # --- Control "un registro por día" (OBSOLETO) ---
+    # OBSOLETO (D9): resto del modelo anterior de "un registro por día". Hoy el
+    # control lo lleva CheckInProgramado, con dos turnos diarios. El campo se
+    # escribe (bot.py) pero NADIE lo lee: cero lecturas en todo el código.
+    #
+    # Se conserva a propósito: borrar una columna en producción exige migración
+    # y despliegue, y el beneficio es cosmético. La limpieza real —quitar campo
+    # y escritura— queda para después del merge, cuando no haya nada en juego.
+    # La marca va en comentario y no en help_text para no arrastrar una
+    # migración: el modelo no está registrado en el Admin, así que el único
+    # lector posible de ese texto es quien esté leyendo este archivo.
     fecha_ultimo_registro = models.DateField(
         null=True, blank=True,
         help_text="Día en que el paciente completó su último registro"

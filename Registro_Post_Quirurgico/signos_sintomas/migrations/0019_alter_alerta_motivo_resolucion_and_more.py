@@ -28,8 +28,20 @@ def preparar_datos_para_integridad(apps, schema_editor):
         )
 
     # Antes de Sprint 5 era posible cerrar alertas sin capturar motivo o fecha.
-    # Se conserva su estado y se etiqueta explícitamente como dato histórico;
-    # no se inventa una actuación clínica.
+    # Se conserva su estado y se etiqueta explícitamente como dato histórico.
+    #
+    # PRECISIÓN AGREGADA EN EL LOOP C (hallazgo 9). La frase original decía "no
+    # se inventa una actuación clínica", y para `motivo_resolucion='LEGACY'` es
+    # exacto: LEGACY significa "no se capturó". Pero el relleno de
+    # `fecha_resolucion` de abajo SÍ fabrica un dato: usa la última detección (o
+    # la fecha de la alerta) como si fuera el momento en que el médico la
+    # resolvió, y eso nadie lo observó. La migración ya corrió, así que no se
+    # cambia su comportamiento; queda escrito aquí y en CLAUDE.md para que nadie
+    # lea esas fechas como registro de una actuación real.
+    #
+    # Regla que el proyecto sigue desde entonces: no se hace backfill de datos
+    # que nadie observó — ver `veces` en esta misma migración y `resuelta_por`
+    # (D3), que se dejaron deliberadamente sin rellenar.
     Alerta.objects.filter(
         resuelta=True,
         motivo_resolucion__isnull=True,
