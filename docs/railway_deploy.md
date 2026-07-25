@@ -59,22 +59,21 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 | `DJANGO_SETTINGS_MODULE` | `Registro_Post_Quirurgico.settings_production` |
 | `SECRET_KEY` | Clave nueva y larga, **distinta** a la de desarrollo. Generar con `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` |
 | `ALLOWED_HOSTS` | El dominio de Railway, ej. `mi-app.up.railway.app` (sin `https://`). **Ojo:** la variable se llama `ALLOWED_HOSTS`, no `DJANGO_ALLOWED_HOSTS`. |
-| `CSRF_TRUSTED_ORIGINS` | El mismo dominio **con** esquema: `https://mi-app.up.railway.app` |
+| `CSRF_TRUSTED_ORIGINS` | El mismo dominio **con** esquema: `https://mi-app.up.railway.app`. **Obligatoria: si falta o queda vacía, el contenedor no arranca.** Vacía, el POST del login del médico devolvía 403 sin explicación. |
 | `DB_NAME` | Referencia al Postgres de Railway: `${{Postgres.PGDATABASE}}` |
 | `DB_USER` | `${{Postgres.PGUSER}}` |
 | `DB_PASSWORD` | `${{Postgres.PGPASSWORD}}` |
 | `DB_HOST` | `${{Postgres.PGHOST}}` |
 | `DB_PORT` | `${{Postgres.PGPORT}}` |
-| `REDIS_URL` | Referencia al Redis de Railway: `${{Redis.REDIS_URL}}` |
-| `TRUST_RAILWAY_PROXY` | `True` solo en el servicio web que recibe todo su tráfico por el edge de Railway. |
-| `ADMIN_URL` | Slug privado no trivial terminado en `/`. No publicar el valor real. |
+| `REDIS_URL` | Referencia al Redis de Railway: `${{Redis.REDIS_URL}}`. **Obligatoria: si falta o queda vacía, el contenedor no arranca.** Antes caía a un default `localhost` y degradaba en silencio los rate limits compartidos entre workers. |
+| `TRUST_RAILWAY_PROXY` | **`True` en el servicio web** — es un solo interruptor para las tres cabeceras del edge: `X-Real-IP` (IP del cliente), `X-Forwarded-Host` (host con el que se reconstruye la URL) y `X-Forwarded-Proto` (esquema). **Sin él, Django ve HTTP detrás del edge y `SECURE_SSL_REDIRECT` entra en un bucle de redirecciones.** Los servicios cron no atienden tráfico HTTP y no lo necesitan. |
+| `ADMIN_URL` | Slug privado no trivial terminado en `/`, ej. `gestion-clinica-x7k2/`. Cambia la URL del Admin para reducir ataques automáticos. Si se omite queda `admin/`, que en producción no debe usarse. No publicar el valor real. |
 | `MEDICO_CONTACTO_USERNAME` | Usuario médico que recibe los mensajes del formulario público. |
 | `EMAIL_DELIVERY_PROVIDER` | `resend` para entregar alertas por HTTPS. |
 | `RESEND_API_KEY` | Clave secreta `re_...` creada en Resend; nunca copiarla en documentación o chat. |
 | `RESEND_FROM_EMAIL` | Remitente verificado. Para la prueba restringida: `Seguimiento posquirúrgico <onboarding@resend.dev>`. |
 | `EMAIL_TIMEOUT` | `10` segundos. Limita cada llamada al proveedor. |
 | `PANEL_MEDICO_URL` | URL HTTPS completa de la ruta privada del Admin; se usa en el correo sin incluir datos del paciente. |
-| `ADMIN_URL` | *(recomendado)* slug no trivial con `/` final, ej. `gestion-clinica-x7k2/`. Cambia la URL del Admin para reducir ataques. Si se omite, queda `admin/`. |
 | `TWILIO_AUTH_TOKEN` | Auth Token **primario** de Twilio (no el de Test) |
 | `TWILIO_VALIDATE_SIGNATURE` | `True` (o omitir — el default ya es `True`) |
 | `DEFAULT_FROM_EMAIL` | *(opcional)* si se omite, usa `EMAIL_HOST_USER` |
@@ -111,10 +110,17 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 
 ## 5. Gotchas conocidos
 
-- **Primer deploy sin variables → falla al arrancar.** `collectstatic` y los
-  demás comandos del `CMD` importan `settings_production`, que exige
-  `SECRET_KEY`, `DB_*` y las credenciales del proveedor de email seleccionado.
-  Cargar las variables **antes** de desplegar.
+- **Primer deploy sin variables → falla al arrancar, a propósito.**
+  `collectstatic` y los demás comandos del `CMD` importan `settings_production`,
+  que exige `SECRET_KEY`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`,
+  `CSRF_TRUSTED_ORIGINS`, `REDIS_URL` y las credenciales del proveedor de email
+  seleccionado. Desde el Loop C **una variable definida pero vacía cuenta como
+  ausente** y el arranque se detiene nombrándola: antes devolvía cadena vacía y
+  el sistema arrancaba roto, para fallar mucho después y lejos de la causa.
+  También se rechaza el placeholder `<...>` pegado literalmente — fue la causa
+  raíz del 403 de Twilio y de los login fallidos al Admin (06/07/2026). Cargar
+  las variables **antes** de desplegar, con el valor crudo: sin comillas y sin
+  corchetes.
 - **Estáticos del Admin sin estilo** → revisar que `collectstatic` corrió en el
   arranque y que WhiteNoise está en el middleware (ya configurado). Si el deploy
   falla al ejecutar `collectstatic` por una referencia estática inexistente, degradar en
@@ -124,7 +130,10 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
   El valor es el host sin esquema; la variable se llama `ALLOWED_HOSTS`.
 - **Rate limit / IP real** → resuelto con `X-Real-IP` documentado por Railway,
   confianza explícita y validación conjunta de `X-Railway-Edge`. No usar
-  `X-Forwarded-For`.
+  `X-Forwarded-For`. Desde el Loop C, `TRUST_RAILWAY_PROXY` gobierna también
+  `USE_X_FORWARDED_HOST` y `SECURE_PROXY_SSL_HEADER`: sin declararlo, Django ya
+  no cree ninguna de las tres cabeceras. **Si el sitio entra en un bucle de
+  redirecciones tras desplegar, la causa es esa variable en `False` o ausente.**
 - **Gmail SMTP inaccesible desde Railway** → Resend por HTTPS quedó activo y
   entregó la prueba del 21/07/2026. El dominio de onboarding llegó a spam;
   antes del piloto real verificar un dominio propio con SPF/DKIM/DMARC.

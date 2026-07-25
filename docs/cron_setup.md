@@ -38,42 +38,57 @@ mañana.
 al paciente. Procesa como máximo 100 registros por corrida, bloquea cada fila
 y continúa con las demás si una evaluación vuelve a fallar. El cron matutino
 también lo ejecuta como respaldo, pero no reemplaza la corrida frecuente.
+**Tope de 10 intentos (D6):** un registro que falló 10 veces deja de recogerse
+— a esa altura la causa es un defecto reproducible, no un fallo transitorio, y
+seguir reintentando solo esconde el problema. Queda visible en el Admin con
+estado `ERROR`.
 
 `procesar_notificaciones_email` tampoco corre dentro del webhook. Consume la
 bandeja `NotificacionAlerta`, limita cada corrida a 50 candidatas y aplica
-reintentos con espera creciente. El comando `cron_operativo` agrupa, en este
-orden, `cerrar_checkins_vencidos`, `reintentar_evaluaciones_alertas` y
-`procesar_notificaciones_email` para plataformas con pocos servicios.
+reintentos con espera creciente. **Tope de 10 intentos (D6):** ≈39 horas con el
+backoff actual; agotado, la notificación pasa al estado terminal `FALLIDA` y el
+**tablero de triage lo avisa, también al médico** — un aviso de alerta ALTA que
+no llegó es información clínica que no puede quedar enterrada. El comando
+`cron_operativo` agrupa, en este orden, `cerrar_checkins_vencidos`,
+`reintentar_evaluaciones_alertas` y `procesar_notificaciones_email` para
+plataformas con pocos servicios.
 
 ## Crontab (producción Linux — Railway/Render con worker o VPS)
 
 Bogotá es **UTC-5** todo el año (no tiene horario de verano). Las horas
 de abajo ya están convertidas a UTC para pegar directo en `crontab -e`:
 
+**Ojo con la ruta de `manage.py`:** en este repo `manage.py` NO está en la raíz,
+vive un nivel debajo (`Registro_Post_Quirurgico/manage.py`) — por eso el
+Dockerfile invoca `python Registro_Post_Quirurgico/manage.py` y gunicorn usa
+`--chdir`. Las líneas de abajo ya usan esa ruta; con `cd /app && python
+manage.py ...` el cron fallaría en cada corrida con
+`can't open file 'manage.py'`.
+
 ```cron
 MAILTO=email-del-desarrollador@ejemplo.com
 SHELL=/bin/bash
 
 # 5:55 AM Bogotá = 10:55 UTC — desactivar vencidos ANTES de crear check-ins
-55 10 * * * cd /app && python manage.py desactivar_pacientes_vencidos >> /var/log/monitoreo/desactivar.log 2>&1
+55 10 * * * cd /app && python Registro_Post_Quirurgico/manage.py desactivar_pacientes_vencidos >> /var/log/monitoreo/desactivar.log 2>&1
 
 # 6:00 AM Bogotá = 11:00 UTC — crear check-ins del día
-0 11 * * * cd /app && python manage.py crear_checkins_diarios >> /var/log/monitoreo/checkins.log 2>&1
+0 11 * * * cd /app && python Registro_Post_Quirurgico/manage.py crear_checkins_diarios >> /var/log/monitoreo/checkins.log 2>&1
 
 # 6:00 AM Bogotá = 11:00 UTC — cerrar vencidos de la noche/madrugada anterior
-5 11 * * * cd /app && python manage.py cerrar_checkins_vencidos >> /var/log/monitoreo/vencidos.log 2>&1
+5 11 * * * cd /app && python Registro_Post_Quirurgico/manage.py cerrar_checkins_vencidos >> /var/log/monitoreo/vencidos.log 2>&1
 
 # 7:00 AM Bogotá = 12:00 UTC — recordatorio matutino
-0 12 * * * cd /app && python manage.py enviar_recordatorios >> /var/log/monitoreo/recordatorios.log 2>&1
+0 12 * * * cd /app && python Registro_Post_Quirurgico/manage.py enviar_recordatorios >> /var/log/monitoreo/recordatorios.log 2>&1
 
 # 6:00 PM Bogotá = 23:00 UTC — cerrar vencidos de la tarde
-0 23 * * * cd /app && python manage.py cerrar_checkins_vencidos >> /var/log/monitoreo/vencidos.log 2>&1
+0 23 * * * cd /app && python Registro_Post_Quirurgico/manage.py cerrar_checkins_vencidos >> /var/log/monitoreo/vencidos.log 2>&1
 
 # Recuperar evaluaciones de alertas pendientes o fallidas
-*/5 * * * * cd /app && python manage.py reintentar_evaluaciones_alertas >> /var/log/monitoreo/reintentos-alertas.log 2>&1
+*/5 * * * * cd /app && python Registro_Post_Quirurgico/manage.py reintentar_evaluaciones_alertas >> /var/log/monitoreo/reintentos-alertas.log 2>&1
 
 # Entregar correos pendientes sin bloquear el webhook
-*/5 * * * * cd /app && python manage.py procesar_notificaciones_email >> /var/log/monitoreo/notificaciones.log 2>&1
+*/5 * * * * cd /app && python Registro_Post_Quirurgico/manage.py procesar_notificaciones_email >> /var/log/monitoreo/notificaciones.log 2>&1
 ```
 
 **`MAILTO`:** con esta línea al inicio del crontab, cualquier error en la
@@ -85,6 +100,14 @@ desarrollador — es el mecanismo de "cron falla → email → resolución en
 Railway no heredan este mecanismo: hoy sus fallos quedan en logs. Antes del
 piloto real se debe configurar monitoreo externo que avise si una ejecución no
 ocurre o si web/cron dejan de responder.
+
+**Endpoint para el monitor externo:** `GET /salud/` verifica base de datos y
+cache y responde **200** o **503**, sin detalle en el cuerpo (quien consulta no
+debe conocer la topología interna). Es lo que debe vigilar el monitor gratuito
+cada 5 minutos. La alarma va **al Arquitecto, no al médico**: una caída de
+Redis es ruido de infraestructura y no debe mezclarse con las alertas clínicas.
+El endpoint ya existe (Loop B, decisión D2); darlo de alta en un servicio de
+monitoreo sigue pendiente.
 
 **Nota sobre `desactivar_pacientes_vencidos` a las 5:55 y `crear_checkins_diarios`/`cerrar_checkins_vencidos` a las 6:00 en el mismo minuto UTC (11:00):**
 cron ejecuta cada línea como un proceso independiente; el orden entre
