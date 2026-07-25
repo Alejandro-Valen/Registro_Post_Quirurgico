@@ -80,7 +80,10 @@ SECURE_CSP = {
 
 # B1: CSRF origins explícitos (Twilio + dominio propio).
 # Ejemplo en .env de producción: CSRF_TRUSTED_ORIGINS=https://midominio.com
-CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
+# Obligatoria (hallazgo 11): vacía, el POST del login devuelve 403 sin
+# explicación y el fallo aparece en la cara del médico, no al desplegar.
+# `config_obligatoria` llega desde settings.py con el import * de arriba.
+CSRF_TRUSTED_ORIGINS = config_obligatoria('CSRF_TRUSTED_ORIGINS', cast=Csv())
 
 # Railway documenta X-Real-IP como la IP remota y X-Railway-Edge como una
 # cabecera presente en todas las solicitudes que atraviesan su edge. La
@@ -101,10 +104,13 @@ CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
 # Django (default) no comparte estado entre procesos/workers y haría que
 # los rate limits compartidos entre workers fallarían silenciosamente.
 # Variable de entorno: REDIS_URL=redis://:password@host:6379/1
+# Obligatoria (hallazgo 11): con el default de localhost, una REDIS_URL vacía o
+# mal referenciada tras recrear el servicio arrancaría "bien" y degradaría en
+# silencio los rate limits compartidos entre workers.
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': config('REDIS_URL', default='redis://localhost:6379/1'),
+        'LOCATION': config_obligatoria('REDIS_URL'),
     }
 }
 
@@ -120,12 +126,15 @@ if EMAIL_DELIVERY_PROVIDER == 'django':
     EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
     EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
     EMAIL_USE_TLS = True
-    EMAIL_HOST_USER = config('EMAIL_HOST_USER')
-    EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
+    EMAIL_HOST_USER = config_obligatoria('EMAIL_HOST_USER')
+    EMAIL_HOST_PASSWORD = config_obligatoria('EMAIL_HOST_PASSWORD')
     DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER)
 elif EMAIL_DELIVERY_PROVIDER == 'resend':
-    RESEND_API_KEY = config('RESEND_API_KEY')
-    RESEND_FROM_EMAIL = config('RESEND_FROM_EMAIL')
+    # Obligatorias (hallazgo 11): vacías, el aviso de una alerta ALTA se
+    # acumula en el outbox y falla 10 veces antes de rendirse (D6), en vez de
+    # avisar al desplegar que la credencial nunca se configuró.
+    RESEND_API_KEY = config_obligatoria('RESEND_API_KEY')
+    RESEND_FROM_EMAIL = config_obligatoria('RESEND_FROM_EMAIL')
 else:
     raise ImproperlyConfigured(
         'EMAIL_DELIVERY_PROVIDER debe ser "django" o "resend".'

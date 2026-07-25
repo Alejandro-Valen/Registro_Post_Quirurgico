@@ -1,9 +1,54 @@
+import re
 from pathlib import Path
-from decouple import config, Csv
+
+from decouple import config, Csv, UndefinedValueError
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = config('SECRET_KEY')
+# --- Variables de entorno obligatorias (hallazgo 11) ---
+# `config('X')` solo protege del caso "no existe". Si la variable existe pero
+# está vacía devuelve '' y el proceso arranca con una configuración inválida
+# que falla mucho después y lejos de su causa: un correo que nunca sale, un
+# login que devuelve 403, un cache que no comparte estado entre workers.
+_PLACEHOLDER_RE = re.compile(r'^<.*>$')
+
+
+def config_obligatoria(nombre, cast=None):
+    """Lee una variable que el despliegue REQUIERE y detiene el arranque si no sirve.
+
+    Rechaza tres formas de estar mal: no definida, vacía (o solo espacios), y
+    con el placeholder de ejemplo todavía puesto. Pegar los `<...>` literalmente
+    en las variables de Railway fue la causa raíz del 403 de Twilio y de los
+    login fallidos al Admin (BITACORA, 06/07/2026): el proceso arrancaba
+    normal y el fallo aparecía en otra parte, sin relación aparente.
+
+    El mensaje nombra la variable pero NUNCA muestra su valor: varias de ellas
+    son secretos.
+    """
+    try:
+        valor = config(nombre)
+    except UndefinedValueError:
+        valor = None
+
+    texto = '' if valor is None else str(valor).strip()
+    if not texto:
+        raise ImproperlyConfigured(
+            'La variable de entorno {} es obligatoria y está vacía o sin '
+            'definir. Escribe su valor en el .env (o en las variables del '
+            'servicio en Railway), crudo: sin comillas y sin <corchetes>.'
+            .format(nombre)
+        )
+    if _PLACEHOLDER_RE.match(texto):
+        raise ImproperlyConfigured(
+            'La variable de entorno {} conserva un placeholder de ejemplo '
+            'entre < >. Reemplázalo por el valor real, sin los signos.'
+            .format(nombre)
+        )
+    return cast(texto) if cast else texto
+
+
+SECRET_KEY = config_obligatoria('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 # Hosts permitidos: se definen por .env (separados por coma), NUNCA con wildcard
@@ -75,9 +120,9 @@ WSGI_APPLICATION = 'Registro_Post_Quirurgico.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME'),
-        'USER': config('DB_USER'),
-        'PASSWORD': config('DB_PASSWORD'),
+        'NAME': config_obligatoria('DB_NAME'),
+        'USER': config_obligatoria('DB_USER'),
+        'PASSWORD': config_obligatoria('DB_PASSWORD'),
         'HOST': config('DB_HOST', default='localhost'),
         'PORT': config('DB_PORT', default='5432'),
     }
