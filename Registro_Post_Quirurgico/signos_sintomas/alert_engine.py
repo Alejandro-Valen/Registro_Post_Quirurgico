@@ -618,12 +618,27 @@ def _evaluar_hinchazon(registro, fecha_referencia):
         if nivel_hoy > nivel_ayer:
             severidad_hinchazon = 'BAJA'
 
-    # Condición MEDIA: empeoramiento verificado (hoy > antier) que
-    # se mantuvo sin bajar en la ventana de los últimos > 2 días
+    # Condición MEDIA: empeoramiento verificado contra antier (hoy > antier)
+    # que además no bajó en el camino.
+    #
+    # Con dato de ayer, "sin bajar" es la secuencia no decreciente
+    # antier <= ayer <= hoy: eso es el "sostenido" de la regla documentada.
+    #
+    # SIN dato de ayer no hay con qué comprobar el sostenimiento, y la
+    # condición se reduce a hoy > antier. Es el comportamiento que este código
+    # ya tenía: la expresión anterior lo escondía tras dos comparaciones que se
+    # volvían trivialmente verdaderas en ese caso (`nivel_ayer is None or ...`
+    # y `nivel_hoy >= nivel_hoy`). Se conserva idéntico a propósito —
+    # cambiar cuándo dispara la alerta es mover un umbral clínico y requiere
+    # validación del médico (decisión D10). Lo fija
+    # HinchazonCondicionMediaTests.
     if nivel_antier is not None and nivel_hoy is not None:
-        if nivel_hoy > nivel_antier and (
-            nivel_ayer is None or nivel_ayer >= nivel_antier
-        ) and nivel_hoy >= (nivel_ayer if nivel_ayer is not None else nivel_hoy):
+        empeoro_contra_antier = nivel_hoy > nivel_antier
+        if nivel_ayer is None:
+            se_mantuvo_sin_bajar = True
+        else:
+            se_mantuvo_sin_bajar = nivel_antier <= nivel_ayer <= nivel_hoy
+        if empeoro_contra_antier and se_mantuvo_sin_bajar:
             severidad_hinchazon = 'MEDIA'
 
     # Condición ALTA: "mucho" (2) sostenido 4 días consecutivos
