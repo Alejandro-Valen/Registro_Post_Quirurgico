@@ -5407,6 +5407,109 @@ class GraficaSignosVitalesTests(TestCase):
         self.assertEqual(set(datos.keys()), {'3', '7', '10'})
 
 
+class HinchazonCondicionMediaTests(TestCase):
+    """D10 — fija el comportamiento ACTUAL de la condición MEDIA de la Regla 7.
+
+    Estas pruebas nacen en verde a propósito: no denuncian un defecto, retratan
+    lo que el código hace hoy para que la expresión pueda reescribirse de forma
+    legible sin cambiar cuándo dispara la alerta. Mover ese umbral es una
+    decisión clínica del médico, no una limpieza de código (D10).
+
+    La condición encadena tres comparaciones y dos se vuelven trivialmente
+    verdaderas cuando falta el dato de ayer (`nivel_ayer is None or ...` y
+    `nivel_hoy >= nivel_hoy`), así que la verificación de "sostenido"
+    desaparece justo cuando no hay con qué verificarla. Cada caso de abajo aísla
+    una de las comparaciones.
+
+    Los fixtures se anclan a un único `now()` y la evaluación recibe la fecha de
+    referencia explícita: así el resultado no cambia si la corrida cruza la
+    medianoche de Bogotá.
+    """
+
+    def setUp(self):
+        self.ahora = timezone.now()
+        self.hoy = timezone.localdate(self.ahora)
+        self.paciente = Paciente.objects.create(
+            nombre_completo="Paciente Hinchazon D10",
+            telefono_whatsapp="+573008881010",
+            fecha_cirugia=self.hoy,
+        )
+
+    def _reportar(self, nivel, dias_atras=0):
+        """Reporte con valores neutros salvo la hinchazón: aísla la Regla 7."""
+        registro = RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal("37.0"),
+            dolor_eva=2,
+            tiene_drenaje=False,
+            presencia_gases=True,
+            episodios_nauseas=0,
+            hinchazon_abdominal=nivel,
+        )
+        RegistroDiario.objects.filter(pk=registro.pk).update(
+            fecha_registro=self.ahora - timedelta(days=dias_atras)
+        )
+        registro.refresh_from_db()
+        return registro
+
+    def _severidad_ileo(self, registro):
+        alertas = evaluar_registro(registro, fecha_referencia=self.hoy)
+        ileo = [a for a in alertas if a.tipo == 'ILEO_PARALITICO']
+        return ileo[0].severidad if ileo else None
+
+    def test_sin_dato_de_ayer_el_empeoramiento_contra_antier_dispara_media(self):
+        """El hueco de ayer deja la condición reducida a hoy > antier.
+
+        Es el caso que la expresión actual esconde: sin dato de ayer no puede
+        comprobarse que el empeoramiento se haya sostenido, y aun así alerta.
+        Queda fijado tal cual — cambiarlo es decisión del médico.
+        """
+        self._reportar("nada", dias_atras=2)
+        hoy = self._reportar("algo")
+
+        self.assertEqual(self._severidad_ileo(hoy), 'MEDIA')
+
+    def test_sin_dato_de_ayer_y_sin_empeoramiento_no_dispara(self):
+        """Aun sin ayer, sigue exigiéndose que hoy supere a antier."""
+        self._reportar("algo", dias_atras=2)
+        hoy = self._reportar("algo")
+
+        self.assertIsNone(self._severidad_ileo(hoy))
+
+    def test_una_bajada_en_el_medio_rompe_el_sostenido_y_deja_baja(self):
+        """Con dato de ayer, `ayer >= antier` sí cumple su función.
+
+        algo -> nada -> mucho empeora contra antier, pero bajó en el camino:
+        no es un empeoramiento sostenido. Queda la BAJA por el salto de ayer a
+        hoy, que es una condición distinta.
+        """
+        self._reportar("algo", dias_atras=2)
+        self._reportar("nada", dias_atras=1)
+        hoy = self._reportar("mucho")
+
+        self.assertEqual(self._severidad_ileo(hoy), 'BAJA')
+
+    def test_mejora_respecto_de_ayer_no_dispara_media(self):
+        """Con dato de ayer, `hoy >= ayer` sí cumple su función.
+
+        nada -> mucho -> algo supera a antier y nunca bajó de él, pero hoy
+        mejoró respecto de ayer: la tendencia no está sostenida.
+        """
+        self._reportar("nada", dias_atras=2)
+        self._reportar("mucho", dias_atras=1)
+        hoy = self._reportar("algo")
+
+        self.assertIsNone(self._severidad_ileo(hoy))
+
+    def test_secuencia_no_decreciente_con_aumento_neto_dispara_media(self):
+        """Frontera `ayer == antier`: la secuencia plana-y-luego-sube alerta."""
+        self._reportar("nada", dias_atras=2)
+        self._reportar("nada", dias_atras=1)
+        hoy = self._reportar("algo")
+
+        self.assertEqual(self._severidad_ileo(hoy), 'MEDIA')
+
+
 class BotEstadoEvaluacionMotorTests(TestCase):
     """Hallazgo 7 — un fallo del motor en la ruta del bot debe quedar registrado.
 
