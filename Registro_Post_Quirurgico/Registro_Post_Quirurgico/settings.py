@@ -121,10 +121,24 @@ TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
 # son visibles para el superusuario (fail-closed para datos personales).
 MEDICO_CONTACTO_USERNAME = config('MEDICO_CONTACTO_USERNAME', default='')
 
-# Detrás de un túnel/proxy (ngrok): que build_absolute_uri() reconstruya la URL
-# pública https que Twilio firmó (imprescindible para validar X-Twilio-Signature).
-USE_X_FORWARDED_HOST = True
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# --- Confianza en el proxy que está delante (hallazgo 6) ---
+# Railway —y ngrok en desarrollo— entregan la petición al proceso por HTTP y
+# describen la original en cabeceras: X-Forwarded-Proto, X-Forwarded-Host y
+# X-Real-IP. Creerles solo es correcto si TODO el tráfico entra por ese edge;
+# si el proceso es alcanzable de forma directa, cualquiera puede escribirlas y
+# hacerle creer a Django que una petición en claro llegó por HTTPS.
+#
+# Un solo interruptor gobierna las tres cabeceras: el esquema, el host
+# reconstruido y la IP del cliente (home.views._get_client_ip). Por defecto NO
+# se confía; se declara con TRUST_RAILWAY_PROXY=True en el entorno.
+#
+# Al activarlo, build_absolute_uri() reconstruye la URL pública https que Twilio
+# firmó — imprescindible para validar X-Twilio-Signature detrás del túnel.
+TRUST_RAILWAY_PROXY = config('TRUST_RAILWAY_PROXY', default=False, cast=bool)
+USE_X_FORWARDED_HOST = TRUST_RAILWAY_PROXY
+SECURE_PROXY_SSL_HEADER = (
+    ('HTTP_X_FORWARDED_PROTO', 'https') if TRUST_RAILWAY_PROXY else None
+)
 
 # --- Logging (B2) ---
 # Filtra PHI/PII: los logs de Django nunca deben escribir el cuerpo del webhook

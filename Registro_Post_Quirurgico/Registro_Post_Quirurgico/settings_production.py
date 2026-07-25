@@ -86,7 +86,12 @@ CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
 # cabecera presente en todas las solicitudes que atraviesan su edge. La
 # confianza se habilita de forma explícita para no aceptar esos headers en
 # despliegues directos o locales.
-TRUST_RAILWAY_PROXY = config('TRUST_RAILWAY_PROXY', default=False, cast=bool)
+#
+# TRUST_RAILWAY_PROXY vive ahora en settings.py, donde además gobierna
+# USE_X_FORWARDED_HOST y SECURE_PROXY_SSL_HEADER (hallazgo 6): un solo
+# interruptor para las tres cabeceras del proxy. En Railway debe estar en True
+# — sin él, Django ve HTTP detrás del edge y SECURE_SSL_REDIRECT entra en un
+# bucle de redirecciones.
 
 # B5: URL del admin en producción debe diferir de la de desarrollo (ver urls.py).
 # Se documenta aquí para recordatorio; el cambio real está en urls.py.
