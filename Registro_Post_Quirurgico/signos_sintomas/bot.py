@@ -34,7 +34,7 @@ from decimal import Decimal, InvalidOperation
 from django.db import transaction
 from django.utils import timezone
 
-from .evaluacion_alertas import evaluar_registro_con_estado
+from .evaluacion_alertas import evaluar_registro_con_estado, registrar_fallo_evaluacion
 from .models import CheckInProgramado, ConversacionWhatsApp, Paciente, RegistroDiario
 
 logger = logging.getLogger(__name__)
@@ -491,7 +491,9 @@ def _crear_registro(conv, paciente, checkin):
     savepoint. Si el motor de alertas fallara (bug futuro), se descarta solo la
     evaluación — el RegistroDiario y el check-in COMPLETADO SIEMPRE quedan
     guardados, y el paciente recibe el mensaje de cierre neutro. Nunca se pierde
-    el reporte del paciente por un fallo del engine.
+    el reporte del paciente por un fallo del engine. El fallo sí queda anotado
+    en el registro (estado ERROR), fuera del savepoint revertido, para que sea
+    visible en el Admin y recuperable por `reintentar_evaluaciones_alertas`.
     """
     registro = RegistroDiario.objects.create(
         paciente=paciente,
@@ -521,9 +523,16 @@ def _crear_registro(conv, paciente, checkin):
             alertas_nuevas = evaluar_registro_con_estado(
                 registro, fecha_referencia=fecha_referencia
             )
-    except Exception:
+    except Exception as exc:
         # El reporte del paciente ya está guardado (fuera de este savepoint).
         # No se pierde nada; el paciente recibe el cierre neutro.
+        #
+        # Al revertirse el savepoint se perdió también la constancia del fallo
+        # que el motor había escrito (estado ERROR, intento consumido y nombre
+        # de la excepción). Se vuelve a registrar aquí, ya fuera del savepoint,
+        # para que el registro no se vea como uno que jamás pasó por el motor
+        # (hallazgo 7).
+        registrar_fallo_evaluacion(registro, exc)
         logger.exception(
             "Fallo al evaluar alertas del registro pk=%s (paciente pk=%s); "
             "queda marcado para reintento y se usa cierre neutro.",
