@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, time as hora_del_dia, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -8,9 +8,36 @@ from django.db import IntegrityError, close_old_connections, transaction
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from freezegun import freeze_time
 
 from . import bot
 from .alert_engine import evaluar_registro
+
+# --- Ancla de reloj para las pruebas que arman escenarios de varios días ---
+#
+# Varias clases construyen sus fixtures leyendo el reloj más de una vez: el
+# registro de "anteayer", el de "ayer", la fecha que el modelo pone solo al
+# crear el de hoy, y la que el motor usa al evaluar. Si la corrida cruza la
+# medianoche de Bogotá entre dos de esas lecturas, "ayer" y "hoy" caen el mismo
+# día y la prueba falla sin que nada esté mal en el sistema: el motor agrupa por
+# `fecha_registro__date` y calcula con `localdate()`, que es lo correcto.
+#
+# Es fragilidad de las pruebas, y estaba medida: con un reloj falso que cruza la
+# medianoche a distintas profundidades del escenario caían 14 pruebas de cinco
+# clases (Loop C; el Loop B había contado 17 con otro arnés).
+#
+# El ancla congela el reloj de esas clases en el PEOR instante del día —un
+# segundo antes de la medianoche— calculado una sola vez al importar el módulo.
+# Todas las lecturas devuelven el mismo instante: el escenario es coherente por
+# construcción y además queda probado en el borde, que es donde antes se rompía.
+#
+# Se aplica clase por clase, nunca global: congelar el reloj rompería las
+# pruebas que necesitan que el tiempo avance (márgenes del webhook, backoff de
+# reintentos).
+ANCLA_MEDIANOCHE = datetime.combine(
+    timezone.localdate(),
+    hora_del_dia(23, 59, 59),
+).replace(tzinfo=timezone.get_current_timezone())
 from .models import (
     Alerta,
     CheckInProgramado,
@@ -23,6 +50,7 @@ from .models import (
 )
 
 
+@freeze_time(ANCLA_MEDIANOCHE)
 class AlertEngineTests(TestCase):
     def test_temperatura_alta_crea_alerta_sepsis(self):
         paciente = Paciente.objects.create(
@@ -1416,6 +1444,7 @@ class BotWhatsAppTests(TestCase):
         self.assertIsNone(segundo.registro_id)
 
 
+@freeze_time(ANCLA_MEDIANOCHE)
 class BotMensajeCierreAlertaTests(TestCase):
     """Bloque B — mensaje de cierre del bot según severidad de las alertas
     generadas por el check-in. El paciente nunca ve el tipo de alerta ni los
@@ -3581,6 +3610,7 @@ class CheckInProgramadoModelTests(TestCase):
         self.assertIn('PENDIENTE', str(checkin))
 
 
+@freeze_time(ANCLA_MEDIANOCHE)
 class AlertFechaReferenciaTests(TestCase):
     """Bloque 2A — parámetro fecha_referencia en evaluar_registro (decisión 0-①)."""
 
@@ -4025,6 +4055,7 @@ class DeteccionAlertaConstraintTests(TestCase):
                 )
 
 
+@freeze_time(ANCLA_MEDIANOCHE)
 class SchedulerTests(TestCase):
     """Bloque 4 — Management commands del scheduler y alerta SILENCIO."""
 
@@ -4807,6 +4838,7 @@ class SeedDemoTests(TestCase):
         self.assertFalse(demos.exists())
 
 
+@freeze_time(ANCLA_MEDIANOCHE)
 class DesactivarPacientesVencidosTests(TestCase):
     """Sprint 5, Bloque 1B — desactivación automática a 10 días postop (P-5)."""
 

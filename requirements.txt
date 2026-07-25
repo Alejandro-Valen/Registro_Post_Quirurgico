@@ -43,6 +43,7 @@ filelock==3.20.1
 flatbuffers==25.2.10
 fonttools==4.59.1
 fqdn==1.5.1
+freezegun==1.5.5
 frozenlist==1.8.0
 fsspec==2025.10.0
 gast==0.6.0
