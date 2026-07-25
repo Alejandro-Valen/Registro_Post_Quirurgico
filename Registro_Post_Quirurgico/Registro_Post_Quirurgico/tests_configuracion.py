@@ -20,7 +20,9 @@ _RUTA_PAQUETE = Path(__file__).resolve().parent
 
 # Entorno mínimo y bien formado para producción. Cada prueba parte de aquí y
 # daña UNA variable, para que el fallo señale sin ambigüedad a esa variable.
-_ENTORNO_PRODUCCION_VALIDO = {
+# Público a propósito: `signos_sintomas.tests` también carga la configuración de
+# producción y necesita el mismo entorno mínimo.
+ENTORNO_PRODUCCION_VALIDO = {
     'CSRF_TRUSTED_ORIGINS': 'https://ejemplo.up.railway.app',
     'REDIS_URL': 'redis://localhost:6379/1',
     'EMAIL_DELIVERY_PROVIDER': 'resend',
@@ -45,7 +47,7 @@ def _cargar_settings_base(entorno):
     return _cargar_settings('settings.py', entorno, 'copia_settings_base')
 
 
-def _cargar_settings_produccion(entorno):
+def cargar_settings_produccion(entorno):
     return _cargar_settings(
         'settings_production.py', entorno, 'copia_settings_produccion'
     )
@@ -131,10 +133,10 @@ class VariablesEntornoVaciasTests(SimpleTestCase):
         self.assertTrue(base.DATABASES['default']['NAME'])
 
     def test_clave_de_resend_vacia_detiene_el_arranque(self):
-        entorno = dict(_ENTORNO_PRODUCCION_VALIDO, RESEND_API_KEY='')
+        entorno = dict(ENTORNO_PRODUCCION_VALIDO, RESEND_API_KEY='')
 
         with self.assertRaises(ImproperlyConfigured) as cm:
-            _cargar_settings_produccion(entorno)
+            cargar_settings_produccion(entorno)
 
         self.assertIn('RESEND_API_KEY', str(cm.exception))
 
@@ -144,16 +146,16 @@ class VariablesEntornoVaciasTests(SimpleTestCase):
         Con DEBUG=False y cookies seguras, el POST del login devuelve 403 sin
         explicación: el fallo aparece en la cara del médico, no al desplegar.
         """
-        entorno = dict(_ENTORNO_PRODUCCION_VALIDO, CSRF_TRUSTED_ORIGINS='')
+        entorno = dict(ENTORNO_PRODUCCION_VALIDO, CSRF_TRUSTED_ORIGINS='')
 
         with self.assertRaises(ImproperlyConfigured) as cm:
-            _cargar_settings_produccion(entorno)
+            cargar_settings_produccion(entorno)
 
         self.assertIn('CSRF_TRUSTED_ORIGINS', str(cm.exception))
 
     def test_produccion_con_entorno_completo_carga_sin_errores(self):
         """Guarda contra una validación demasiado celosa: producción arranca."""
-        produccion = _cargar_settings_produccion(dict(_ENTORNO_PRODUCCION_VALIDO))
+        produccion = cargar_settings_produccion(dict(ENTORNO_PRODUCCION_VALIDO))
 
         self.assertFalse(produccion.DEBUG)
         self.assertEqual(produccion.RESEND_FROM_EMAIL, 'avisos@ejemplo.com')

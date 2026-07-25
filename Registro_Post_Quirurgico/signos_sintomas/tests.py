@@ -3471,8 +3471,23 @@ class CacheProductionConfigTests(TestCase):
         self.assertGreaterEqual(django.VERSION[:3], (6, 0, 7))
 
     def test_produccion_aplica_csp_sin_scripts_inline(self):
+        """Cambió en el Loop C (hallazgo 11): ya no importa el módulo tal cual.
+
+        `settings_production` ahora exige CSRF_TRUSTED_ORIGINS y REDIS_URL al
+        cargarse —una variable vacía debe detener el arranque— y el .env de
+        desarrollo no las tiene, así que el import directo fallaba aquí. La
+        prueba carga el módulo con un entorno de producción mínimo y válido; lo
+        que verifica (CSP y timeout de correo) no cambió.
+        """
         from django.utils.csp import CSP
-        from Registro_Post_Quirurgico import settings_production
+        from Registro_Post_Quirurgico.tests_configuracion import (
+            ENTORNO_PRODUCCION_VALIDO,
+            cargar_settings_produccion,
+        )
+
+        settings_production = cargar_settings_produccion(
+            dict(ENTORNO_PRODUCCION_VALIDO)
+        )
 
         self.assertIn(
             'django.middleware.csp.ContentSecurityPolicyMiddleware',
