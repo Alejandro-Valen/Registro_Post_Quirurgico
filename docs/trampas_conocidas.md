@@ -40,6 +40,58 @@ piloto real.
 de la corrida anterior, con el código anterior. Verificar el log posterior al
 deploy, o revisar directamente que tenga las variables.
 
+**Un cron no toma las variables nuevas hasta su siguiente ejecución
+programada.** Guardar la variable no reinicia nada. Con `cron-tarde` (cada 5
+min) se ve enseguida; con `cron-manana` hay que esperar a las 6:00 AM o forzar
+un redeploy. Más de una vez se dio por roto algo que solo estaba esperando su
+turno: **compara siempre la hora del log con la hora en que guardaste el
+cambio.**
+
+### Variables compartidas vs. referencias entre servicios (25/07/2026)
+
+Railway ofrece dos mecanismos que el selector presenta juntos, y **no son
+intercambiables**:
+
+| Tipo de valor | Dónde va | Ejemplo |
+|---|---|---|
+| Texto plano que escribes tú | Variable **compartida** del proyecto | `CSRF_TRUSTED_ORIGINS`, `ALLOWED_HOSTS`, `ADMIN_URL` |
+| Valor que **produce otro servicio** | Referencia **al servicio** | `REDIS_URL` → `${{Redis.REDIS_URL}}`, `DB_*` → `${{Postgres.*}}` |
+
+Poner `REDIS_URL = ${{shared.REDIS_URL}}` dejó el cache inutilizable: la
+compartida guardaba a su vez una referencia que no se resolvía. El sistema no
+avisó de forma obvia —la web seguía sirviendo la landing— y solo el endpoint de
+salud lo delató con un **503**.
+
+**Railway reemplaza por CADENA VACÍA toda referencia que no puede resolver.**
+Ese es el detalle que hace difícil el diagnóstico: no falla ni deja el texto
+`${{...}}` a la vista, simplemente queda vacío. Combinado con una variable
+obligatoria (hallazgo 11), el resultado es un contenedor que no arranca. Es
+preferible a arrancar roto, pero hay que saber leerlo: **"la variable está
+vacía" casi siempre significa "la referencia no resolvió"**, no que alguien la
+haya borrado.
+
+**Orden obligatorio al reorganizar variables:** primero apuntar las referencias
+al destino nuevo, verificar que los servicios arrancan, y **solo entonces**
+borrar la variable vieja. Al revés, todos los servicios que la referenciaban
+quedan sin valor y dejan de arrancar a la vez. Pasó esa noche: se borró la
+compartida antes de corregir las referencias y cayeron el web y los dos cron.
+
+**La línea entre tarjetas del diagrama solo refleja referencias declaradas.** Si
+un servicio usa el valor literal de otro, la línea no aparece aunque la conexión
+funcione perfectamente. Sirve para detectar que una referencia se perdió, no
+para saber si dos servicios se hablan.
+
+**Nunca usar `REDIS_PUBLIC_URL`.** Es el endpoint público: sale del proyecto y
+vuelve a entrar por internet, con cargos de egress, más latencia y menos
+seguridad. La correcta es `REDIS_URL`, que viaja por la red privada de Railway.
+
+**Pendiente (deuda menor, para hacer con calma):** los dos servicios cron
+quedaron con la **URL literal** de Redis en vez de la referencia
+`${{Redis.REDIS_URL}}`, para cerrar el incidente de madrugada. Si algún día
+rotan las credenciales de Redis, esos dos servicios dejarán de conectarse en
+silencio. Conviene devolverlos a la referencia y confirmar que la línea del
+diagrama reaparece.
+
 **Nota cron (08/07/2026):** en Railway, encadenar comandos con `&&` en el
 Custom Start Command **solo corre el primero** → se creó el comando único
 `cron_matutino` (corre **6 tareas** en orden con `call_command`, incluidas la
