@@ -72,6 +72,7 @@ clasifica señales de alarma médicas.
 | Documento | Qué responde |
 |-----------|--------------|
 | `docs/README.md` | Índice general y **orden de autoridad** si dos documentos se contradicen |
+| `docs/proceso/metodo_de_trabajo.md` | **Cómo se corrige algo aquí:** decidir → documentar → test en rojo → implementar → verificar. Léelo antes de tu primer cambio |
 | `BITACORA.md` | Qué pasó en cada sesión, con los problemas encontrados y cómo se resolvieron |
 | `docs/resumen_sprints.md` | Qué entregó cada sprint, bloque y loop — el mapa de la BITÁCORA |
 | `docs/auditoria_literatura/` | La evidencia clínica que respalda (o no) cada umbral |

@@ -13,7 +13,7 @@
 
 **Fecha de las decisiones:** 22/07/2026
 **Rama:** `sprint-5-produccion` · **Punto de partida:** `fbf62a8`
-**Auditoría de origen:** ver `AUDITORIA_PRE_MERGE_LOOPS_1_6.md` (instrucción) y
+**Auditoría de origen:** ver `docs/proceso/auditorias/2026-07-22_instruccion_loops_1_6.md` (instrucción) y
 la entrada de `BITACORA.md` del 22/07/2026 (informe y hallazgos).
 
 ---
@@ -49,12 +49,13 @@ código antes de aceptarlas.
 > **Se actualiza en CADA cierre de sesión, aunque quede a mitad de un loop.**
 > Es lo primero que debe leer quien retome el trabajo.
 
-**Última actualización:** 24/07/2026
-**Punto alcanzado:** **Loop C implementado, pendiente de verificación del
-Arquitecto y de la consulta D7 en Railway.** Cerrados los hallazgos 6, 7, 8, 11,
-9 y 14, las decisiones D8, D9 y D10, el blindaje de los tests de medianoche y la
-reestructuración de la documentación. Falta **C6 (D7)**, que se ejecuta contra
-Railway y no desde aquí.
+**Última actualización:** 25/07/2026
+**Punto alcanzado:** **LOOP C CERRADO Y VERIFICADO.** Los tres loops de
+corrección están completos: los 14 hallazgos de la auditoría del 22/07 y las
+decisiones D1-D10 quedaron implementados y verificados. El Arquitecto ejecutó su
+comprobación (6 bloques en verde) y la consulta D7 contra Railway dio **cero**.
+Siguiente: auditoría independiente de cierre con Codex antes del PR a
+`Desarrollo`.
 **Rama:** `sprint-5-produccion` · **Restauración segura:** `fbf62a8`
 **Línea base de la suite:** 319 tests OK (299 + 20 del Loop C)
 
@@ -119,8 +120,19 @@ los fixtures a un único `now()` de referencia, o `freezegun`).
 - [x] **C6** D10 en dos pasos: `21b8d79` (caracterización, verde a propósito) y `922e13c` (expresión legible, comportamiento idéntico)
 - [x] **C7** `test: blindar contra la medianoche las pruebas de escenarios de varios dias` — `cc84037` (freezegun, solo en `requirements.txt`)
 - [x] **C8** Documentación: `c5174c1` (hallazgo 9 + D9), `e7155cb` (D8), `f82a973` (hallazgo 14 + despliegue), `27b1960` (reestructuración documental)
-- [ ] **C9** D7 — consulta de solo lectura en Railway y anotación en BITACORA · **la ejecuta el Arquitecto**
-- [ ] Cierre: suite · `check --deploy` · `pip-audit` · verificación del Arquitecto
+- [x] **C9** D7 — consulta de solo lectura ejecutada por el Arquitecto en Railway el 25/07/2026: **cero registros** con `COMPLETADA` + `intentos = 0`. Nada que revisar, nada que reevaluar. Ficha D7 cerrada
+- [x] Cierre: suite (319 OK) · `check` y `check --deploy` sin issues · `makemigrations --check` limpio · `pip-audit` sin vulnerabilidades · verificación del Arquitecto ejecutada (6 bloques en verde)
+
+**Resultado de D7 (25/07/2026).** La consulta sobre la base de producción
+devolvió `d7_marcados_0020 = 0` sobre 18 registros totales. La expectativa de la
+ficha se confirmó: los demos se limpiaron, los pacientes de prueba de los Loops
+5 y 6 se eliminaron transaccionalmente y **nunca ha habido un paciente real en
+el sistema**, así que no hay evaluación clínica congelada por la migración. Se
+documenta y se cierra sin tocar dato alguno.
+
+Panorama de la base al momento de la consulta: 18 registros, 2 pacientes activos
+(ambos demo, `DEMO-0001` y `DEMO-0002`), 10 alertas abiertas y 4 check-ins
+pendientes creados esa madrugada por `cron_matutino`.
 
 **Numeración:** el plan original nombraba C1-C6 por hallazgo. Al aplicar el
 método, la primera posición la ocupó el commit de pruebas en rojo (como `A1` y

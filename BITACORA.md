@@ -1143,7 +1143,7 @@ Sincronización de docs de este cambio: commits `docs:` en esta misma sesión.
 ## Auditoría de cierre Sprint 3 — Veredicto y hallazgos
 **Fecha:** 24/06/2026
 **Responsable:** León (Arquitecto IA) con Claude Code (coherencia y lógica clínica) + Codex (seguridad y escalabilidad, pasada web + pasada local)
-**Estado:** COMPLETADO ✅ — ver `AUDITORIA_SPRINT3_CIERRE.md`
+**Estado:** COMPLETADO ✅ — ver `docs/proceso/auditorias/2026-06_informe_sprint3_cierre.md`
 
 ### Qué se auditó y quién
 
@@ -1224,7 +1224,7 @@ detalles de los necesarios, y el endpoint de contacto web sin rate limit.
 - **Flujo del bot en 10 preguntas** (temperatura, dolor, drenaje ×2,
   gases+náuseas, hinchazón, FC, FR, tolerancia a líquidos).
 - **Documentación sincronizada:** CLAUDE.md, ROADMAP y BITACORA
-  reflejan el estado real del código. `AUDITORIA_SPRINT3_CIERRE.md`
+  reflejan el estado real del código. `docs/proceso/auditorias/2026-06_informe_sprint3_cierre.md`
   creado en la raíz del repo con el detalle técnico de cada hallazgo.
 
 ### Próximo paso
@@ -1265,7 +1265,7 @@ de producción real), luego Sprint 4 (dashboard del médico).
 ### Qué se hizo
 
 Se resolvieron los 20 hallazgos del Grupo A, B y C de
-`AUDITORIA_SPRINT3_CIERRE.md`, en orden A1→A6, B1→B7, C1→C7.
+`docs/proceso/auditorias/2026-06_informe_sprint3_cierre.md`, en orden A1→A6, B1→B7, C1→C7.
 Cada hallazgo tiene su commit individual en la rama.
 
 **Grupo A — Lógica y seguridad del bot:**
@@ -3196,7 +3196,7 @@ hasta recibir una auditoría independiente favorable.
   (`enviar_recordatorios` continúa stub), dominio propio de Resend, plan Railway
   con cron separado, Habeas Data firmado y datos definitivos del médico.
 
-**Compuerta de cierre:** se creó `AUDITORIA_PRE_MERGE_LOOPS_1_6.md` para que
+**Compuerta de cierre:** se creó `docs/proceso/auditorias/2026-07-22_instruccion_loops_1_6.md` para que
 Claude Code contraste todo el árbol, los seis loops, las 280 pruebas y los
 controles de producción. No se abrirá PR ni se hará merge hasta clasificar sus
 hallazgos, resolver los bloqueantes y repetir las pruebas afectadas.
@@ -3258,7 +3258,7 @@ instrucciones activas contradictorias antes de la auditoría con Claude Code.
   funcional sigue siendo **280/280 tests OK**, `check --deploy` limpio y
   `pip-audit` sin vulnerabilidades conocidas.
 - No se abrió PR ni se hizo merge. El siguiente paso obligatorio es entregar a
-  Claude Code `AUDITORIA_PRE_MERGE_LOOPS_1_6.md`, recibir su informe completo y
+  Claude Code `docs/proceso/auditorias/2026-07-22_instruccion_loops_1_6.md`, recibir su informe completo y
   volver a Codex para resolver conjuntamente cualquier hallazgo bloqueante.
 
 ---
@@ -3270,7 +3270,7 @@ corregido y verificado. Loops B y C pendientes.
 
 ### Auditoría independiente (Claude Code)
 
-Se ejecutó `AUDITORIA_PRE_MERGE_LOOPS_1_6.md` sobre `fbf62a8`, sin editar
+Se ejecutó `docs/proceso/auditorias/2026-07-22_instruccion_loops_1_6.md` sobre `fbf62a8`, sin editar
 código. **Veredicto: BLOQUEADO PARA PR A DESARROLLO.**
 
 Las cuatro cifras que reportaba Codex se confirmaron reproduciéndolas: 280 tests

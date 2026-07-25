@@ -27,7 +27,7 @@ de produccion, y emitir un veredicto reproducible antes del PR a `Desarrollo`.
 
 Lee completos `docs/README.md`, `CLAUDE.md`,
 `ROADMAP_MONITOREO_POSQUIRURGICO.md`, `BITACORA.md`,
-`AUDITORIA_SPRINT3_CIERRE.md`, `docs/cron_setup.md`,
+`docs/proceso/auditorias/2026-06_informe_sprint3_cierre.md`, `docs/cron_setup.md`,
 `docs/railway_deploy.md`, `docs/transferencia_cuentas.md` y el consentimiento
 rastreado dentro de `docs/`. Despues inspecciona el proyecto completo, incluidos
 `settings.py`, `settings_production.py`, `urls.py`, `wsgi.py`, `asgi.py`,

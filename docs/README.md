@@ -49,12 +49,12 @@ para después.
 
 ## Material histórico o de referencia
 
-- `AUDITORIA_PRE_MERGE_LOOPS_1_6.md` es la **instrucción** que se usó para la
+- `docs/proceso/auditorias/2026-07-22_instruccion_loops_1_6.md` es la **instrucción** que se usó para la
   auditoría independiente previa al PR. La auditoría **ya se ejecutó** (22/07);
   sus 14 hallazgos y su informe están en la entrada de `BITACORA.md` de esa
   fecha y su corrección en `docs/decisiones_correccion_auditoria.md`. No debe
   volver a ejecutarse.
-- `AUDITORIA_SPRINT3_CIERRE.md` conserva el diagnóstico previo al hardening. Sus
+- `docs/proceso/auditorias/2026-06_informe_sprint3_cierre.md` conserva el diagnóstico previo al hardening. Sus
   hallazgos no deben reportarse como actuales sin volver a reproducirlos.
 - `docs/auditoria_literatura/` conserva los análisis clínicos de junio de 2026.
   Las frases "pendiente" dentro de esos análisis pertenecen a la sesión
