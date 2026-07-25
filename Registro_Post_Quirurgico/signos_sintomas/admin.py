@@ -54,6 +54,27 @@ def _solo_propios(request):
     return not request.user.is_superuser
 
 
+class MedicoResponsableListFilter(admin.RelatedFieldListFilter):
+    """Filtro por médico responsable, visible solo para el superusuario.
+
+    El filtro estándar de Django se arma con TODOS los usuarios de la base, no
+    con los que el usuario puede ver: a un médico le mostraba en la barra
+    lateral los nombres de cuenta de sus colegas y del superusuario (hallazgo
+    8). El listado en sí nunca estuvo comprometido — sigue acotado a sus
+    pacientes— y por eso mismo el filtro tampoco le sirve de nada.
+
+    Sin opciones, `has_output()` da False y el Admin no dibuja el filtro. Para
+    el superusuario no cambia nada: conserva la lista completa y la opción
+    "sin asignar". Si un médico llega con el parámetro escrito a mano en la
+    URL, se ignora y el `get_queryset` del ModelAdmin lo sigue acotando.
+    """
+
+    def field_choices(self, field, request, model_admin):
+        if _solo_propios(request):
+            return []
+        return super().field_choices(field, request, model_admin)
+
+
 class TodasLasFechasListFilter(admin.DateFieldListFilter):
     def choices(self, changelist):
         for indice, choice in enumerate(super().choices(changelist)):
@@ -277,7 +298,12 @@ class TieneAlertaActivaFilter(admin.SimpleListFilter):
 class PacienteAdmin(admin.ModelAdmin):
     list_display = ['nombre_completo', 'cedula', 'medico_nombre',
                     'fecha_cirugia', 'activo']
-    list_filter = ['activo', 'tipo_cirugia', 'medico_responsable', TieneAlertaActivaFilter]
+    list_filter = [
+        'activo',
+        'tipo_cirugia',
+        ('medico_responsable', MedicoResponsableListFilter),
+        TieneAlertaActivaFilter,
+    ]
     search_fields = ['nombre_completo', 'cedula', 'telefono_whatsapp',
                      'medico_responsable__first_name',
                      'medico_responsable__last_name',
