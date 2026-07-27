@@ -264,7 +264,7 @@ Retomamos el trabajo de corrección post-auditoría del Sprint 5.
 
 Antes de proponer nada:
 1. Lee completo docs/decisiones_correccion_auditoria.md — contiene las
-   decisiones D1-D7 con su razonamiento, el método de trabajo acordado y el
+   decisiones D1-D14 con su razonamiento, el método de trabajo acordado y el
    estado de avance.
 2. Lee completo CLAUDE.md.
 3. Verifica el estado real con git log, git status y la suite de tests. No
