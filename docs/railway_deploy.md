@@ -118,8 +118,8 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 ## 4. Orden de ejecución (resumen)
 
 1. Crear proyecto en Railway y provisionar **PostgreSQL** y **Redis**.
-2. Añadir el **servicio web** desde el repo de GitHub (rama a decidir: se puede
-   desplegar `sprint-5-produccion` o mergear antes a `Desarrollo`).
+2. Añadir el **servicio web** desde el repo de GitHub (ver "Rama de despliegue"
+   abajo).
 3. Cargar **todas** las variables de la tabla de arriba.
 4. Disparar el primer **deploy**. El arranque aplica migraciones, configura el
    grupo `Médicos`, crea las cuentas cuyas variables existan y levanta Gunicorn.
@@ -131,6 +131,48 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
    del motor y entrega de la bandeja de correo.
 7. Actualizar el **webhook de Twilio** para que apunte a
    `https://<dominio-railway>/<ruta-del-webhook>` (recordar: Auth Token primario).
+
+---
+
+## 4.1 Rama de despliegue
+
+**Hoy (27/07/2026): el servicio web sigue `sprint-5-produccion`**, con deploy
+automático. Consecuencias que hay que tener presentes mientras siga así:
+
+- **Cada push a `sprint-5-produccion` sale a producción de inmediato.** No hay
+  paso intermedio ni aprobación.
+- **Mergear a `Desarrollo` no despliega nada.** El PR es un cambio de registro
+  del proyecto, no un evento de producción.
+
+**A dónde va esto (pendiente, después del merge).** Una rama de sprint es un
+destino temporal: cuando el Sprint 5 termine, producción quedaría anclada a una
+rama muerta, o alguien seguiría commiteando a "sprint 5" para siempre.
+
+El destino **no es `Desarrollo`**. `Desarrollo` es la rama de integración: ahí
+aterriza cada sprint, incluido el trabajo a medio terminar. Apuntar producción
+ahí significa que todo lo que se integra queda delante de un paciente sin que
+nadie lo decida.
+
+**Plan acordado:** tras el merge del Sprint 5, crear una rama **`produccion`**
+desde `Desarrollo` y apuntar Railway allí. `Desarrollo` sigue recibiendo el
+trabajo de cada sprint; desplegar pasa a ser un acto explícito —un merge de
+`Desarrollo` a `produccion`— en vez de una consecuencia de integrar.
+
+Orden, para no dejar producción atrás por accidente:
+
+1. Cerrar el Loop D y verificarlo.
+2. PR y merge de `sprint-5-produccion` → `Desarrollo`.
+3. Crear `produccion` **desde `Desarrollo`** (mismo contenido, ya mergeado).
+4. Cambiar la rama del servicio web de Railway a `produccion` y **verificar
+   `/salud/` en 200** antes de dar el cambio por bueno.
+5. Repetir para los dos servicios cron: comparten repositorio y también tienen
+   rama propia configurada.
+6. Recién entonces archivar `sprint-5-produccion`.
+
+> **Nunca apuntar Railway a `Desarrollo` mientras el Sprint 5 no esté mergeado.**
+> `Desarrollo` va 101 commits atrás: el cambio de rama revertiría producción a
+> código anterior a los cuatro loops de corrección, incluida la escalera de
+> alertas SILENCIO.
 
 ---
 

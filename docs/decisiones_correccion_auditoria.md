@@ -32,9 +32,18 @@ la entrada de `BITACORA.md` del 22/07/2026 (informe y hallazgos).
 | [D8](#d8) | Días sin datos en las reglas de días consecutivos | *(nuevo)* | C | Aceptada |
 | [D9](#d9) | Campo `fecha_ultimo_registro` sin lectores | *(nuevo)* | C | Aceptada |
 | [D10](#d10) | Cláusula MEDIA de la regla de hinchazón | *(nuevo)* | C | Aceptada |
+| [D11](#d11) | Identidad del paciente en la salida operativa | cierre 1 | D | Aceptada |
+| [D12](#d12) | Todo paciente activo tiene un médico responsable | cierre 2 | D | Aceptada |
+| [D13](#d13) | La autenticidad del webhook no depende del entorno | cierre 3 | D | Aceptada |
 
 Los hallazgos 2, 6, 7, 8, 9, 11 y 14 son correcciones técnicas sin decisión de
 producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
+
+**D11, D12 y D13 vienen de una auditoría posterior**, la de cierre pre-merge del
+27/07/2026 — informe y verificación en
+`docs/proceso/auditorias/2026-07-27_informe_cierre_codex.md`. Los "hallazgos
+cierre 1-3" de la tabla son los de **ese** informe, no los de la auditoría del
+22/07.
 
 **D8, D9 y D10 no vienen de la auditoría.** Salieron de un ejercicio distinto el
 22/07/2026: se le pidió a otra sesión que **documentara** el sistema explorando
@@ -49,15 +58,18 @@ código antes de aceptarlas.
 > **Se actualiza en CADA cierre de sesión, aunque quede a mitad de un loop.**
 > Es lo primero que debe leer quien retome el trabajo.
 
-**Última actualización:** 25/07/2026
-**Punto alcanzado:** **LOOP C CERRADO Y VERIFICADO.** Los tres loops de
-corrección están completos: los 14 hallazgos de la auditoría del 22/07 y las
-decisiones D1-D10 quedaron implementados y verificados. El Arquitecto ejecutó su
-comprobación (6 bloques en verde) y la consulta D7 contra Railway dio **cero**.
-Siguiente: auditoría independiente de cierre con Codex antes del PR a
-`Desarrollo`.
-**Rama:** `sprint-5-produccion` · **Restauración segura:** `fbf62a8`
-**Línea base de la suite:** 319 tests OK (299 + 20 del Loop C)
+**Última actualización:** 27/07/2026
+**Punto alcanzado:** **AUDITORÍA DE CIERRE HECHA Y TRIADA. LOOP D DECIDIDO, SIN
+EMPEZAR.** Los Loops A, B y C están cerrados y verificados. La auditoría de
+cierre (Codex, 27/07) volvió a **BLOQUEAR el PR** con dos hallazgos ALTOS; los
+cuatro se reprodujeron contra el código antes de aceptarlos, y la verificación
+corrigió la mecánica de uno y encontró una ocurrencia que el informe no vio.
+Decisiones **D11, D12 y D13** escritas y aprobadas. Siguiente paso: **D-1, la
+prueba en rojo** del Loop D.
+**Rama:** `sprint-5-produccion` · **Restauración segura:** `2eb7801`
+**Línea base de la suite:** 319 tests OK (verificada de nuevo el 27/07, 112 s)
+**Informe de la auditoría de cierre:**
+`docs/proceso/auditorias/2026-07-27_informe_cierre_codex.md`
 
 ### Loop A — Corrección clínica *(bloquea el merge)*
 
@@ -175,11 +187,33 @@ probadas. El arnés no se commiteó: era instrumento de medición.
 En desarrollo con ngrok hay que agregar `TRUST_RAILWAY_PROXY=True` al `.env`
 local, o la firma de Twilio deja de validar.
 
-### Después de los tres loops
+### Loop D — Privacidad operativa, responsable clínico y firma *(bloquea el merge)*
 
-- [ ] Entrada final de BITACORA cerrando los tres loops
+Nace de la auditoría de cierre del 27/07/2026. Decisiones D11-D13 aprobadas
+**antes** de escribir código, como en los tres loops anteriores.
+
+- [ ] **D-1** `test: reproducir PHI en salida operativa, paciente sin medico y firma heredada` — prueba en rojo, cada caso fallando por su propio defecto
+- [ ] **D-2** `fix: identificar al paciente por pk en la salida operativa` → D11
+- [ ] **D-3** `feat: exigir medico responsable al registrar un paciente` → D12 (capa 1)
+- [ ] **D-4** `feat: proteger la atribucion clinica al eliminar una cuenta medica` → D12 (capa 2, migración de `on_delete`)
+- [ ] **D-5** `feat: avisar en el tablero de pacientes sin medico o con medico inactivo` → D12 (capa 3)
+- [ ] **D-6** `fix: fijar la validacion de firma de Twilio en produccion` → D13
+- [ ] **D-7** Documentación: los 5 desfases del hallazgo 4, empezando por `ROADMAP:374` (escalera SILENCIO `1/2/3+` → `1/2/4`)
+- [ ] Cierre: suite completa · `check` y `check --deploy` · `makemigrations --check` · verificación del Arquitecto
+- [ ] Push a `origin/sprint-5-produccion` + entrada de BITACORA
+
+**Advertencia de despliegue.** Railway sigue `sprint-5-produccion`: **cada push
+del Loop D sale a producción de inmediato.** D-4 (migración) y D-6 (firma) son
+los dos que conviene empujar mirando `/salud/` después, no de madrugada.
+
+### Después de los cuatro loops
+
+- [ ] Entrada final de BITACORA cerrando los loops
 - [ ] Revisión del diff completo contra `origin/Desarrollo`
 - [ ] PR a `Desarrollo`
+- [ ] **Rama de despliegue:** crear `produccion` desde `Desarrollo` tras el merge
+  y apuntar Railway allí — pasos y advertencias en `docs/railway_deploy.md`,
+  sección 4.1
 
 ---
 
@@ -797,6 +831,232 @@ fundamento sobre si es correcta.
 El orden importa: **hacerla legible y cubierta por pruebas primero** permite que
 la decisión clínica se tome después con la información a la vista, y que
 cualquier cambio futuro sea verificable en vez de arriesgado.
+
+---
+
+<a id="d11"></a>
+## D11 — Identidad del paciente en la salida operativa
+
+**Hallazgo:** auditoría de cierre, 1 (ALTO) · **Loop:** D · **Estado:** Aceptada
+
+### Problema
+
+`desactivar_pacientes_vencidos` escribe el **nombre completo** del paciente y su
+día postoperatorio en la salida estándar, que Railway captura y conserva:
+
+```
+desactivar_pacientes_vencidos: Maria Fernanda Quintero desactivado (POD 12)
+```
+
+`enviar_recordatorios` arma además **nombre completo y teléfono** de cada
+check-in pendiente. Hoy no se emite porque el logger `signos_sintomas` está en
+nivel `WARNING`, pero un cambio de nivel volcaría la lista completa de pacientes
+con su celular.
+
+Y `settings.py:189` afirma que el LOGGING "filtra PHI/PII". **No filtra nada:**
+el único filtro configurado es `RequireDebugFalse`.
+
+Reproducido el 27/07/2026 — ver
+`docs/proceso/auditorias/2026-07-27_informe_cierre_codex.md`.
+
+### Decisión
+
+**Invariante: la salida operativa del sistema no contiene identidad del
+paciente.** Ni en logs, ni en stdout, ni en la salida de un comando.
+
+1. Toda salida operativa identifica al paciente por `pk`, como ya hace el resto
+   del código (`cerrar_checkins_vencidos`, `signals`, `bot`).
+2. El comentario de `settings.py:189` dice la verdad sobre lo que el LOGGING
+   hace y lo que no.
+3. **Una prueba guardián** recorre la salida de los comandos operativos y falla
+   si aparece el nombre o el teléfono de un paciente.
+
+### Razonamiento
+
+**Por qué `pk` y no una cédula parcial o un seudónimo.** El `pk` ya es el
+identificador que usa el resto del sistema para operar, es estable, y no dice
+nada de la persona fuera de la base. Cualquier identificador derivado del dato
+real (iniciales, cédula truncada) sigue siendo dato personal degradado: reduce
+el riesgo sin eliminarlo, y obliga a discutir cuánto es "suficientemente poco".
+
+**Qué se pierde.** Leer un log operativo ya no dice *a quién* le pasó algo sin
+consultar la base. Es exactamente la propiedad que se busca: quien tiene derecho
+a saberlo entra al panel autenticado, que es donde vive esa información.
+
+**Por qué la prueba guardián y no solo corregir las dos líneas.** Las dos
+ocurrencias de hoy se arreglan en diez minutos; lo que hace falta es que la
+tercera —la que escriba alguien dentro de seis meses— no llegue a producción.
+Sin el guardián esto se repite, porque escribir el nombre en un log es lo
+natural cuando estás depurando.
+
+**Qué NO cubre esta decisión.** El traceback de `bot.py:536` (`logger.exception`)
+sí se emite y arrastra el mensaje de la excepción. El encabezado propio usa solo
+`pk`s, pero una excepción de terceros podría cargar un valor clínico. **No hay
+ningún caso conocido**; se registra como exposición condicional y se deja fuera
+del Loop D. Redactar tracebacks es una capa de logging propia, no un parche, y
+merece su propia decisión cuando exista un caso real que la justifique.
+
+---
+
+<a id="d12"></a>
+## D12 — Todo paciente activo tiene un médico responsable
+
+**Hallazgo:** auditoría de cierre, 2 (ALTO) · **Loop:** D · **Estado:** Aceptada
+
+### Problema
+
+El formulario del Admin **no exige** `medico_responsable`, y el desplegable nace
+vacío. Un médico no-superusuario puede crear un paciente sin asignarlo — con una
+sola opción posible en la lista, que es él mismo.
+
+El paciente resultante sigue activo, responde al bot y genera alertas, pero:
+
+- **desaparece del listado del médico** (`get_queryset` filtra por
+  `medico_responsable=request.user`),
+- **desaparece de los KPI del tablero de triage** — el médico ve ceros, no un
+  hueco,
+- su alerta ALTA queda con `destinatario=''` y `procesar_notificaciones_email`
+  lanza `CommandError`, dejando la corrida del cron en rojo permanente.
+
+Hay además una segunda vía, por la puerta de atrás: `medico_responsable` es
+`on_delete=SET_NULL`, así que **borrar la cuenta de un médico convierte a todos
+sus pacientes en huérfanos invisibles, en silencio.**
+
+Reproducido el 27/07/2026 con el formulario real del Admin.
+
+### Decisión
+
+**Invariante clínico: todo paciente activo tiene un médico responsable, y esa
+atribución es histórica e indeleble.**
+
+Se sostiene en tres capas, porque una sola no alcanza:
+
+1. **La puerta de entrada.** El formulario del Admin exige el campo. Si quien
+   guarda es un médico no-superusuario, se le asigna a él automáticamente. El
+   superusuario conserva la libertad de dejarlo vacío para mantenimiento.
+2. **La puerta de atrás.** `on_delete=SET_NULL` → **`PROTECT`**. Django se niega
+   a borrar una cuenta de médico mientras tenga pacientes: obliga a reasignarlos
+   explícitamente antes.
+3. **La red.** El tablero del superusuario avisa de dos condiciones que hoy son
+   invisibles: *pacientes activos sin médico responsable* y **_pacientes activos
+   cuyo médico está inactivo_**.
+
+**Regla operativa que acompaña a la decisión:** las cuentas de médico **no se
+borran, se desactivan** (`is_active=False`); y antes de desactivar una, se
+reasignan sus pacientes activos.
+
+### Razonamiento
+
+**Por qué quién atendió a un paciente no se borra.** Es parte de la historia
+clínica, no un dato de configuración. Borrarlo no es limpiar datos personales:
+es borrar la trazabilidad de un acto médico. El proyecto ya aplica ese principio
+en dos sitios — los pacientes se cierran con `activo=False` porque *"el borrado
+elimina trazabilidad clínica"* (`PacienteAdmin.has_delete_permission`), y D3 se
+negó a rellenar `resuelta_por` hacia atrás porque habría **fabricado una
+atribución clínica**. Esta decisión es la misma idea aplicada al otro extremo de
+la relación.
+
+**Por qué desactivar y no borrar resuelve el caso real.** Un médico que deja de
+usar el sistema no puede entrar, pero su nombre sigue colgando de cada paciente
+que atendió y de cada alerta que resolvió. No se pierde nada y no hay que migrar
+nada. `PROTECT` no es la regla: es lo que impide saltársela por descuido.
+
+**Por qué tres capas y no una.** Cada una tapa lo que las otras no ven. El
+formulario cubre el camino de todos los días; `PROTECT` cubre el borrado
+administrativo; el aviso del tablero cubre todo lo demás —un script, un import,
+una carga de datos— porque **el problema real de este hallazgo no es que el
+paciente quede huérfano: es que quede huérfano en silencio.** Un huérfano
+visible es un pendiente; uno invisible es un paciente sin atención.
+
+**Por qué el aviso de "médico inactivo" pesa tanto como el de "sin médico".** Es
+el riesgo operativo del día a día una vez aplicada la regla de desactivar en vez
+de borrar: se desactiva al médico que se fue, sus pacientes siguen vivos
+respondiendo al bot, y sus alertas ALTA viajan al correo de alguien que ya no
+entra al sistema. El síntoma es idéntico —nadie mira a ese paciente— pero la
+causa no se detecta con la comprobación de huérfanos.
+
+**Por qué NO se pone `NOT NULL` en la base de datos ahora.** La puerta que está
+abierta es el formulario, y ésa la cierra la capa 1. `NOT NULL` obligaría a
+resolver hoy dos cosas que no tienen respuesta: los estados transitorios
+legítimos —`seed_demo_produccion` avisa explícitamente que puede dejar pacientes
+sin asignar si no hay superusuario— y la migración de las filas existentes en
+producción. Es la misma precaución de D9: no se altera una columna en producción
+en medio de un merge bloqueado. **Queda como candidato explícito** para cuando
+ya no pueda nacer un huérfano por ninguna vía; entonces será una migración
+aburrida en vez de una decisión.
+
+### Efecto secundario conocido y aceptado
+
+Con `PROTECT`, borrar una cuenta de médico con pacientes **falla con un error de
+Django** en vez de hacerlo en silencio. Es el comportamiento buscado, pero
+significa que la operación "dar de baja a un médico" pasa a tener un paso
+obligatorio previo: reasignar. Se documenta en la regla operativa, y el aviso
+del tablero es lo que hace que se cumpla sola.
+
+---
+
+<a id="d13"></a>
+## D13 — La autenticidad del webhook no depende del entorno
+
+**Hallazgo:** auditoría de cierre, 3 (ALTO condicional) · **Loop:** D ·
+**Estado:** Aceptada
+
+### Problema
+
+La firma `X-Twilio-Signature` es **la única cerradura** del webhook: la URL es
+pública y adivinable, no hay login y está exenta de CSRF. Sin validación de
+firma, cualquiera que conozca la URL puede inyectar telemetría falsa en la
+historia de un paciente real, cerrar su check-in del día como respondido
+—**apagando la alerta SILENCIO de alguien que en realidad no respondió**— o
+generar alertas ALTA falsas. Ni el rate limit ni la validación del SID lo
+impiden: ninguno autentica.
+
+`settings_production.py` **no fija** `TWILIO_VALIDATE_SIGNATURE`: hereda lo que
+diga el entorno. Con la variable en `False`, producción acepta cualquier POST sin
+firma, en silencio, y `check --deploy` no lo reporta.
+
+**Estado real verificado en Railway el 27/07/2026:** la variable **no existe** en
+el servicio web; `TWILIO_AUTH_TOKEN` sí. Como el default del código es `True`, la
+validación está activa hoy.
+
+### Decisión
+
+1. **`TWILIO_VALIDATE_SIGNATURE = True` fijo en `settings_production.py`**, junto
+   a `DEBUG = False`. Deja de leerse del entorno.
+2. **No crear la variable en Railway.** Ni con valor `True`.
+
+### Razonamiento
+
+**Por qué no crear la casilla, aunque sea para ponerla en `True`.**
+`python-decouple` convierte una cadena vacía en `False`:
+
+```
+variable AUSENTE     -> True     ← el estado actual
+variable VACIA ('')  -> False    ← la firma queda desactivada
+variable = True      -> True
+```
+
+Y Railway **reemplaza por cadena vacía toda referencia que no puede resolver**
+(`docs/trampas_conocidas.md`, incidente del 25/07). Crear la variable introduce
+exactamente el modo de fallo que ya costó una madrugada, con la diferencia de
+que este falla **abriendo la cerradura en silencio** en vez de tumbando el
+contenedor. Una variable que no existe no se puede configurar mal.
+
+**Por qué en producción no se negocia.** El valor `False` es legítimo y
+necesario en desarrollo local, donde no hay firma que validar. Que la misma
+palanca exista en producción significa que una variable copiada entre servicios
+—o compartida entre ellos— desactiva la autenticación del canal por el que entra
+toda la información clínica del sistema.
+
+**Qué se pierde.** Poder desactivar la validación en producción para depurar. No
+hace falta: cuando la firma falla detrás de Railway, la causa real es casi
+siempre que Django no reconstruye la URL pública `https`, y eso se arregla con
+`TRUST_RAILWAY_PROXY=True` (hallazgo 6), no apagando la cerradura.
+
+**Coherencia con D2.** El rate limit del webhook **falla abierto** ante una caída
+de Redis, y esa decisión se justificó precisamente en que *la firma de Twilio
+protege el webhook*. D13 convierte ese supuesto en garantía. Codex registró la
+misma condición al revisar D2.
 
 ---
 
