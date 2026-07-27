@@ -35,6 +35,7 @@ la entrada de `BITACORA.md` del 22/07/2026 (informe y hallazgos).
 | [D11](#d11) | Identidad del paciente en la salida operativa | cierre 1 | D | Aceptada |
 | [D12](#d12) | Todo paciente activo tiene un médico responsable | cierre 2 | D | Aceptada |
 | [D13](#d13) | La autenticidad del webhook no depende del entorno | cierre 3 | D | Aceptada |
+| [D14](#d14) | Aislamiento entre las tareas de un mismo cron | cierre (d) | E | Decidida, **sin implementar** |
 
 Los hallazgos 2, 6, 7, 8, 9, 11 y 14 son correcciones técnicas sin decisión de
 producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
@@ -64,8 +65,12 @@ EMPEZAR.** Los Loops A, B y C están cerrados y verificados. La auditoría de
 cierre (Codex, 27/07) volvió a **BLOQUEAR el PR** con dos hallazgos ALTOS; los
 cuatro se reprodujeron contra el código antes de aceptarlos, y la verificación
 corrigió la mecánica de uno y encontró una ocurrencia que el informe no vio.
-Decisiones **D11, D12 y D13** escritas y aprobadas. Siguiente paso: **D-1, la
-prueba en rojo** del Loop D.
+Decisiones **D11, D12 y D13** escritas, revisadas por Codex y corregidas: D11
+acotó su invariante a la salida nominal, y D12 ganó una cuarta capa
+(`CheckConstraint`) porque su promesa original era más amplia que su alcance.
+**D14** queda decidida para el Loop E. Siguiente paso: **D-0, las dos consultas
+de solo lectura en Railway** — las ejecuta el Arquitecto y son la compuerta de
+la migración.
 **Rama:** `sprint-5-produccion` · **Restauración segura:** `2eb7801`
 **Línea base de la suite:** 319 tests OK (verificada de nuevo el 27/07, 112 s)
 **Informe de la auditoría de cierre:**
@@ -192,19 +197,38 @@ local, o la firma de Twilio deja de validar.
 Nace de la auditoría de cierre del 27/07/2026. Decisiones D11-D13 aprobadas
 **antes** de escribir código, como en los tres loops anteriores.
 
-- [ ] **D-1** `test: reproducir PHI en salida operativa, paciente sin medico y firma heredada` — prueba en rojo, cada caso fallando por su propio defecto
-- [ ] **D-2** `fix: identificar al paciente por pk en la salida operativa` → D11
-- [ ] **D-3** `feat: exigir medico responsable al registrar un paciente` → D12 (capa 1)
-- [ ] **D-4** `feat: proteger la atribucion clinica al eliminar una cuenta medica` → D12 (capa 2, migración de `on_delete`)
-- [ ] **D-5** `feat: avisar en el tablero de pacientes sin medico o con medico inactivo` → D12 (capa 3)
-- [ ] **D-6** `fix: fijar la validacion de firma de Twilio en produccion` → D13
-- [ ] **D-7** Documentación: los 5 desfases del hallazgo 4, empezando por `ROADMAP:374` (escalera SILENCIO `1/2/3+` → `1/2/4`)
+- [ ] **D-0** *(León, en Railway)* Dos consultas de **solo lectura**: pacientes activos sin responsable, y pacientes activos cuyo médico está inactivo / sin `is_staff` / sin correo. **Compuerta de D-4bis** — ver D12
+- [ ] **D-1** `test: reproducir PHI en salida operativa, paciente sin medico y firma heredada` — prueba en rojo, cada caso fallando por su propio defecto. El guardián de PHI captura stdout, stderr y logs **forzando INFO**; la firma se prueba con la variable ausente, vacía y en `False`
+- [ ] **D-2** `fix: fijar la validacion de firma de Twilio en produccion` → D13
+- [ ] **D-3** `fix: identificar al paciente por pk en la salida operativa` → D11
+- [ ] **D-4** `feat: exigir medico responsable al registrar un paciente` → D12 (capa 1)
+- [ ] **D-5** `feat: proteger la atribucion clinica al eliminar una cuenta medica` → D12 (capa 2, migración de `on_delete`)
+- [ ] **D-6** `feat: garantizar responsable en todo paciente activo` → D12 (capa 4, `CheckConstraint`) — **solo si D-0 dio cero**
+- [ ] **D-7** `feat: avisar en el tablero de pacientes sin atencion efectiva` → D12 (capa 3, las cuatro condiciones)
+- [ ] **D-8** `fix: negar la creacion de pacientes de ejemplo sin medico usable` → D12 (`seed_demo_produccion`)
+- [ ] **D-9** Documentación: los desfases del hallazgo 4 que sigan abiertos
 - [ ] Cierre: suite completa · `check` y `check --deploy` · `makemigrations --check` · verificación del Arquitecto
-- [ ] Push a `origin/sprint-5-produccion` + entrada de BITACORA
+- [ ] **Un solo push** a `origin/sprint-5-produccion` con todo en verde + entrada de BITACORA
 
-**Advertencia de despliegue.** Railway sigue `sprint-5-produccion`: **cada push
-del Loop D sale a producción de inmediato.** D-4 (migración) y D-6 (firma) son
-los dos que conviene empujar mirando `/salud/` después, no de madrugada.
+**Por qué D-2 (la firma) va tan arriba.** Es pequeño, independiente de todo lo
+demás y protege la única autenticación del webhook. Si el loop se interrumpe a
+mitad, conviene que eso ya esté hecho.
+
+**Advertencia de despliegue.** Railway sigue `sprint-5-produccion`: **el push
+sale a producción de inmediato**, y el `Dockerfile` encadena
+`migrate && gunicorn` — una migración que falla deja el contenedor sin arrancar.
+Por eso el push es único, con todo verde, y **mirando el log del deploy y
+`/salud/` justo después**, con el revert listo. Nunca de madrugada.
+
+### Loop E — Operación del cron *(no bloquea el merge)*
+
+- [ ] **E-1** `test: reproducir que un fallo temprano del cron impide entregar alertas`
+- [ ] **E-2** `fix: aislar las tareas del cron conservando las dependencias clinicas` → D14
+
+Va **después** del PR, antes del piloto con pacientes reales. Motivo en D14: es
+una condición preexistente que esta rama no empeora, y `cron_operativo` corre
+cada 5 minutos, así que un fallo transitorio se cura solo. Lo que no se cura solo
+es uno persistente.
 
 ### Después de los cuatro loops
 
@@ -861,15 +885,29 @@ Reproducido el 27/07/2026 — ver
 
 ### Decisión
 
-**Invariante: la salida operativa del sistema no contiene identidad del
-paciente.** Ni en logs, ni en stdout, ni en la salida de un comando.
+**Invariante: ninguna salida que el sistema escribe deliberadamente —logs,
+stdout, stderr, salida de un comando— contiene identidad del paciente.**
+
+El invariante habla de la salida **nominal**: la que este código decide
+escribir. No alcanza al texto de una excepción ajena que llegue por un
+traceback; eso se acota abajo como riesgo residual, y la ficha no promete
+cubrirlo.
 
 1. Toda salida operativa identifica al paciente por `pk`, como ya hace el resto
    del código (`cerrar_checkins_vencidos`, `signals`, `bot`).
 2. El comentario de `settings.py:189` dice la verdad sobre lo que el LOGGING
-   hace y lo que no.
+   hace y lo que no — y **no afirma que los tracebacks estén saneados**.
 3. **Una prueba guardián** recorre la salida de los comandos operativos y falla
-   si aparece el nombre o el teléfono de un paciente.
+   si aparece el nombre o el teléfono de un paciente. Captura **stdout, stderr y
+   los logs forzando nivel INFO**, no con la configuración normal.
+
+**Por qué el guardián fuerza el nivel INFO.** Bajo el nivel `WARNING` que rige
+en producción, la línea de `enviar_recordatorios` con nombre y teléfono es
+invisible: un guardián que corriera con la configuración normal **pasaría en
+verde con el defecto puesto**. Sería el fallo de julio —una prueba verde que no
+prueba nada— reproducido dentro de la prueba que existe para impedirlo. La
+regresión que hay que atrapar no es "se emite PHI", es "se escribió código que
+emitiría PHI si alguien cambia un nivel de log".
 
 ### Razonamiento
 
@@ -889,12 +927,19 @@ tercera —la que escriba alguien dentro de seis meses— no llegue a producció
 Sin el guardián esto se repite, porque escribir el nombre en un log es lo
 natural cuando estás depurando.
 
-**Qué NO cubre esta decisión.** El traceback de `bot.py:536` (`logger.exception`)
-sí se emite y arrastra el mensaje de la excepción. El encabezado propio usa solo
-`pk`s, pero una excepción de terceros podría cargar un valor clínico. **No hay
-ningún caso conocido**; se registra como exposición condicional y se deja fuera
-del Loop D. Redactar tracebacks es una capa de logging propia, no un parche, y
-merece su propia decisión cuando exista un caso real que la justifique.
+### Riesgo residual aceptado
+
+El traceback de `bot.py:536` (`logger.exception`) sí se emite —ERROR pasa el
+umbral— y arrastra el mensaje de la excepción. El encabezado que escribe este
+código usa solo `pk`s, pero una excepción de terceros podría cargar un valor
+clínico. **No hay ningún caso conocido**; se registra como exposición
+condicional, fuera del alcance de D11 y fuera del Loop D.
+
+Redactar tracebacks es una capa de logging propia, no un parche, y merece su
+propia decisión cuando exista un caso real que la justifique. Lo que sí exige
+esta ficha es que **ningún comentario del código afirme lo contrario**: la
+promesa que se escriba en `settings.py` debe describir la salida nominal, no
+insinuar que los tracebacks están saneados.
 
 ---
 
@@ -924,12 +969,27 @@ sus pacientes en huérfanos invisibles, en silencio.**
 
 Reproducido el 27/07/2026 con el formulario real del Admin.
 
+**Y dos vías más, señaladas por Codex al revisar la primera versión de esta
+ficha** (verificadas contra el código antes de aceptarlas):
+
+- `seed_demo_produccion.py:190` crea los pacientes de ejemplo **sin médico** si
+  no encuentra un superusuario, con solo un `WARNING` en pantalla.
+- `seed_demo_produccion.py:183` acepta **cualquier `username`** en `--medico`,
+  sin comprobar que sea `is_staff`, que pertenezca al grupo Médicos ni que tenga
+  correo. Un paciente asignado a un usuario así no es huérfano —el campo está
+  lleno— pero **nadie puede verlo ni recibir su alerta**, y ninguno de los dos
+  avisos de la capa 3 lo detectaba.
+
 ### Decisión
 
-**Invariante clínico: todo paciente activo tiene un médico responsable, y esa
-atribución es histórica e indeleble.**
+**Invariante clínico: todo paciente ACTIVO tiene un médico responsable que
+puede verlo y recibir sus alertas; y la atribución, una vez hecha, es histórica
+e indeleble.**
 
-Se sostiene en tres capas, porque una sola no alcanza:
+La palabra *activo* es la que hace que el invariante sea cumplible y no un deseo:
+las filas históricas e inactivas conservan lo que tengan, incluido `NULL`.
+
+Se sostiene en cuatro capas, porque ninguna alcanza sola:
 
 1. **La puerta de entrada.** El formulario del Admin exige el campo. Si quien
    guarda es un médico no-superusuario, se le asigna a él automáticamente. El
@@ -937,9 +997,18 @@ Se sostiene en tres capas, porque una sola no alcanza:
 2. **La puerta de atrás.** `on_delete=SET_NULL` → **`PROTECT`**. Django se niega
    a borrar una cuenta de médico mientras tenga pacientes: obliga a reasignarlos
    explícitamente antes.
-3. **La red.** El tablero del superusuario avisa de dos condiciones que hoy son
-   invisibles: *pacientes activos sin médico responsable* y **_pacientes activos
-   cuyo médico está inactivo_**.
+3. **La red.** El tablero del superusuario avisa de los pacientes **activos sin
+   nadie que pueda atenderlos**: sin médico responsable, o con un médico que
+   está inactivo, **o que no tiene acceso al Admin (`is_staff=False`), o que no
+   tiene correo**. Las cuatro condiciones producen el mismo daño clínico —nadie
+   mira a ese paciente— y por eso comparten un solo aviso.
+4. **La garantía.** `CheckConstraint` en `Paciente`: **`activo=True` implica
+   `medico_responsable` no nulo**. La base de datos rechaza la fila, venga del
+   Admin, de un script, del shell o de un comando.
+
+Y el comando que hoy los fabrica se corrige: `seed_demo_produccion` **se niega a
+crear pacientes sin médico** en vez de advertirlo, y valida que el `--medico`
+recibido sea un médico usable (activo, `is_staff`, con correo).
 
 **Regla operativa que acompaña a la decisión:** las cuentas de médico **no se
 borran, se desactivan** (`is_active=False`); y antes de desactivar una, se
@@ -961,12 +1030,23 @@ usar el sistema no puede entrar, pero su nombre sigue colgando de cada paciente
 que atendió y de cada alerta que resolvió. No se pierde nada y no hay que migrar
 nada. `PROTECT` no es la regla: es lo que impide saltársela por descuido.
 
-**Por qué tres capas y no una.** Cada una tapa lo que las otras no ven. El
+**Por qué cuatro capas y no una.** Cada una tapa lo que las otras no ven. El
 formulario cubre el camino de todos los días; `PROTECT` cubre el borrado
-administrativo; el aviso del tablero cubre todo lo demás —un script, un import,
-una carga de datos— porque **el problema real de este hallazgo no es que el
-paciente quede huérfano: es que quede huérfano en silencio.** Un huérfano
-visible es un pendiente; uno invisible es un paciente sin atención.
+administrativo; la restricción cubre todo lo que no pasa por Django —un script,
+el shell, una carga de datos—; y el aviso del tablero cubre lo que ninguna
+impide: el paciente cuyo médico existe pero **no puede atenderlo**. Porque **el
+problema real de este hallazgo no es que el paciente quede huérfano: es que
+quede huérfano en silencio.** Un huérfano visible es un pendiente; uno invisible
+es un paciente sin atención.
+
+**Por qué el invariante se acotó a los pacientes activos.** La primera versión de
+esta ficha prometía *"todo paciente activo tiene un médico responsable"* en el
+título y, tres párrafos después, admitía en el razonamiento que la garantía real
+era sobre el silencio, no sobre la existencia del huérfano. Codex leyó el título,
+enumeró cuatro vías por las que un huérfano seguía naciendo, y tenía razón: la
+ficha se contradecía a sí misma. La respuesta no fue rebajar la promesa sino
+**hacerla verdadera**, con la capa 4. Una decisión que promete de más es peor que
+una que promete poco: la siguiente persona confía en ella.
 
 **Por qué el aviso de "médico inactivo" pesa tanto como el de "sin médico".** Es
 el riesgo operativo del día a día una vez aplicada la regla de desactivar en vez
@@ -975,15 +1055,21 @@ respondiendo al bot, y sus alertas ALTA viajan al correo de alguien que ya no
 entra al sistema. El síntoma es idéntico —nadie mira a ese paciente— pero la
 causa no se detecta con la comprobación de huérfanos.
 
-**Por qué NO se pone `NOT NULL` en la base de datos ahora.** La puerta que está
-abierta es el formulario, y ésa la cierra la capa 1. `NOT NULL` obligaría a
-resolver hoy dos cosas que no tienen respuesta: los estados transitorios
-legítimos —`seed_demo_produccion` avisa explícitamente que puede dejar pacientes
-sin asignar si no hay superusuario— y la migración de las filas existentes en
-producción. Es la misma precaución de D9: no se altera una columna en producción
-en medio de un merge bloqueado. **Queda como candidato explícito** para cuando
-ya no pueda nacer un huérfano por ninguna vía; entonces será una migración
-aburrida en vez de una decisión.
+**Por qué una restricción condicional y no `NOT NULL`.** `NOT NULL` obligaría a
+inventarle un médico a cada fila histórica e inactiva que hoy no lo tiene —
+fabricar una atribución clínica, justo lo que D3 se negó a hacer. La restricción
+`activo ⇒ responsable` deja esas filas en paz y protege exactamente el caso que
+importa: el paciente que **hoy** está siendo monitoreado. Es más estrecha y más
+fuerte a la vez. La sugirió Codex al revisar la primera versión de esta ficha.
+
+**La compuerta antes de la capa 4, que no es opcional.** El `Dockerfile` encadena
+`migrate --noinput && gunicorn`: **si la migración falla, el contenedor no
+arranca.** Añadir una restricción que alguna fila existente viole no produce un
+error en el log — produce el sitio caído. Por eso el Loop D empieza por dos
+consultas de **solo lectura** contra producción (paso D-0): cero pacientes
+activos sin responsable, y cero pacientes activos con un médico inactivo, sin
+`is_staff` o sin correo. Si alguna devuelve filas, **se arreglan los datos antes
+de escribir la migración**. Es la misma disciplina de D7: contar antes de actuar.
 
 ### Efecto secundario conocido y aceptado
 
@@ -1057,6 +1143,78 @@ siempre que Django no reconstruye la URL pública `https`, y eso se arregla con
 de Redis, y esa decisión se justificó precisamente en que *la firma de Twilio
 protege el webhook*. D13 convierte ese supuesto en garantía. Codex registró la
 misma condición al revisar D2.
+
+---
+
+<a id="d14"></a>
+## D14 — Aislamiento entre las tareas de un mismo cron
+
+**Hallazgo:** auditoría de cierre, riesgo residual (d) · **Loop:** E ·
+**Estado:** Decidida, **sin implementar**
+
+### Problema
+
+`cron_matutino` y `cron_operativo` ejecutan sus tareas con `call_command` en un
+bucle sin manejo de errores. **Si una tarea falla, las siguientes no corren.**
+
+La verificación del 27/07 comprobó que el fallo de
+`procesar_notificaciones_email` no arrastra a nadie —es la última de ambas
+listas— y de ahí se concluyó "no hay efecto dominó". **La conclusión era más
+amplia que la evidencia**, y Codex lo señaló: eso demuestra que la *última*
+tarea está aislada, no que las tareas estén aisladas entre sí.
+
+El caso que importa es el contrario. En `cron_operativo`:
+
+```
+cerrar_checkins_vencidos → reintentar_evaluaciones_alertas → procesar_notificaciones_email
+```
+
+Un fallo persistente de la **primera** impide que salgan los correos de alerta
+ALTA de ese ciclo. La tarea que genera las alertas de silencio y la que entrega
+los avisos al médico están encadenadas por una razón que no es clínica: que el
+plan de Railway no daba para más servicios cron.
+
+### Decisión
+
+**Un fallo operativo no puede impedir que se entregue una alerta clínica ya
+generada.** Las tareas de un cron se aíslan entre sí, **salvo cuando existe una
+dependencia clínica declarada.**
+
+1. El runner ejecuta **todas** las tareas, captura el fallo de cada una, y
+   **termina con estado de error** informando cuáles fallaron. No se rinde en la
+   primera ni finge que todo salió bien.
+2. **Excepción declarada:** en `cron_matutino`, si `desactivar_pacientes_vencidos`
+   falla, `crear_checkins_diarios` **no debe ejecutarse**. Las dependencias se
+   escriben en el propio comando, con su motivo clínico al lado.
+
+### Razonamiento
+
+**Por qué no basta con "continuar ante el fallo".** Es la corrección obvia y
+sería un error. `cron_matutino` tiene un orden clínicamente obligatorio, escrito
+en su propio docstring: `desactivar_pacientes_vencidos` va **antes** de
+`crear_checkins_diarios` porque, si no, un paciente que vence ese día recibe un
+check-in que quedará `PENDIENTE` para siempre y **generará una alerta SILENCIO
+espuria**. Continuar ciegamente tras el fallo de la primera produce exactamente
+ese daño. El aislamiento tiene que ser **selectivo y declarado**, no automático.
+
+**Por qué termina en error igualmente.** Rendirse en silencio sería peor que
+fallar — es el mismo razonamiento de D6. Railway marca la corrida como fallida y
+eso es una señal operativa legítima; lo que no es legítimo es que esa señal
+cueste los correos del ciclo.
+
+**Por qué no bloquea el merge y va en un loop aparte.** Es una condición
+**preexistente**: la rama `sprint-5-produccion` no la introduce ni la empeora, y
+`cron_operativo` corre cada 5 minutos, así que un fallo transitorio se cura solo
+en el siguiente ciclo. Lo que no se cura solo es un fallo persistente. Se
+implementa antes del piloto con pacientes reales, no antes del merge.
+
+### Deuda de infraestructura asociada
+
+El agrupamiento existe porque el plan actual de Railway limita el número de
+servicios cron (ver `CLAUDE.md`, "Por resolver antes del piloto real", punto 5).
+Al mejorar el plan, `cron-operativo` pasa a servicio propio y `cron-tarde`
+vuelve a su horario original — y buena parte de este acoplamiento desaparece por
+sí solo. D14 es lo que hace que el sistema sea correcto **mientras tanto**.
 
 ---
 

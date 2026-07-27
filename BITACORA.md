@@ -3702,3 +3702,144 @@ cerrar check-ins sin que nadie se enterara.
 
 Trampa registrada en `docs/trampas_conocidas.md` y regla en
 `docs/railway_deploy.md`.
+
+---
+
+## Sprint 5 — Auditoría de cierre pre-merge y decisiones del Loop D
+**Fecha:** 27/07/2026
+**Responsable:** León (Arquitecto IA) con Claude Code
+**Estado:** DECISIONES ESCRITAS — Loop D sin empezar
+
+### Qué se hizo
+
+La sesión anterior se cortó (pestaña cerrada) justo cuando iba a llegar el
+informe de la auditoría de cierre. Se reconstruyó el estado desde el
+repositorio, no desde la memoria de nadie: `git log`, el "Estado de avance" de
+`docs/decisiones_correccion_auditoria.md`, y una **medición propia de la línea
+base** antes de leer nada del auditor — 319 tests OK, `check` limpio,
+migraciones al día, `pip-audit` sin vulnerabilidades. Sirvió para contrastar las
+cifras del informe en vez de creerlas.
+
+**El informe de Codex volvió a bloquear el PR**, con dos hallazgos ALTOS. Los
+cuatro se reprodujeron contra el código antes de aceptar ninguno, con un arnés
+desechable fuera del repositorio. El resultado completo quedó escrito en
+`docs/proceso/auditorias/2026-07-27_informe_cierre_codex.md`.
+
+**Hallazgo 1 — identidad del paciente en la salida operativa.** Confirmado,
+pero **por un canal distinto al que reportaba el informe**. El logger
+`signos_sintomas` está en nivel WARNING, así que todos los `logger.info` con
+datos del paciente se descartan antes de emitirse; lo que sí llega a Railway es
+`self.stdout.write` de `desactivar_pacientes_vencidos`, con el nombre completo y
+el día postoperatorio. Corregir la línea que señalaba Codex no habría cerrado
+nada. La reproducción encontró además una ocurrencia que el informe no vio:
+`enviar_recordatorios` arma nombre completo **y teléfono** de cada check-in
+pendiente — hoy mudo por el nivel del logger, y a un cambio de configuración de
+volcarse entero. Y el comentario de `settings.py` promete un filtro PHI que no
+existe.
+
+**Hallazgo 2 — paciente activo sin médico responsable.** Confirmado y peor de lo
+reportado. El formulario del Admin no exige el campo y el desplegable nace
+vacío, con una sola opción posible. El paciente resultante sigue activo y
+generando alertas, pero desaparece del listado del médico **y de los KPI del
+tablero**: el médico ve ceros, no un hueco. Su alerta ALTA queda sin
+destinatario y deja `procesar_notificaciones_email` en `CommandError`. Se
+verificó que no hay efecto dominó —esa tarea es la última de ambos cron—, lo que
+resultó ser una conclusión demasiado amplia (ver más abajo).
+
+**Hallazgo 3 — la firma de Twilio depende del entorno.** `settings_production`
+no vuelve a fijar `TWILIO_VALIDATE_SIGNATURE`. Verificado en el panel de
+Railway: la variable **no existe**, así que hoy la validación está activa por el
+default del código.
+
+**Hallazgo 4 — cinco documentos que contradicen el código.** Los cinco
+confirmados. El del ROADMAP no era polvo documental: enunciaba la escalera
+SILENCIO como 1/2/3+ cuando el código y `reglas_clinicas.md` dicen 1/2/4. Se
+corrigió en esta misma sesión, junto con el estado de CLAUDE.md.
+
+### Decisiones tomadas
+
+**D11 — la salida operativa no contiene identidad del paciente.** Se identifica
+por `pk`, como ya hace el resto del código. Con una prueba guardián que captura
+stdout, stderr y logs **forzando nivel INFO**: bajo el nivel WARNING de
+producción, un guardián normal pasaría en verde con el defecto puesto — el mismo
+fallo de julio reproducido dentro de la prueba que debe impedirlo.
+
+**D12 — todo paciente ACTIVO tiene un médico que puede verlo y recibir sus
+alertas.** Cuatro capas: formulario obligatorio con autoasignación,
+`on_delete=PROTECT` para que borrar una cuenta médica no fabrique huérfanos en
+silencio, un `CheckConstraint` que la base rechaza venga de donde venga, y un
+aviso en el tablero para el paciente cuyo médico existe pero no puede atenderlo.
+Más la regla operativa: **las cuentas de médico no se borran, se desactivan** —
+quién atendió a un paciente es parte de la historia clínica, no un dato de
+configuración.
+
+**D13 — la autenticidad del webhook no depende del entorno.**
+`TWILIO_VALIDATE_SIGNATURE = True` fijo en `settings_production`, y **no crear
+la variable en Railway**: `python-decouple` convierte cadena vacía en `False`, y
+Railway vacía toda referencia que no resuelve. Crear la casilla introduciría el
+mismo modo de fallo del incidente del 25/07, con la diferencia de que este
+fallaría **abriendo la cerradura en silencio**.
+
+**D14 — aislamiento entre las tareas de un mismo cron.** Escrita, sin
+implementar, para el Loop E.
+
+### Problemas encontrados y resueltos
+
+**Dos fichas prometían más de lo que garantizaban.** Codex revisó las
+decisiones antes de programar —ese fue el punto de pedirle una segunda vuelta— y
+encontró que D11 declaraba un invariante absoluto sobre "la salida operativa"
+mientras excluía los tracebacks tres párrafos después, y que D12 prometía en el
+título *"todo paciente activo tiene médico responsable"* mientras su propio
+razonamiento admitía que la garantía real era sobre el silencio, no sobre la
+existencia del huérfano. Enumeró cuatro vías por las que un huérfano seguía
+naciendo, y las cuatro se verificaron ciertas — incluidas dos en
+`seed_demo_produccion` que nadie había mirado: crea pacientes sin médico cuando
+no hay superusuario, y acepta cualquier `username` en `--medico` sin comprobar
+que sea un médico usable.
+
+La respuesta no fue rebajar la promesa sino **hacerla verdadera**, con la cuarta
+capa. Una decisión que promete de más es peor que una que promete poco: la
+siguiente persona confía en ella. La lección de método queda registrada — **el
+mismo rigor que se le exige a un test en verde hay que exigírselo a una ficha de
+decisión**: hay que verificar por qué es cierta.
+
+**Una conclusión propia demasiado amplia.** Al verificar el hallazgo 2 se
+comprobó que el fallo del envío de correo no arrastra a ninguna otra tarea del
+cron, y se concluyó "no hay efecto dominó". Codex señaló que eso demuestra que
+la *última* tarea está aislada, no que las tareas lo estén entre sí: un fallo
+persistente de `cerrar_checkins_vencidos` sí impide que salgan los correos de
+alerta ALTA de ese ciclo. Tenía razón. De ahí salió D14 — y con ella la
+constatación de que la corrección obvia (continuar tras el fallo) habría sido
+**incorrecta**, porque `cron_matutino` tiene una dependencia clínica declarada:
+desactivar antes de crear check-ins, o se generan alertas SILENCIO espurias.
+
+**Una compuerta que no se había visto.** El `Dockerfile` encadena
+`migrate --noinput && gunicorn`. Una migración que falle no produce un error en
+el log: deja el contenedor sin arrancar. Como la capa 4 de D12 añade una
+restricción que las filas existentes deben cumplir, el Loop D empieza por dos
+consultas de **solo lectura** contra producción. Es la disciplina de D7: contar
+antes de actuar.
+
+### Decisiones de operación
+
+**Rama de despliegue.** Se confirmó en el panel que Railway sigue
+`sprint-5-produccion`: cada push sale a producción, y mergear a `Desarrollo` no
+despliega nada. Se decidió que el destino tampoco es `Desarrollo` —es la rama de
+integración, donde aterriza trabajo a medio terminar— sino una rama `produccion`
+creada después del merge. Pasos y advertencias en `docs/railway_deploy.md`,
+sección 4.1, incluida la más importante: **nunca apuntar Railway a `Desarrollo`
+antes del merge**, porque va 101 commits atrás y revertiría producción a código
+anterior a los cuatro loops, con la escalera de SILENCIO rota.
+
+### Qué queda pendiente
+
+**Loop D, paso D-0:** las dos consultas de solo lectura en Railway — pacientes
+activos sin responsable, y pacientes activos cuyo médico está inactivo, sin
+`is_staff` o sin correo. Las ejecuta el Arquitecto y son la compuerta de la
+migración del paso D-6. Si alguna devuelve filas, se arreglan los datos antes de
+escribir la migración.
+
+Después, en orden: D-1 (prueba en rojo), D-2 (firma), D-3 (PHI), D-4/5/6/7 (las
+cuatro capas de D12), D-8 (seed) y D-9 (documentación). Un solo push al final,
+con todo verde, mirando el log del deploy y `/salud/` después. Detalle en el
+"Estado de avance" de `docs/decisiones_correccion_auditoria.md`.

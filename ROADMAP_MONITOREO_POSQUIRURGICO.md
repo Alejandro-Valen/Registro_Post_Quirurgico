@@ -371,8 +371,9 @@ Restricción: como máximo una alerta abierta por `(paciente, tipo)`.
 
 - [x] **NUEVA alerta clínica: silencio del paciente.** RESUELTO en Sprint 4
   (Bloque 4, 26/06/2026, ver FASE 4 abajo): tipo `SILENCIO`, racha check a
-  check (1→BAJA, 2 consecutivos→MEDIA, 3+→ALTA), implementado en
-  `cerrar_checkins_vencidos`.
+  check, implementado en `cerrar_checkins_vencidos`. **La escalera vigente
+  (1→BAJA, 2→MEDIA, 4→ALTA) la fija `docs/reglas_clinicas.md`**, corregida en
+  el Loop A por la decisión D1 — este archivo no la duplica.
 
 - [x] **Gating del alert_engine — 2 políticas.** RESUELTO en Sprint 4
   (Bloque 2B, 26/06/2026, ver FASE 4 abajo):

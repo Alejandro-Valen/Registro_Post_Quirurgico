@@ -188,14 +188,27 @@ romperlo con 15 comprobaciones. Pero encontró **14 hallazgos** y dejó el PR
 `SILENCIO / BAJA`, y las 280 pruebas lo dejaban pasar porque estaban escritas
 mirando el código en vez del requisito.
 
-La corrección se organizó en tres loops, con las decisiones D1-D10 tomadas y
-documentadas **antes** de escribir código en
-`docs/decisiones_correccion_auditoria.md`. Ese archivo es la fuente de verdad
-del trabajo de corrección e incluye el estado de avance por commit.
+La corrección se organizó en loops, con las decisiones tomadas y documentadas
+**antes** de escribir código en `docs/decisiones_correccion_auditoria.md`. Ese
+archivo es la fuente de verdad del trabajo de corrección e incluye el estado de
+avance por commit.
 
 - **Loop A** (clínico, bloqueante): cerrado y verificado por el Arquitecto.
 - **Loop B** (trazabilidad y operación): cerrado y verificado.
-- **Loop C** (coherencia e higiene): **en curso.**
+- **Loop C** (coherencia e higiene): cerrado y verificado.
+
+**Qué pasó (27/07/2026).** La auditoría de cierre pre-merge (Codex) **volvió a
+bloquear el PR** con dos hallazgos ALTOS: identidad del paciente en la salida
+operativa, y un paciente activo que puede quedarse sin médico responsable —
+invisible para todos. Los cuatro hallazgos se reprodujeron contra el código
+antes de aceptarlos; la verificación cambió de sitio una corrección y encontró
+una ocurrencia que el informe no vio. Informe completo en
+`docs/proceso/auditorias/2026-07-27_informe_cierre_codex.md`.
+
+- **Loop D** (privacidad operativa, responsable clínico, firma del webhook):
+  decisiones **D11-D13** escritas y revisadas. **Sin empezar.** Bloquea el merge.
+- **Loop E** (aislamiento de las tareas del cron): decisión **D14** escrita.
+  No bloquea el merge; va antes del piloto con pacientes reales.
 
 **Método de trabajo de los loops:** decidir → documentar → **test en rojo** →
 implementar → verificación del Arquitecto → un loop por sesión. Nació de la
@@ -207,10 +220,17 @@ se verifica por qué está verde.*
 variables y los gotchas están en `docs/railway_deploy.md`.
 
 **Próximo paso exacto (al retomar):** verificar el estado real contra `git log` y
-la suite antes de proponer nada, y continuar por donde diga el "Estado de
-avance" de `docs/decisiones_correccion_auditoria.md`. La auditoría **ya se
-ejecutó — no repetirla.** Solo al cerrar el Loop C se prepara el PR hacia
-`Desarrollo`, se revisa el diff completo y se decide el merge.
+la suite antes de proponer nada, y continuar por el "Estado de avance" de
+`docs/decisiones_correccion_auditoria.md` — hoy: **Loop D, paso D-0**, dos
+consultas de solo lectura contra Railway que ejecuta el Arquitecto y que son la
+compuerta de la migración de D-6. Las dos auditorías **ya se ejecutaron — no
+repetirlas.** Solo al cerrar el Loop D se prepara el PR hacia `Desarrollo`, se
+revisa el diff completo y se decide el merge.
+
+**Railway despliega desde `sprint-5-produccion`:** cada push a la rama activa
+sale a producción, y mergear a `Desarrollo` no despliega nada. La rama de
+despliegue definitiva y su plan de migración están en `docs/railway_deploy.md`,
+sección 4.1.
 
 ### Por resolver antes del piloto real
 
