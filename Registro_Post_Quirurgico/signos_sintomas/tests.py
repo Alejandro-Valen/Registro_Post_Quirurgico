@@ -5714,3 +5714,210 @@ class AdminFiltrosNoExponenOtrasCuentasTests(TestCase):
         contenido = resp.content.decode()
         self.assertIn('Paciente del filtro 1', contenido)
         self.assertNotIn('Paciente del filtro 2', contenido)
+
+
+# ===========================================================================
+# Loop D — D-1: pruebas en rojo de la auditoría de cierre (27/07/2026)
+# Fichas D11, D12 y D13 en docs/decisiones_correccion_auditoria.md
+# ===========================================================================
+
+
+class SalidaOperativaSinIdentidadTests(TestCase):
+    """D11 — la salida nominal de un comando no lleva identidad del paciente.
+
+    Invariante: ninguna salida que el sistema escribe deliberadamente —stdout,
+    stderr o logs— contiene el nombre ni el teléfono de un paciente. Railway
+    conserva esa salida, y quien tiene derecho a saber a quién le pasó algo
+    entra al panel autenticado.
+
+    POR QUÉ ESTE GUARDIÁN FUERZA EL NIVEL INFO. En producción el logger
+    `signos_sintomas` está en WARNING, así que la línea de `enviar_recordatorios`
+    con nombre y teléfono hoy no se emite. Un guardián que corriera con la
+    configuración normal **pasaría en verde con el defecto puesto**: sería una
+    prueba verde que no prueba nada, el mismo fallo que dejó viva la escalera de
+    SILENCIO durante seis loops. Lo que hay que atrapar no es "se emite PHI",
+    es "se escribió código que emitiría PHI si alguien baja un nivel de log".
+    """
+
+    NOMBRE = 'Nombre Inconfundible De Prueba'
+    TELEFONO = '+573009998877'
+
+    def setUp(self):
+        self.paciente = Paciente.objects.create(
+            nombre_completo=self.NOMBRE,
+            telefono_whatsapp=self.TELEFONO,
+            cedula='PHI-0001',
+            fecha_cirugia=timezone.localdate() - timedelta(days=12),
+        )
+        # fecha_registro es auto_now_add: se retrasa con UPDATE para superar el
+        # guard DIAS_GRACIA_INGRESO de desactivar_pacientes_vencidos.
+        Paciente.objects.filter(pk=self.paciente.pk).update(
+            fecha_registro=timezone.now() - timedelta(days=5)
+        )
+
+    def _todo_lo_que_escribe(self, comando):
+        """stdout + stderr + logs del comando, con el logger forzado a INFO."""
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        salida, errores = StringIO(), StringIO()
+        with self.assertLogs('signos_sintomas', level='INFO') as capturado:
+            call_command(comando, stdout=salida, stderr=errores)
+        return '\n'.join(
+            [salida.getvalue(), errores.getvalue(), *capturado.output]
+        )
+
+    def test_desactivar_pacientes_vencidos_no_nombra_al_paciente(self):
+        escrito = self._todo_lo_que_escribe('desactivar_pacientes_vencidos')
+
+        self.assertNotIn(self.NOMBRE, escrito)
+
+    def test_desactivar_pacientes_vencidos_identifica_al_paciente_por_pk(self):
+        """Retirar el nombre no puede dejar la salida inservible para operar."""
+        escrito = self._todo_lo_que_escribe('desactivar_pacientes_vencidos')
+
+        self.assertIn('pk={}'.format(self.paciente.pk), escrito)
+
+    def test_enviar_recordatorios_no_expone_nombre_ni_telefono(self):
+        CheckInProgramado.objects.create(
+            paciente=self.paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now() - timedelta(hours=1),
+        )
+
+        escrito = self._todo_lo_que_escribe('enviar_recordatorios')
+
+        self.assertNotIn(self.NOMBRE, escrito)
+        self.assertNotIn(self.TELEFONO, escrito)
+
+
+class PacienteActivoExigeMedicoTests(TestCase):
+    """D12 — todo paciente ACTIVO tiene un médico que puede atenderlo.
+
+    Un paciente activo sin médico responsable no es un pendiente visible: es un
+    paciente invisible. Desaparece del listado del médico, desaparece de los KPI
+    del tablero (el médico ve ceros, no un hueco) y su alerta ALTA queda con
+    destinatario vacío. Cuatro capas, cada una tapa lo que las otras no ven.
+    """
+
+    def setUp(self):
+        from django.contrib.auth.models import Permission
+        from django.contrib.contenttypes.models import ContentType
+
+        User = get_user_model()
+        self.medico = User.objects.create_user(
+            username='dra_d12',
+            password='pass',
+            is_staff=True,
+            email='dra_d12@ejemplo.com',
+        )
+        ct = ContentType.objects.get_for_model(Paciente)
+        self.medico.user_permissions.add(
+            *Permission.objects.filter(content_type=ct)
+        )
+
+    def test_el_admin_no_deja_nacer_un_paciente_activo_sin_medico(self):
+        """Capa 1 — la puerta de entrada de todos los días.
+
+        El desplegable nace vacío y con una sola opción posible (el propio
+        médico). Dejarlo así es el camino de menor resistencia, no un descuido
+        rebuscado. Da igual si el formulario lo rechaza o si se lo asigna solo:
+        lo que no puede quedar es un paciente activo sin responsable.
+        """
+        self.client.force_login(self.medico)
+
+        self.client.post(
+            '/admin/signos_sintomas/paciente/add/',
+            {
+                'nombre_completo': 'Paciente Sin Responsable',
+                'cedula': 'D12-0001',
+                'telefono_whatsapp': '+573007770001',
+                'fecha_cirugia': timezone.localdate().isoformat(),
+                # `activo` es un checkbox: omitirlo crea el paciente INACTIVO y
+                # la prueba pasaría en verde sin haber probado nada.
+                'activo': 'on',
+            },
+            follow=True,
+        )
+
+        self.assertFalse(
+            Paciente.objects.filter(
+                activo=True, medico_responsable__isnull=True
+            ).exists()
+        )
+
+    def test_borrar_la_cuenta_del_medico_no_deja_pacientes_huerfanos(self):
+        """Capa 2 — la puerta de atrás.
+
+        Con on_delete=SET_NULL, borrar una cuenta de médico convierte a todos
+        sus pacientes en huérfanos invisibles, en silencio. Quién atendió a un
+        paciente es historia clínica, no configuración.
+        """
+        from django.db.models import ProtectedError
+
+        Paciente.objects.create(
+            nombre_completo='Paciente Con Responsable',
+            telefono_whatsapp='+573007770002',
+            cedula='D12-0002',
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable=self.medico,
+        )
+
+        with self.assertRaises(ProtectedError):
+            self.medico.delete()
+
+    def test_la_base_rechaza_un_paciente_activo_sin_medico(self):
+        """Capa 4 — la garantía, para lo que no pasa por el Admin.
+
+        Un script, el shell o una carga de datos no ven el formulario. La
+        restricción vive en la base y no se puede esquivar.
+        """
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Paciente.objects.create(
+                    nombre_completo='Paciente De Script',
+                    telefono_whatsapp='+573007770003',
+                    cedula='D12-0003',
+                    fecha_cirugia=timezone.localdate(),
+                    medico_responsable=None,
+                    activo=True,
+                )
+
+    def test_un_paciente_inactivo_sin_medico_sigue_siendo_valido(self):
+        """NACE EN VERDE A PROPÓSITO: congela el alcance de la restricción.
+
+        La palabra *activo* es la que hace el invariante cumplible. Exigir el
+        médico en las filas históricas obligaría a inventarles uno — fabricar
+        una atribución clínica, justo lo que D3 se negó a hacer. Esta prueba
+        existe para que la capa 4 no se escriba como NOT NULL.
+        """
+        paciente = Paciente.objects.create(
+            nombre_completo='Paciente Histórico',
+            telefono_whatsapp='+573007770004',
+            cedula='D12-0004',
+            fecha_cirugia=timezone.localdate() - timedelta(days=30),
+            medico_responsable=None,
+            activo=False,
+        )
+
+        self.assertIsNone(paciente.medico_responsable)
+
+    def test_el_seed_de_produccion_se_niega_sin_medico_usable(self):
+        """El comando que hoy fabrica huérfanos: advierte y crea igual."""
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        get_user_model().objects.all().delete()
+
+        call_command(
+            'seed_demo_produccion', '--confirmar',
+            stdout=StringIO(), stderr=StringIO(),
+        )
+
+        self.assertFalse(
+            Paciente.objects.filter(cedula__startswith='DEMO-').exists()
+        )

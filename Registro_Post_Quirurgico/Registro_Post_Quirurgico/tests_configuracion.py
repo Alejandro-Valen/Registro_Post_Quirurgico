@@ -53,6 +53,30 @@ def cargar_settings_produccion(entorno):
     )
 
 
+def cargar_produccion_sobre_base_fresca(entorno):
+    """Carga producción SOBRE una copia fresca de `settings.py`.
+
+    Por qué hace falta: `settings_production.py` empieza con
+    `from .settings import *`, y ese import resuelve contra el módulo que ya
+    está en `sys.modules` — el que se evaluó al arrancar la suite, con el `.env`
+    de quien la ejecuta. Parchear el entorno **no tiene ningún efecto sobre los
+    valores heredados**: una prueba que verifique uno de ellos con
+    `cargar_settings_produccion` pasa en verde aunque el defecto siga puesto.
+    Se detectó exactamente así en D-1 (Loop D).
+
+    Aquí se ejecuta primero una copia fresca de la configuración base con el
+    entorno parcheado, se inyecta bajo el nombre que resolverá el import, y
+    recién entonces se carga producción. La inyección se deshace al salir.
+    """
+    import sys
+
+    base = _cargar_settings_base(entorno)
+    with mock.patch.dict(
+        sys.modules, {'Registro_Post_Quirurgico.settings': base}
+    ):
+        return cargar_settings_produccion(entorno)
+
+
 class ConfianzaCabecerasProxyTests(SimpleTestCase):
     """Hallazgo 6 — la confianza en cabeceras de proxy debe ser explícita.
 
@@ -159,3 +183,50 @@ class VariablesEntornoVaciasTests(SimpleTestCase):
 
         self.assertFalse(produccion.DEBUG)
         self.assertEqual(produccion.RESEND_FROM_EMAIL, 'avisos@ejemplo.com')
+
+
+class FirmaTwilioNoDependeDelEntornoTests(SimpleTestCase):
+    """D13 — en producción la validación de firma no se lee del entorno.
+
+    La firma `X-Twilio-Signature` es la ÚNICA cerradura del webhook: la URL es
+    pública y adivinable, no hay login y está exenta de CSRF. Sin validación,
+    cualquiera que conozca la URL puede inyectar telemetría falsa en la historia
+    de un paciente, o cerrar su check-in del día como respondido —apagando la
+    alerta SILENCIO de alguien que en realidad no respondió—. Ni el rate limit
+    ni la validación del SID lo impiden: ninguno autentica.
+
+    `settings_production` hoy no fija la variable: hereda lo que diga el
+    entorno, y `check --deploy` no lo reporta.
+    """
+
+    def test_variable_ausente_mantiene_la_validacion_activa(self):
+        """NACE EN VERDE: es el estado real de Railway hoy, y debe seguir así."""
+        produccion = cargar_produccion_sobre_base_fresca(
+            dict(ENTORNO_PRODUCCION_VALIDO)
+        )
+
+        self.assertTrue(produccion.TWILIO_VALIDATE_SIGNATURE)
+
+    def test_variable_vacia_no_desactiva_la_validacion(self):
+        """El modo de fallo real: Railway reemplaza por cadena vacía toda
+        referencia que no puede resolver (trampas_conocidas, 25/07), y
+        python-decouple convierte '' en False. La cerradura se abriría sola,
+        en silencio, el día que alguien mueva la variable de sitio."""
+        entorno = dict(ENTORNO_PRODUCCION_VALIDO, TWILIO_VALIDATE_SIGNATURE='')
+
+        produccion = cargar_produccion_sobre_base_fresca(entorno)
+
+        self.assertTrue(produccion.TWILIO_VALIDATE_SIGNATURE)
+
+    def test_variable_en_false_no_desactiva_la_validacion(self):
+        """False es legítimo en desarrollo local, donde no hay firma que
+        validar. Que la misma palanca exista en producción significa que una
+        variable copiada entre servicios desactiva la autenticación del canal
+        por el que entra toda la información clínica del sistema."""
+        entorno = dict(
+            ENTORNO_PRODUCCION_VALIDO, TWILIO_VALIDATE_SIGNATURE='False'
+        )
+
+        produccion = cargar_produccion_sobre_base_fresca(entorno)
+
+        self.assertTrue(produccion.TWILIO_VALIDATE_SIGNATURE)
