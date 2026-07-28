@@ -68,6 +68,31 @@ def panel_triage(context):
     activos = pacientes.filter(activo=True)
     pendientes = alertas.filter(resuelta=False)
 
+    # D12 (capa 3) — pacientes activos que NADIE puede atender.
+    #
+    # Las otras tres capas impiden que el paciente quede huérfano; ninguna
+    # impide que su médico exista pero no pueda atenderlo. Las cuatro
+    # condiciones producen el mismo daño clínico —nadie mira a ese paciente— y
+    # por eso comparten un solo aviso:
+    #   · sin médico responsable  (imposible desde la migración 0028 en un
+    #     paciente activo; se conserva por si la restricción se retirara)
+    #   · médico desactivado      (el riesgo del día a día: se desactiva al
+    #     médico que se fue y sus pacientes siguen vivos)
+    #   · médico sin is_staff     (no puede entrar al Admin: no lo ve nadie)
+    #   · médico sin correo       (la alerta ALTA no tiene a dónde ir, y
+    #     procesar_notificaciones_email queda en rojo permanente)
+    #
+    # Solo para el superusuario: es información de administración de cuentas, y
+    # un médico no puede ver pacientes que no son suyos.
+    sin_atencion = 0
+    if user.is_superuser:
+        sin_atencion = Paciente.objects.filter(activo=True).filter(
+            Q(medico_responsable__isnull=True)
+            | Q(medico_responsable__is_active=False)
+            | Q(medico_responsable__is_staff=False)
+            | Q(medico_responsable__email='')
+        ).count()
+
     total_checkins = checkins.count()
     respondidos = checkins.filter(estado=CheckInProgramado.ESTADO_COMPLETADO).count()
     kpi = {
@@ -162,6 +187,7 @@ def panel_triage(context):
         'contactos': contactos,
         'total_mensajes_contacto': total_mensajes_contacto,
         'notificaciones_fallidas': fallidas.count(),
+        'sin_atencion': sin_atencion,
         'pacientes': pacientes_tabla,
         'hoy': hoy,
         'es_super': user.is_superuser,

@@ -5992,6 +5992,90 @@ class PacienteActivoExigeMedicoTests(TestCase):
 
         self.assertIsNone(paciente.medico_responsable)
 
+    def _paciente_de(self, medico, sufijo):
+        return Paciente.objects.create(
+            nombre_completo='Paciente Sin Atención {}'.format(sufijo),
+            telefono_whatsapp='+5730077711{}'.format(sufijo),
+            cedula='D12-ATN-{}'.format(sufijo),
+            fecha_cirugia=timezone.localdate(),
+            medico_responsable=medico,
+            activo=True,
+        )
+
+    def _contexto_del_tablero(self):
+        from django.test import RequestFactory
+
+        from .templatetags.panel_admin import panel_triage
+
+        peticion = RequestFactory().get('/')
+        peticion.user = get_user_model().objects.create_superuser(
+            username='super_tablero', password='pass', email='s@ejemplo.com'
+        )
+        return panel_triage({'request': peticion})
+
+    def test_el_tablero_avisa_del_medico_inactivo(self):
+        """Capa 3 — el riesgo operativo del día a día.
+
+        Es la consecuencia directa de la regla "las cuentas no se borran, se
+        desactivan": se desactiva al médico que se fue, sus pacientes siguen
+        vivos respondiendo al bot, y sus alertas ALTA viajan al correo de
+        alguien que ya no entra al sistema. El síntoma es idéntico al del
+        huérfano —nadie mira a ese paciente— pero ninguna otra capa lo detecta.
+        """
+        medico = get_user_model().objects.create_user(
+            username='dr_inactivo', password='x', is_staff=True,
+            email='dr_inactivo@ejemplo.com', is_active=False,
+        )
+        self._paciente_de(medico, '1')
+
+        self.assertEqual(self._contexto_del_tablero()['sin_atencion'], 1)
+
+    def test_el_tablero_avisa_del_medico_sin_acceso_al_admin(self):
+        medico = get_user_model().objects.create_user(
+            username='dr_sin_staff', password='x', is_staff=False,
+            email='dr_sin_staff@ejemplo.com',
+        )
+        self._paciente_de(medico, '2')
+
+        self.assertEqual(self._contexto_del_tablero()['sin_atencion'], 1)
+
+    def test_el_tablero_avisa_del_medico_sin_correo(self):
+        """Un médico sin correo no recibe la alerta ALTA: el aviso no llega a
+        nadie y `procesar_notificaciones_email` deja la corrida del cron en
+        rojo permanente."""
+        medico = get_user_model().objects.create_user(
+            username='dr_sin_email', password='x', is_staff=True,
+        )
+        self._paciente_de(medico, '3')
+
+        self.assertEqual(self._contexto_del_tablero()['sin_atencion'], 1)
+
+    def test_el_tablero_no_avisa_cuando_el_medico_puede_atender(self):
+        """NACE EN VERDE A PROPÓSITO: un aviso que salta siempre no es un aviso.
+
+        `self.medico` está activo, es `is_staff` y tiene correo — las tres
+        condiciones. Sin esta prueba, una consulta mal escrita que marcara a
+        todos pasaría desapercibida: las otras tres seguirían en verde.
+        """
+        self._paciente_de(self.medico, '4')
+
+        self.assertEqual(self._contexto_del_tablero()['sin_atencion'], 0)
+
+    def test_el_aviso_es_visible_en_el_panel_del_superusuario(self):
+        """Que el número esté en el contexto no sirve si nadie lo ve."""
+        medico = get_user_model().objects.create_user(
+            username='dr_invisible', password='x', is_staff=True,
+        )
+        self._paciente_de(medico, '5')
+        superusuario = get_user_model().objects.create_superuser(
+            username='super_visible', password='pass', email='sv@ejemplo.com'
+        )
+        self.client.force_login(superusuario)
+
+        respuesta = self.client.get(reverse('admin:index'))
+
+        self.assertContains(respuesta, 'sin atención efectiva')
+
     def test_el_seed_de_produccion_se_niega_sin_medico_usable(self):
         """El comando que hoy fabrica huérfanos: advierte y crea igual."""
         from io import StringIO
