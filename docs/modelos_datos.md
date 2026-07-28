@@ -204,7 +204,15 @@ temp_hinchazon_abdominal    CharField nullable
 temp_frecuencia_cardiaca    PositiveSmallIntegerField nullable
 temp_frecuencia_respiratoria PositiveSmallIntegerField nullable
 temp_tolero_liquidos        BooleanField nullable
-fecha_ultimo_registro       DateField nullable  # controla "un registro por día"
+fecha_ultimo_registro       DateField nullable
+                            # OBSOLETO (D9). Se escribe pero NUNCA se lee:
+                            # dos apariciones en todo el código, la definición
+                            # y la escritura en bot.py. Cero lecturas. Es un
+                            # resto del modelo viejo de "un registro por día",
+                            # que hoy controla CheckInProgramado. No se borra
+                            # todavía: quitar una columna en producción exige
+                            # migración y despliegue, y el beneficio es
+                            # cosmético. Limpieza para después del merge.
 fecha_actualizacion         DateTimeField auto_now=True
 ```
 

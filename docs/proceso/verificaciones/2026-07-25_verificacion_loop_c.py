@@ -39,6 +39,21 @@ from signos_sintomas.models import CheckInProgramado, Paciente, RegistroDiario
 RUTA_SETTINGS = pathlib.Path(settings.BASE_DIR) / "Registro_Post_Quirurgico"
 
 
+def _medico_archivo():
+    """Médico responsable de los pacientes de esta verificación (D12, Loop D).
+
+    Añadido después de escrita: la migración 0028 impide que exista un paciente
+    ACTIVO sin médico responsable, y los fixtures de aquí no lo pasaban. Es un
+    ajuste de fixture, no de lo que la verificación comprueba — sus aserciones
+    no cambiaron.
+    """
+    medico, _ = get_user_model().objects.get_or_create(
+        username='medico_verificacion_loop_c',
+        defaults={'is_staff': True, 'email': 'verificacion@ejemplo.com'},
+    )
+    return medico
+
+
 def _titulo(texto):
     print("\n" + "=" * 72)
     print("  " + texto)
@@ -125,7 +140,8 @@ class Verificacion3EstadoDelMotor(TestCase):
     def test_el_fallo_queda_anotado_y_el_reporte_sobrevive(self):
         _titulo("3. HALLAZGO 7 — estado de error del motor en la ruta del bot")
 
-        paciente = Paciente.objects.create(
+        paciente = Paciente.objects.create(medico_responsable=_medico_archivo(),
+            
             nombre_completo="Paciente Verificacion Loop C",
             telefono_whatsapp=self.TELEFONO,
             fecha_cirugia=timezone.localdate() - timedelta(days=3),
@@ -230,7 +246,8 @@ class Verificacion5HinchazonSinCambios(TestCase):
         """Un paciente por escenario: las alertas protegen sus registros
         (`Alerta.registro_origen` es PROTECT), así que no se pueden borrar
         entre escenario y escenario."""
-        return Paciente.objects.create(
+        return Paciente.objects.create(medico_responsable=_medico_archivo(),
+            
             nombre_completo="Paciente Hinchazon {}".format(indice),
             telefono_whatsapp="+57300777660{}".format(indice),
             fecha_cirugia=self.hoy,
@@ -284,7 +301,8 @@ class Verificacion6Medianoche(TestCase):
 
         ahora = timezone.now()
         hoy = timezone.localdate(ahora)
-        paciente = Paciente.objects.create(
+        paciente = Paciente.objects.create(medico_responsable=_medico_archivo(),
+            
             nombre_completo="Paciente Medianoche",
             telefono_whatsapp="+573005554433",
             fecha_cirugia=hoy,

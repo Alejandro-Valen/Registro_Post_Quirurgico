@@ -479,8 +479,12 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
   `_ORDEN_SEVERIDAD = {'BAJA': 1, 'MEDIA': 2, 'ALTA': 3}`.
 - [x] **0-③ Alerta de silencio:** tipo `SILENCIO` (choice nuevo en
   `Alerta.tipo`). Racha contada check a check (mañana→tarde→mañana…):
-  1 silencio → BAJA, 2 consecutivos → MEDIA, 3+ → ALTA. La racha se
-  rompe con cualquier check-in COMPLETADO entre medias.
+  **1 silencio → BAJA, 2 → MEDIA, 4 → ALTA** (corregido en el Loop A,
+  decisión D1: el umbral ALTA cae en dos días calendario completos sin
+  una sola señal). La racha se rompe con cualquier check-in COMPLETADO
+  entre medias; un PENDIENTE anterior se ignora sin romperla.
+  **La escalera vigente la fija `docs/reglas_clinicas.md`** — este
+  documento solo la refiere.
 - [x] **0-④ Scheduler:** Opción A — management commands + cron del SO.
   Tres commands: `crear_checkins_diarios`, `cerrar_checkins_vencidos`,
   `enviar_recordatorios`. Monitoreo y evaluación de migración a Celery
@@ -517,7 +521,8 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
     guard por CheckInProgramado PENDIENTE; 3 tests nuevos; 122 tests OK)
   - [x] Alerta de silencio (NO_RESPONDIDO) — **DECISIÓN TOMADA (0-③):**
     tipo `SILENCIO` (choice nuevo). Racha check a check:
-    1 → BAJA, 2 consecutivos → MEDIA, 3+ → ALTA.
+    1 → BAJA, 2 → MEDIA, **4 → ALTA** (corregido en el Loop A, D1;
+    la escalera vigente vive en `docs/reglas_clinicas.md`).
     (Bloque 4 — 26/06/2026: cerrar_checkins_vencidos + modelo Alerta actualizado)
   - [x] Resolver los 2 gatings (Bloque 2B — 26/06/2026):
     - Deduplicación — **IMPLEMENTADA (0-②):** `_deduplicar()` en cada

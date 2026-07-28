@@ -177,7 +177,7 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo |
-| Sprint 5 | Producción, despliegue y cierre pre-merge (RAG diferido a Sprint 6) | ⏳ **En corrección post-auditoría.** Loops A y B cerrados; Loop C en curso. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y cierre pre-merge (RAG diferido a Sprint 6) | ⏳ **En corrección post-auditoría.** Loops A, B, C y D cerrados; falta el push y el PR. Rama `sprint-5-produccion` |
 
 **Qué pasó (22/07/2026).** Una auditoría independiente sobre `fbf62a8` confirmó
 las cuatro cifras que se reportaban (280 tests, `check --deploy`, `pip-audit`,

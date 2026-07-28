@@ -14,8 +14,12 @@
 **Función principal:** `procesar_mensaje(telefono, texto) -> texto_respuesta`
 
 Diseño: lógica **pura**, sin conocimiento de HTTP ni Twilio. La vista
-(`views.py`, pendiente) traduce HTTP ↔ esta función. Esto permite testear el
-bot completo sin mockear peticiones web — actualmente **69 tests unitarios OK**.
+(`views.py`, en funcionamiento desde el Sprint 3) traduce HTTP ↔ esta función.
+Esto permite testear el bot completo sin mockear peticiones web.
+
+> El número total de pruebas del proyecto no se anota aquí: se desactualiza en
+> cada sesión y ya lo hizo una vez (decía 69 con la suite en 319). La cifra
+> vigente sale de `python manage.py test --noinput`.
 
 **Máquina de estados (10 preguntas):**
 ```

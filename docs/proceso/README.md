@@ -65,10 +65,15 @@ python manage.py test 2026-07-25_verificacion_loop_c -v 2 --noinput
 Remove-Item Env:PYTHONPATH
 ```
 
-> El nombre de módulo con fecha no es importable directamente en Python; para
-> ejecutarlo, cópialo con un nombre sin guiones ni cifras iniciales (por
-> ejemplo `verificacion_loop_c.py`) o ábrelo y adapta el comando. Se conserva
-> con fecha porque su valor es de archivo histórico, no de uso frecuente.
+> El comando de arriba **funciona tal cual**: el cargador de pruebas de Django
+> importa el módulo por nombre y el nombre con fecha no le estorba. La nota
+> anterior decía lo contrario y mandaba a copiar el archivo con otro nombre —
+> era falso, y se corrigió en el Loop D (hallazgo 4 de la auditoría de cierre).
+>
+> Verificado el 27/07/2026: 6 pruebas, OK. Sus fixtures se ajustaron ese día
+> para pasarle un `medico_responsable`, que la migración 0028 volvió
+> obligatorio en todo paciente activo; lo que la verificación comprueba no
+> cambió.
 
 ## Cuándo se puede borrar todo esto
 
