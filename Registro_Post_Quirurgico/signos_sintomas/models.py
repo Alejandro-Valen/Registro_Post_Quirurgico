@@ -97,6 +97,19 @@ class Paciente(models.Model):
                 ),
                 name='paciente_tipo_cirugia_valido',
             ),
+            # D12 (capa 4), la garantía: activo ⇒ tiene médico responsable.
+            # El formulario cubre el camino de todos los días y PROTECT cubre el
+            # borrado, pero ninguno de los dos ve un script, el shell ni una
+            # carga de datos. Esto sí.
+            # Condicional y no NOT NULL a propósito: las filas históricas e
+            # inactivas conservan lo que tengan, incluido NULL. Exigirles un
+            # médico obligaría a inventarles una atribución clínica.
+            CheckConstraint(
+                condition=(
+                    Q(activo=False) | Q(medico_responsable__isnull=False)
+                ),
+                name='paciente_activo_con_medico_responsable',
+            ),
         ]
 
     def clean(self):
