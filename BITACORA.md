@@ -1,5 +1,4 @@
-# Bitácora del Proyecto — MVP Sugarbaker
-## Clínica Somer — Medellín, Colombia
+# Bitácora del Proyecto — Sistema de Monitoreo Posquirúrgico Remoto
 
 ---
 
@@ -4001,8 +4000,8 @@ Railway allí (`docs/railway_deploy.md`, sección 4.1).
 dependencia clínica declarada de `cron_matutino`. Va antes del piloto con
 pacientes reales.
 
-**Anotado, sin decidir:** el encabezado de este archivo dice "MVP Sugarbaker /
-Clínica Somer", y CLAUDE.md prohíbe usar nombres de instituciones y la marca
-"Sugarbaker" hasta que exista una decisión formal de afiliación. No se tocó
-porque cambiar el encabezado de la bitácora histórica es decisión del Arquitecto,
-no del agente.
+**Encabezado corregido:** este archivo nombraba una institución en su título, y
+CLAUDE.md prohíbe usar nombres de instituciones y la marca "Sugarbaker" como
+nombre del sistema. Ahora dice "Sistema de Monitoreo Posquirúrgico Remoto". Las
+entradas históricas no se reescribieron: describen lo que se hizo en su momento.
+`sugarbaker_hipec` sigue siendo un valor legítimo de `tipo_cirugia`.
