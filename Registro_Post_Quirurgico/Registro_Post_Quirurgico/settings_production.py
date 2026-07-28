@@ -29,6 +29,25 @@ from django.utils.csp import CSP
 # A6: DEBUG=False siempre en producción. Stacktrace nunca llega al cliente.
 DEBUG = False
 
+# D13: la autenticidad del webhook no se lee del entorno.
+#
+# La firma X-Twilio-Signature es la ÚNICA cerradura del webhook: la URL es
+# pública y adivinable, no hay login y está exenta de CSRF. Sin validación,
+# cualquiera que conozca la URL puede inyectar telemetría falsa en la historia
+# de un paciente, o cerrar su check-in del día como respondido —apagando la
+# alerta SILENCIO de alguien que en realidad no respondió—.
+#
+# NO CREAR la variable TWILIO_VALIDATE_SIGNATURE en Railway, ni siquiera con
+# valor True: python-decouple convierte la cadena vacía en False, y Railway
+# reemplaza por cadena vacía toda referencia que no puede resolver
+# (docs/trampas_conocidas.md, incidente del 25/07/2026). Una casilla que no
+# existe no se puede configurar mal; una que existe se abre en silencio el día
+# que alguien la mueva de sitio.
+#
+# False sigue siendo legítimo en desarrollo local, donde no hay firma real que
+# validar: allí lo gobierna settings.py leyendo el .env.
+TWILIO_VALIDATE_SIGNATURE = True
+
 # --- Archivos estáticos con WhiteNoise (despliegue, 04/07/2026) ---
 # Railway no tiene un Nginx delante que sirva /static/, así que WhiteNoise
 # sirve los estáticos del Admin desde el propio proceso Django. El middleware
