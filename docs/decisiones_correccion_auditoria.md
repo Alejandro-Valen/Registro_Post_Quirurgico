@@ -60,19 +60,22 @@ código antes de aceptarlas.
 > Es lo primero que debe leer quien retome el trabajo.
 
 **Última actualización:** 27/07/2026
-**Punto alcanzado:** **LOOP D EN CURSO. COMPUERTA D-0 ABIERTA.** Los Loops A, B
-y C están cerrados y verificados. La auditoría de cierre (Codex, 27/07) volvió a
-**BLOQUEAR el PR** con dos hallazgos ALTOS; los cuatro se reprodujeron contra el
-código antes de aceptarlos, y la verificación corrigió la mecánica de uno y
-encontró una ocurrencia que el informe no vio. Decisiones **D11, D12 y D13**
-escritas, revisadas por Codex y corregidas: D11 acotó su invariante a la salida
-nominal, y D12 ganó una cuarta capa (`CheckConstraint`) porque su promesa
-original era más amplia que su alcance. **D14** queda decidida para el Loop E.
-**D-0 ejecutado el 27/07 contra producción: cero pacientes activos sin médico**
-— la migración de D-6 puede escribirse. Siguiente paso: **D-1**, la prueba en
-rojo de los tres defectos.
+**Punto alcanzado:** **LOOP D CERRADO Y VERIFICADO. FALTA EL PUSH.** Los nueve
+pasos están hechos en 15 commits locales; la suite quedó en **337 tests OK** y la
+verificación independiente del Arquitecto pasó sus 8 bloques. **Nada se ha
+desplegado:** Railway sigue esta rama, así que el push es único y sale a
+producción con las migraciones 0027 y 0028. La compuerta D-0 se repitió con dato
+fresco justo antes: cero activos sin responsable. Siguiente paso: **el push**,
+mirando el log del deploy y `/salud/`; después, diff completo contra
+`origin/Desarrollo` y PR.
+Los Loops A, B, C y D están cerrados y verificados. La auditoría de cierre
+(Codex, 27/07) había vuelto a **BLOQUEAR el PR** con dos hallazgos ALTOS; los
+cuatro se reprodujeron contra el código antes de aceptarlos, y la verificación
+corrigió la mecánica de uno y encontró una ocurrencia que el informe no vio.
+Decisiones **D11, D12 y D13** escritas, revisadas por Codex y corregidas antes de
+programar. **D14** queda decidida para el Loop E, que va después del PR.
 **Rama:** `sprint-5-produccion` · **Restauración segura:** `2eb7801`
-**Línea base de la suite:** 319 tests OK (verificada de nuevo el 27/07, 112 s)
+**Línea base de la suite:** 319 tests OK antes del Loop D · **337 OK** al cerrarlo
 **Informe de la auditoría de cierre:**
 `docs/proceso/auditorias/2026-07-27_informe_cierre_codex.md`
 
@@ -198,17 +201,34 @@ Nace de la auditoría de cierre del 27/07/2026. Decisiones D11-D13 aprobadas
 **antes** de escribir código, como en los tres loops anteriores.
 
 - [x] **D-0** *(León, en Railway)* Dos consultas de **solo lectura**: pacientes activos sin responsable, y pacientes activos cuyo médico está inactivo / sin `is_staff` / sin correo. **Compuerta de D-6** — ver D12. Ejecutada el 27/07/2026: **cero y cero**
-- [ ] **D-1** `test: reproducir PHI en salida operativa, paciente sin medico y firma heredada` — prueba en rojo, cada caso fallando por su propio defecto. El guardián de PHI captura stdout, stderr y logs **forzando INFO**; la firma se prueba con la variable ausente, vacía y en `False`
-- [ ] **D-2** `fix: fijar la validacion de firma de Twilio en produccion` → D13
-- [ ] **D-3** `fix: identificar al paciente por pk en la salida operativa` → D11
-- [ ] **D-4** `feat: exigir medico responsable al registrar un paciente` → D12 (capa 1)
-- [ ] **D-5** `feat: proteger la atribucion clinica al eliminar una cuenta medica` → D12 (capa 2, migración de `on_delete`)
-- [ ] **D-6** `feat: garantizar responsable en todo paciente activo` → D12 (capa 4, `CheckConstraint`) — **solo si D-0 dio cero**
-- [ ] **D-7** `feat: avisar en el tablero de pacientes sin atencion efectiva` → D12 (capa 3, las cuatro condiciones)
-- [ ] **D-8** `fix: negar la creacion de pacientes de ejemplo sin medico usable` → D12 (`seed_demo_produccion`)
-- [ ] **D-9** Documentación: los desfases del hallazgo 4 que sigan abiertos
-- [ ] Cierre: suite completa · `check` y `check --deploy` · `makemigrations --check` · verificación del Arquitecto
-- [ ] **Un solo push** a `origin/sprint-5-produccion` con todo en verde + entrada de BITACORA
+- [x] **D-1** `test: reproducir PHI en salida operativa, paciente sin medico y firma heredada` — `4cee84c` (11 pruebas: 9 rojas, 2 verdes declaradas). **Dos falsos verdes detectados antes de commitear** — ver abajo
+- [x] **D-2** `fix: fijar la validacion de firma de Twilio en produccion` → D13 — `213218e` (+ `ec0aeda`, docs)
+- [x] **D-3** `fix: identificar al paciente por pk en la salida operativa` → D11 — `ba1c573`
+- [x] **D-4** `feat: exigir medico responsable al registrar un paciente` → D12 (capa 1) — `6de4410`
+- [x] **D-5** `feat: proteger la atribucion clinica al eliminar una cuenta medica` → D12 (capa 2, migración **0027**) — `798e7a9` (+ `338b99d`, docs)
+- [x] **D-6** `feat: garantizar responsable en todo paciente activo` → D12 (capa 4, `CheckConstraint`, migración **0028**) — `dc16719` (+ `72a3a29`, docs)
+- [x] **D-7** `feat: avisar en el tablero de pacientes sin atencion efectiva` → D12 (capa 3) — `f9df890` (+ `f55f4c2`, docs)
+- [x] **D-8** `fix: negar la creacion de pacientes de ejemplo sin medico usable` → D12 — `76c4869`
+- [x] **D-9** `docs: corregir los cinco desfases entre documentos y codigo` — `e67dab1`
+- [x] Cierre: **337 tests OK** · `check` sin issues · `makemigrations --check` limpio · script de verificación `5eff498`
+- [x] **Verificación del Arquitecto:** corrí `docs/proceso/verificaciones/2026-07-27_verificacion_loop_d.py` — **8 bloques, OK**. Confirmé las dos líneas que distinguen la verificación del trámite: la ficha histórica inactiva **sí** se sigue creando (la restricción no es `NOT NULL`), y el aviso del tablero da **0** con un médico que sí puede atender (no salta siempre)
+- [x] **D-0 repetido antes del push** (27/07, dato fresco): `a_sin_medico = 0` otra vez. La 0028 no puede fallar por datos existentes
+- [ ] **Un solo push** a `origin/sprint-5-produccion` con todo en verde, mirando el log del deploy y `/salud/`
+
+**Los dos falsos verdes de D-1, porque son la lección del loop.** La prueba del
+Admin no mandaba el checkbox `activo`: el paciente nacía inactivo y el filtro por
+`activo=True` no lo encontraba. Las tres de la firma parcheaban el entorno, pero
+`settings_production` hereda ese valor con `from .settings import *` y ese import
+resuelve contra el módulo **ya cargado** al arrancar la suite — el parche no
+tocaba nada y las tres pasaban con el defecto intacto. Se corrigieron antes de
+commitear; la segunda dejó el helper `cargar_produccion_sobre_base_fresca` con el
+porqué escrito, para que la próxima prueba de configuración no caiga en lo mismo.
+
+**Alcance de D-6 más allá de la app.** La restricción dejó **164 pruebas en rojo**
+—creaban pacientes activos sin médico— y también rompió la verificación archivada
+del Loop C. Cualquier script, fixture o carga de datos que cree un paciente
+activo sin responsable ahora falla. Es lo que la capa 4 debía lograr; conviene
+saberlo antes de encontrarse con el error.
 
 **Resultado de D-0 (27/07/2026).** Ejecutada en la tarjeta de SQL del Postgres de
 producción (`base = railway`, última migración `0026_notificacion_estado_fallida`):

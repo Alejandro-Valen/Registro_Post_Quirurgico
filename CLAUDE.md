@@ -206,7 +206,9 @@ una ocurrencia que el informe no vio. Informe completo en
 `docs/proceso/auditorias/2026-07-27_informe_cierre_codex.md`.
 
 - **Loop D** (privacidad operativa, responsable clínico, firma del webhook):
-  decisiones **D11-D13** escritas y revisadas. **Sin empezar.** Bloquea el merge.
+  **cerrado y verificado (27/07).** Los nueve pasos, 15 commits, suite en **337
+  tests OK**, migraciones **0027** (`PROTECT`) y **0028** (`CheckConstraint`
+  `activo ⇒ médico`). **Sin desplegar todavía** — falta el push.
 - **Loop E** (aislamiento de las tareas del cron): decisión **D14** escrita.
   No bloquea el merge; va antes del piloto con pacientes reales.
 
@@ -221,11 +223,16 @@ variables y los gotchas están en `docs/railway_deploy.md`.
 
 **Próximo paso exacto (al retomar):** verificar el estado real contra `git log` y
 la suite antes de proponer nada, y continuar por el "Estado de avance" de
-`docs/decisiones_correccion_auditoria.md` — hoy: **Loop D, paso D-0**, dos
-consultas de solo lectura contra Railway que ejecuta el Arquitecto y que son la
-compuerta de la migración de D-6. Las dos auditorías **ya se ejecutaron — no
-repetirlas.** Solo al cerrar el Loop D se prepara el PR hacia `Desarrollo`, se
-revisa el diff completo y se decide el merge.
+`docs/decisiones_correccion_auditoria.md` — hoy: **el push del Loop D**, que
+sigue pendiente. Hay **15 commits locales sin publicar** y ese push sale a
+producción con dos migraciones. Antes de hacerlo, **repetir la consulta de la
+compuerta D-0** (`docs/proceso/verificaciones/2026-07-28_consulta_d0_responsables.py`,
+o su versión SQL): si `a_sin_medico` no da 0, la migración 0028 falla y deja el
+contenedor sin arrancar. Después del push: diff completo contra
+`origin/Desarrollo`, PR y merge. El **Loop E** (D14) va después del PR.
+
+Las dos auditorías **ya se ejecutaron — no repetirlas.** Las decisiones D1-D14
+están tomadas; no se reabren salvo que el Arquitecto lo pida.
 
 **Railway despliega desde `sprint-5-produccion`:** cada push a la rama activa
 sale a producción, y mergear a `Desarrollo` no despliega nada. La rama de

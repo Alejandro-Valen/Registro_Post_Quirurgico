@@ -3843,3 +3843,166 @@ Después, en orden: D-1 (prueba en rojo), D-2 (firma), D-3 (PHI), D-4/5/6/7 (las
 cuatro capas de D12), D-8 (seed) y D-9 (documentación). Un solo push al final,
 con todo verde, mirando el log del deploy y `/salud/` después. Detalle en el
 "Estado de avance" de `docs/decisiones_correccion_auditoria.md`.
+
+---
+
+## Sprint 5 — Loop D completo: privacidad operativa, responsable clínico y firma
+**Fecha:** 27/07/2026
+**Responsable:** León (Arquitecto) con Claude Code
+**Estado:** LOOP D CERRADO Y VERIFICADO ✅ — sin desplegar todavía
+
+### Qué se hizo
+
+Los nueve pasos del Loop D, en 15 commits locales. **Nada se pusheó:** Railway
+despliega desde esta rama, así que el push es único y va al final, con la
+verificación hecha y mirando el log del deploy.
+
+**D-0 — la compuerta.** Ejecuté contra producción las consultas de solo lectura
+que autorizan la migración del paso D-6: **2 pacientes, 0 activos, cero activos
+sin responsable, cero sin atención efectiva.** Base `railway`, migración
+`0026_notificacion_estado_fallida`. Sin ese cero no se podía escribir la
+restricción.
+
+**D-1 — las pruebas en rojo.** Once pruebas, nueve rojas, cada una fallando por
+su propio defecto; las dos verdes lo declaran en su docstring. El guardián de
+PHI captura stdout, stderr **y los logs forzando nivel INFO**.
+
+**D-2 — la firma (D13).** `TWILIO_VALIDATE_SIGNATURE = True` fijo en
+`settings_production.py`. Deja de heredarse del entorno. La variable **no debe
+crearse en Railway ni con valor `True`**: decouple convierte la cadena vacía en
+`False` y Railway vacía toda referencia que no puede resolver, así que la
+casilla fallaría **abriendo la cerradura del webhook en silencio**.
+
+**D-3 — la identidad del paciente (D11).** `desactivar_pacientes_vencidos`
+escribía el nombre completo en stdout —que Railway conserva igual que los logs—
+y `enviar_recordatorios` armaba nombre **y teléfono** de cada check-in
+pendiente. Ambos identifican ahora por `pk`. El comentario de `settings.py` que
+afirmaba filtrar PHI/PII ahora dice la verdad: el único filtro declarado era
+`RequireDebugFalse`.
+
+**D-4 a D-8 — las cuatro capas de D12 y el seed.** Formulario del Admin con el
+médico preseleccionado y validación de paciente activo; `on_delete` de
+`SET_NULL` a **`PROTECT`** (migración 0027); **`CheckConstraint`** `activo ⇒
+medico_responsable no nulo` (migración 0028); aviso en el tablero del
+superusuario de pacientes activos **sin atención efectiva**; y
+`seed_demo_produccion` que se niega a crear pacientes sin un médico usable en
+vez de advertirlo.
+
+**D-9 — los cinco desfases documentales.** El grave era el ROADMAP: decía que la
+escalera de SILENCIO era `1/2/3+` cuando es `1/2/4` desde el Loop A. **Un umbral
+clínico mal escrito en un documento vivo**, no polvo documental.
+
+**Cierre.** Suite en **337 tests OK** (18 más que la línea base de 319), `check`
+sin issues, `makemigrations --check` limpio. Corrí yo mismo la verificación
+independiente `docs/proceso/verificaciones/2026-07-27_verificacion_loop_d.py`:
+**8 bloques, OK.**
+
+### Decisiones tomadas y su justificación
+
+**Asignar en vez de rechazar (capa 1).** El invariante "ningún paciente activo
+sin médico" se cumplía igual rechazando el formulario. Se eligió **asignar** al
+médico que guarda: siendo no-superusuario, su única opción posible es él mismo,
+así que un error de validación sería un obstáculo por un campo con una sola
+respuesta. Como el invariante no distingue entre los dos caminos, se agregó una
+prueba que fija cuál se eligió — si no, alguien puede derivar hacia el rechazo
+dentro de seis meses creyendo que da lo mismo.
+
+**La restricción es condicional, no `NOT NULL`.** `activo ⇒ responsable` deja en
+paz a las fichas históricas. Un `NOT NULL` obligaría a inventarles un médico, que
+es fabricar una atribución clínica — lo mismo que D3 se negó a hacer con
+`resuelta_por`.
+
+**Un solo aviso para cuatro condiciones.** Sin médico, médico desactivado, sin
+`is_staff` o sin correo producen el mismo daño clínico: nadie mira a ese
+paciente. Separarlos multiplicaría avisos sin cambiar la acción del médico.
+
+### Problemas encontrados y resueltos
+
+**1. Corrí la compuerta D-0 contra la base equivocada.** La primera ejecución
+fue en PowerShell local y devolvió "0 pacientes" — de `registro_postquirurgico_db
+@ localhost`, mi base de desarrollo vacía. Si nos quedábamos ahí, habríamos
+escrito la migración creyendo que producción estaba vacía. Lo atrapó el paso de
+confirmar **cuál** base estábamos mirando, no el resultado en sí.
+
+**2. Dos pruebas de D-1 nacieron en verde mintiendo.** La del Admin no mandaba
+el checkbox `activo`, así que el paciente nacía inactivo y el filtro no lo veía.
+Las tres de la firma parcheaban el entorno, pero `settings_production` hereda ese
+valor con `from .settings import *` y ese import resuelve contra el módulo ya
+cargado al arrancar la suite: el parche no tocaba nada y las tres pasaban con el
+defecto intacto. Se corrigieron **antes** de commitear; la segunda dejó el helper
+`cargar_produccion_sobre_base_fresca` con el porqué escrito.
+
+**3. Un `save_model` duplicado que habría roto dos cosas ajenas.** Al implementar
+la capa 1 se escribió un `save_model` nuevo sin ver que `PacienteAdmin` ya tenía
+uno. En Python el segundo gana en silencio: habría anulado la advertencia de
+ingreso tardío (A-1) y el registro de `fecha_consentimiento` del HABEAS DATA, sin
+que ninguna prueba nueva lo notara. Se integró en el método existente y se
+corrieron las 39 pruebas de todas las clases del Admin, no solo las nuevas.
+
+**4. La restricción dejó 164 pruebas en rojo de golpe.** No era un bug: esas
+pruebas creaban pacientes activos sin médico, un estado que dejó de existir. Se
+agregó el helper `medico_de_pruebas()` y un script mecánico insertó el
+responsable en 88 llamadas, saltando las 17 que ya lo pasaban. Tres casos se
+corrigieron a mano por tener significado propio — y uno de ellos importa:
+**`test_set_null_al_borrar_usuario` afirmaba el comportamiento viejo.**
+Verificaba que borrar la cuenta del médico dejara al paciente huérfano. Había una
+prueba en verde documentando el hallazgo como si fuera el contrato.
+
+**5. Una prueba escrita después del arreglo, y el intento fallido de
+verificarla.** La del `--medico` inservible se escribió después de la corrección.
+Para verificar que habría nacido en rojo se corrió contra la versión anterior con
+`git stash` — pero el primer intento puso `--quiet` después de `--`, git lo tomó
+como ruta, no stasheó nada y la prueba pasó en verde. Repetido bien, falló como
+debía. Un "verifiqué" sin mirar la salida no verifica nada.
+
+**6. La verificación archivada del Loop C dejó de correr.** Sus fixtures creaban
+pacientes activos sin médico y la restricción 0028 los rechaza. Se les pasó un
+responsable sin tocar sus aserciones. De paso, la regex que lo hizo insertó el
+argumento en una llamada que ya lo tenía y dejó el módulo con `SyntaxError`;
+apareció al ejecutarlo, no al escribirlo. **D-6 tiene alcance más allá del código
+de la app:** cualquier script o carga de datos que cree pacientes activos sin
+médico ahora falla.
+
+**7. Por qué los demos de producción estaban inactivos, y por qué el correo de
+silencio nunca llegó.** Dos cosas que parecían fallos y no lo eran. El seed les
+pone `fecha_cirugia` 8-10 días hacia atrás para fabricarles historia, así que
+**nacen en POD 8-10**, al borde de los `DIAS_SEGUIMIENTO = 10`; los sostuvo el
+guard de gracia de 2 días y `desactivar_pacientes_vencidos` los cerró. Y
+`signals.py:23` corta la notificación cuando la cédula empieza por `DEMO-`, antes
+de mirar la severidad: **un paciente demo nunca encola correo, por diseño.**
+Consecuencia práctica: el correo de alerta **no se puede probar de punta a punta
+con los demos** — hace falta un paciente con cédula real asignado a un médico con
+correo. Queda para el piloto.
+
+De paso quedó a la vista que la escalera del Loop A vive en producción: 4
+check-ins `NO_RESPONDIDO` y 2 alertas `SILENCIO / MEDIA`, que es la severidad que
+fija D1 para una racha de 2 turnos.
+
+### Qué queda pendiente
+
+**Antes del push, en este orden:**
+
+1. **Repetir la consulta D-0** contra producción. La de esta sesión tiene ocho
+   horas y la corrección de la capa 1 todavía no está desplegada: un superusuario
+   podría haber creado un paciente activo sin médico en el intervalo. Si
+   `a_sin_medico` no da 0, la migración 0028 falla y —con `migrate && gunicorn`
+   encadenados en el Dockerfile— eso no es un error en el log, es el contenedor
+   sin arrancar.
+2. **Push único** a `origin/sprint-5-produccion`, mirando el log del deploy y
+   `/salud/` inmediatamente después, con el revert listo. Nunca de madrugada. De
+   las dos migraciones, la 0027 **no emite SQL** (`sqlmigrate` da `-- (no-op)`) y
+   la 0028 es reversible con `migrate signos_sintomas 0027`.
+
+**Después del push:** revisión del diff completo contra `origin/Desarrollo`, PR y
+merge. Solo entonces se crea la rama `produccion` desde `Desarrollo` y se apunta
+Railway allí (`docs/railway_deploy.md`, sección 4.1).
+
+**Loop E (D14), no bloquea el merge:** aislar las tareas del cron conservando la
+dependencia clínica declarada de `cron_matutino`. Va antes del piloto con
+pacientes reales.
+
+**Anotado, sin decidir:** el encabezado de este archivo dice "MVP Sugarbaker /
+Clínica Somer", y CLAUDE.md prohíbe usar nombres de instituciones y la marca
+"Sugarbaker" hasta que exista una decisión formal de afiliación. No se tocó
+porque cambiar el encabezado de la bitácora histórica es decisión del Arquitecto,
+no del agente.
