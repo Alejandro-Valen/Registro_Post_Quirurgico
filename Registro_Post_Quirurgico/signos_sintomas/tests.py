@@ -5849,6 +5849,32 @@ class PacienteActivoExigeMedicoTests(TestCase):
             ).exists()
         )
 
+    def test_el_admin_asigna_al_medico_que_guarda_en_vez_de_rechazarlo(self):
+        """Añadida en D-4 para fijar CUÁL de los dos mecanismos se eligió.
+
+        El invariante de arriba se cumpliría igual rechazando el formulario.
+        Se eligió asignar: el médico no-superusuario solo puede elegirse a sí
+        mismo, así que un error de validación sería un obstáculo por un campo
+        con una única opción posible. Esta prueba impide que la corrección
+        derive hacia el rechazo sin que nadie lo decida.
+        """
+        self.client.force_login(self.medico)
+
+        self.client.post(
+            '/admin/signos_sintomas/paciente/add/',
+            {
+                'nombre_completo': 'Paciente Asignado Solo',
+                'cedula': 'D12-0005',
+                'telefono_whatsapp': '+573007770005',
+                'fecha_cirugia': timezone.localdate().isoformat(),
+                'activo': 'on',
+            },
+            follow=True,
+        )
+
+        paciente = Paciente.objects.get(cedula='D12-0005')
+        self.assertEqual(paciente.medico_responsable, self.medico)
+
     def test_borrar_la_cuenta_del_medico_no_deja_pacientes_huerfanos(self):
         """Capa 2 — la puerta de atrás.
 

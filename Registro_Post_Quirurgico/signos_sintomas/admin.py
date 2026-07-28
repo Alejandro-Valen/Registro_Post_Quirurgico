@@ -328,7 +328,12 @@ class PacienteAdmin(admin.ModelAdmin):
         """A-1: advierte al médico si registra un paciente con ingreso tardío
         — el comando desactivar_pacientes_vencidos lo desactivaría pronto.
         Bloque 7 (HABEAS DATA): registra/limpia fecha_consentimiento en
-        sincronía con el checkbox de consentimiento_informado."""
+        sincronía con el checkbox de consentimiento_informado.
+        D12 (capa 1): última red antes de la base — un médico no-superusuario
+        solo puede asignarse a sí mismo, así que no tiene sentido rechazarle el
+        guardado por un campo cuya única opción posible es él."""
+        if obj.activo and obj.medico_responsable_id is None and _solo_propios(request):
+            obj.medico_responsable = request.user
         if not change:
             dias_post = (timezone.localdate() - obj.fecha_cirugia).days
             if dias_post >= DIAS_SEGUIMIENTO - 2:
@@ -387,10 +392,48 @@ class PacienteAdmin(admin.ModelAdmin):
         return qs
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """B6: médico no-superuser solo puede asignarse a sí mismo como responsable."""
+        """B6: médico no-superuser solo puede asignarse a sí mismo como responsable.
+
+        D12 (capa 1): además queda preseleccionado. El desplegable nacía vacío
+        con una sola opción posible, y dejarlo así era el camino de menor
+        resistencia — no un descuido rebuscado.
+        """
         if db_field.name == 'medico_responsable' and _solo_propios(request):
             kwargs['queryset'] = get_user_model().objects.filter(pk=request.user.pk)
+            kwargs['initial'] = request.user.pk
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def get_form(self, request, obj=None, **kwargs):
+        """D12 (capa 1) — un paciente ACTIVO no puede quedarse sin responsable.
+
+        La validación vive en el formulario, no solo en la base, para que el
+        error se vea como un mensaje del campo y no como un IntegrityError. El
+        superusuario conserva la libertad de dejarlo vacío en una ficha
+        inactiva: las filas históricas no llevan responsable y exigírselo
+        obligaría a inventarles uno.
+        """
+        form = super().get_form(request, obj, **kwargs)
+        usuario = request.user
+
+        class FormConResponsable(form):
+            def clean(self):
+                datos = super().clean()
+                if datos.get('activo') and not datos.get('medico_responsable'):
+                    if _solo_propios(request):
+                        # Solo puede ser él mismo: se asigna en vez de estorbar.
+                        datos['medico_responsable'] = usuario
+                    else:
+                        self.add_error(
+                            'medico_responsable',
+                            'Un paciente activo necesita un médico responsable: '
+                            'sin él desaparece del listado y de los indicadores '
+                            'del tablero, y sus alertas no llegan a nadie. '
+                            'Asigna uno, o desmarca "activo" si es una ficha '
+                            'histórica.',
+                        )
+                return datos
+
+        return FormConResponsable
 
     def has_change_permission(self, request, obj=None):
         if obj is not None and _solo_propios(request):
