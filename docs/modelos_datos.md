@@ -37,6 +37,8 @@ medico_responsable    ForeignKey(User, PROTECT, null=True, blank=True)
                       # conservan lo que tengan, incluido NULL. Exigirles un
                       # médico obligaría a inventarles uno.
 activo                BooleanField default=True
+                      # Gobierna la restricción de abajo: mientras esté en True,
+                      # la base exige medico_responsable.
 consentimiento_informado  BooleanField default=False
                       # HABEAS DATA (Bloque 7, P-15). El bot no inicia el flujo con
                       # el paciente hasta que el médico marque este campo en el Admin.
@@ -45,6 +47,25 @@ fecha_consentimiento  DateTimeField null=True blank=True
                       # médico no la edita directamente (readonly en el Admin).
 fecha_registro        DateTimeField auto_now_add=True
 ```
+
+**Restricciones de base (`Meta.constraints`)**
+
+| Nombre | Qué garantiza | Migración |
+|---|---|---|
+| `paciente_tipo_cirugia_valido` | `tipo_cirugia` nulo o uno de los tres valores válidos | 0021 |
+| `paciente_activo_con_medico_responsable` | **`activo=True` ⇒ `medico_responsable` no nulo** | **0028** |
+
+La segunda es la capa 4 de D12 y su SQL es
+`CHECK (NOT activo OR medico_responsable_id IS NOT NULL)`. Vive en la base
+porque el formulario del Admin cubre el camino de todos los días y `PROTECT`
+cubre el borrado, pero ninguno de los dos ve un script, el shell o una carga de
+datos. Es **condicional y no `NOT NULL`** a propósito: las fichas históricas e
+inactivas conservan lo que tengan.
+
+**Consecuencia para las pruebas y para cualquier script:** crear un `Paciente`
+sin `medico_responsable` explícito ahora falla, porque `activo` es `True` por
+defecto. Las pruebas usan el helper `medico_de_pruebas()` de `tests.py`; un
+paciente sin responsable debe crearse con `activo=False`.
 
 **Decisión de diseño (fase de generalización):** `tipo_cirugia` es un dato
 puramente descriptivo — no alimenta el `alert_engine` ni cambia el flujo
