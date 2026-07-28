@@ -23,9 +23,19 @@ cedula                CharField(20) unique=True null=True blank=True
 telefono_whatsapp     CharField(20) unique  # identificador para el bot
 fecha_cirugia         DateField
 tipo_cirugia          CharField choices=[sugarbaker_hipec,colectomia_electiva,otra] null=True blank=True
-medico_responsable    ForeignKey(User, SET_NULL, null=True)
+medico_responsable    ForeignKey(User, PROTECT, null=True, blank=True)
                       # related_name='pacientes' — médico accede a sus pacientes con
                       # medico.pacientes.all()
+                      # D12 (capa 2, migración 0027): era SET_NULL. Borrar una
+                      # cuenta de médico dejaba a sus pacientes huérfanos e
+                      # invisibles en silencio. Django ahora se niega a borrar
+                      # la cuenta mientras tenga pacientes: hay que reasignarlos.
+                      # Regla operativa: las cuentas de médico NO se borran, se
+                      # desactivan (is_active=False), y antes de desactivar una
+                      # se reasignan sus pacientes activos.
+                      # null=True sigue: las fichas históricas e inactivas
+                      # conservan lo que tengan, incluido NULL. Exigirles un
+                      # médico obligaría a inventarles uno.
 activo                BooleanField default=True
 consentimiento_informado  BooleanField default=False
                       # HABEAS DATA (Bloque 7, P-15). El bot no inicia el flujo con
