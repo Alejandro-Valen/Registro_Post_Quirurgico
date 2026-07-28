@@ -101,7 +101,7 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 | `EMAIL_TIMEOUT` | `10` segundos. Limita cada llamada al proveedor. |
 | `PANEL_MEDICO_URL` | URL HTTPS completa de la ruta privada del Admin; se usa en el correo sin incluir datos del paciente. |
 | `TWILIO_AUTH_TOKEN` | Auth Token **primario** de Twilio (no el de Test) |
-| `TWILIO_VALIDATE_SIGNATURE` | `True` (o omitir — el default ya es `True`) |
+| ~~`TWILIO_VALIDATE_SIGNATURE`~~ | **NO CREAR esta variable en producción (D13).** `settings_production.py` fija la validación en `True` y ya no la lee del entorno. Crear la casilla —aunque sea con valor `True`— reintroduce el modo de fallo del 25/07: `python-decouple` convierte la cadena vacía en `False`, y Railway reemplaza por cadena vacía toda referencia que no puede resolver. Fallaría **abriendo la cerradura del webhook en silencio**. En desarrollo local sí se usa, en el `.env`. |
 | `DEFAULT_FROM_EMAIL` | *(opcional)* si se omite, usa `EMAIL_HOST_USER` |
 | `DJANGO_SUPERUSER_USERNAME` / `DJANGO_SUPERUSER_PASSWORD` / `DJANGO_SUPERUSER_EMAIL` | Bootstrap temporal de la cuenta técnica. Retirar usuario y contraseña tras verificar el primer arranque. |
 | `DJANGO_MEDICO_USERNAME` / `DJANGO_MEDICO_PASSWORD` / `DJANGO_MEDICO_EMAIL` | Bootstrap temporal de la cuenta `staff` del médico. `crear_medico` la asigna al grupo de privilegio mínimo. Retirar usuario y contraseña tras verificar el acceso. |
