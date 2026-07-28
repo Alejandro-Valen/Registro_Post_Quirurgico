@@ -58,8 +58,11 @@ class Command(BaseCommand):
                     paciente.save(update_fields=['activo'])
 
         for paciente, dias_post in desactivados:
+            # D11: la salida operativa identifica al paciente por pk, nunca por
+            # nombre. Railway conserva stdout igual que los logs; quien tiene
+            # derecho a saber de quién se trata entra al panel autenticado.
             mensaje = (
-                f'desactivar_pacientes_vencidos: {paciente.nombre_completo} '
+                f'desactivar_pacientes_vencidos: paciente pk={paciente.pk} '
                 f'{"se desactivaría" if dry_run else "desactivado"} (POD {dias_post})'
             )
             logger.info(mensaje)

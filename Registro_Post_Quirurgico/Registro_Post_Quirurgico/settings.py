@@ -186,10 +186,29 @@ SECURE_PROXY_SSL_HEADER = (
 )
 
 # --- Logging (B2) ---
-# Filtra PHI/PII: los logs de Django nunca deben escribir el cuerpo del webhook
-# (síntomas del paciente) ni el número de teléfono en claro. La vista del
-# webhook ya usa @sensitive_post_parameters('From', 'Body') para los reportes
-# de error; este LOGGING evita que aparezcan en los logs normales de Django.
+#
+# QUÉ HACE Y QUÉ NO — corregido en D11 (Loop D). El comentario anterior decía
+# que este LOGGING "filtra PHI/PII". No filtra nada: el único filtro declarado
+# es RequireDebugFalse, que decide a quién se le manda un correo de error, no
+# qué se escribe. Un comentario que promete una garantía de privacidad que no
+# existe es peor que no tener comentario — hace que nadie vuelva a mirar.
+#
+# Lo que sí protege la identidad del paciente, y dónde vive de verdad:
+#   1. El código no la escribe. Los comandos y las señales identifican al
+#      paciente por `pk` (D11), y hay una prueba guardián que recorre la salida
+#      de los comandos operativos forzando nivel INFO y falla si aparece un
+#      nombre o un teléfono.
+#   2. La vista del webhook usa @sensitive_post_parameters('From', 'Body'), que
+#      oculta esos campos en el reporte de error de Django.
+#   3. El nivel WARNING de `signos_sintomas` reduce el volumen, pero NO es una
+#      garantía: es una configuración que alguien puede cambiar.
+#
+# Lo que NO está saneado: el texto de una excepción ajena que llegue por un
+# traceback (`logger.exception`). El encabezado que escribe este proyecto usa
+# solo `pk`s, pero una excepción de terceros podría arrastrar un valor. No hay
+# ningún caso conocido; queda registrado como exposición condicional, fuera del
+# alcance de D11 — redactar tracebacks es una capa de logging propia y merece su
+# propia decisión.
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
