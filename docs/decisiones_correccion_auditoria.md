@@ -60,17 +60,17 @@ código antes de aceptarlas.
 > Es lo primero que debe leer quien retome el trabajo.
 
 **Última actualización:** 27/07/2026
-**Punto alcanzado:** **AUDITORÍA DE CIERRE HECHA Y TRIADA. LOOP D DECIDIDO, SIN
-EMPEZAR.** Los Loops A, B y C están cerrados y verificados. La auditoría de
-cierre (Codex, 27/07) volvió a **BLOQUEAR el PR** con dos hallazgos ALTOS; los
-cuatro se reprodujeron contra el código antes de aceptarlos, y la verificación
-corrigió la mecánica de uno y encontró una ocurrencia que el informe no vio.
-Decisiones **D11, D12 y D13** escritas, revisadas por Codex y corregidas: D11
-acotó su invariante a la salida nominal, y D12 ganó una cuarta capa
-(`CheckConstraint`) porque su promesa original era más amplia que su alcance.
-**D14** queda decidida para el Loop E. Siguiente paso: **D-0, las dos consultas
-de solo lectura en Railway** — las ejecuta el Arquitecto y son la compuerta de
-la migración.
+**Punto alcanzado:** **LOOP D EN CURSO. COMPUERTA D-0 ABIERTA.** Los Loops A, B
+y C están cerrados y verificados. La auditoría de cierre (Codex, 27/07) volvió a
+**BLOQUEAR el PR** con dos hallazgos ALTOS; los cuatro se reprodujeron contra el
+código antes de aceptarlos, y la verificación corrigió la mecánica de uno y
+encontró una ocurrencia que el informe no vio. Decisiones **D11, D12 y D13**
+escritas, revisadas por Codex y corregidas: D11 acotó su invariante a la salida
+nominal, y D12 ganó una cuarta capa (`CheckConstraint`) porque su promesa
+original era más amplia que su alcance. **D14** queda decidida para el Loop E.
+**D-0 ejecutado el 27/07 contra producción: cero pacientes activos sin médico**
+— la migración de D-6 puede escribirse. Siguiente paso: **D-1**, la prueba en
+rojo de los tres defectos.
 **Rama:** `sprint-5-produccion` · **Restauración segura:** `2eb7801`
 **Línea base de la suite:** 319 tests OK (verificada de nuevo el 27/07, 112 s)
 **Informe de la auditoría de cierre:**
@@ -197,7 +197,7 @@ local, o la firma de Twilio deja de validar.
 Nace de la auditoría de cierre del 27/07/2026. Decisiones D11-D13 aprobadas
 **antes** de escribir código, como en los tres loops anteriores.
 
-- [ ] **D-0** *(León, en Railway)* Dos consultas de **solo lectura**: pacientes activos sin responsable, y pacientes activos cuyo médico está inactivo / sin `is_staff` / sin correo. **Compuerta de D-4bis** — ver D12
+- [x] **D-0** *(León, en Railway)* Dos consultas de **solo lectura**: pacientes activos sin responsable, y pacientes activos cuyo médico está inactivo / sin `is_staff` / sin correo. **Compuerta de D-6** — ver D12. Ejecutada el 27/07/2026: **cero y cero**
 - [ ] **D-1** `test: reproducir PHI en salida operativa, paciente sin medico y firma heredada` — prueba en rojo, cada caso fallando por su propio defecto. El guardián de PHI captura stdout, stderr y logs **forzando INFO**; la firma se prueba con la variable ausente, vacía y en `False`
 - [ ] **D-2** `fix: fijar la validacion de firma de Twilio en produccion` → D13
 - [ ] **D-3** `fix: identificar al paciente por pk en la salida operativa` → D11
@@ -209,6 +209,39 @@ Nace de la auditoría de cierre del 27/07/2026. Decisiones D11-D13 aprobadas
 - [ ] **D-9** Documentación: los desfases del hallazgo 4 que sigan abiertos
 - [ ] Cierre: suite completa · `check` y `check --deploy` · `makemigrations --check` · verificación del Arquitecto
 - [ ] **Un solo push** a `origin/sprint-5-produccion` con todo en verde + entrada de BITACORA
+
+**Resultado de D-0 (27/07/2026).** Ejecutada en la tarjeta de SQL del Postgres de
+producción (`base = railway`, última migración `0026_notificacion_estado_fallida`):
+
+```
+pacientes_totales  2      pacientes_activos  0
+(A) activos sin medico        0      <- compuerta: abre
+(B) activos sin atencion util 0
+cuentas medicas: pk=1 superusuario, pk=2 staff — ambas activas y con correo
+```
+
+**La migración de D-6 puede escribirse.** Con cero pacientes activos, ninguna fila
+existente puede violar `activo ⇒ medico_responsable no nulo`, y las dos filas
+inactivas quedan fuera del alcance de la restricción — que es exactamente por lo
+que D12 la eligió condicional en vez de `NOT NULL`.
+
+**Por qué los dos demos están inactivos, y por qué no es un fallo.** Sus alertas
+están fechadas el 24/07 y el seed les pone `fecha_cirugia` 8-10 días hacia atrás
+para fabricarles historia: **nacen en POD 8-10**, al borde de los
+`DIAS_SEGUIMIENTO = 10` de P-5. Los sostuvo el guard `DIAS_GRACIA_INGRESO = 2` y
+`desactivar_pacientes_vencidos` los cerró el 26/07. El sistema hizo lo que debía.
+
+**Hallazgo lateral, verificado y sin acción:** un paciente demo **nunca encola
+correo**. `signals.py:23` corta la notificación cuando la cédula empieza por
+`DEMO-`, antes de mirar la severidad. Por eso producción tiene alertas ALTA y
+cero filas en `NotificacionAlerta`. Consecuencia práctica: **el correo de alerta
+no se puede probar de punta a punta con los demos** — hace falta un paciente con
+cédula real asignado a un médico con correo. Queda anotado para el piloto, no
+para este loop.
+
+**Señal de que el Loop A vive en producción:** 4 check-ins `NO_RESPONDIDO` y 2
+alertas `SILENCIO / MEDIA` — racha de 2 turnos perdidos por paciente, que es la
+severidad que fija D1. Antes del Loop A habrían quedado en BAJA.
 
 **Por qué D-2 (la firma) va tan arriba.** Es pequeño, independiente de todo lo
 demás y protege la única autenticación del webhook. Si el loop se interrumpe a
