@@ -3979,18 +3979,26 @@ fija D1 para una racha de 2 turnos.
 
 ### Qué queda pendiente
 
-**Antes del push, en este orden:**
+**Hecho al cierre de la sesión:**
 
-1. **Repetir la consulta D-0** contra producción. La de esta sesión tiene ocho
-   horas y la corrección de la capa 1 todavía no está desplegada: un superusuario
-   podría haber creado un paciente activo sin médico en el intervalo. Si
-   `a_sin_medico` no da 0, la migración 0028 falla y —con `migrate && gunicorn`
-   encadenados en el Dockerfile— eso no es un error en el log, es el contenedor
-   sin arrancar.
-2. **Push único** a `origin/sprint-5-produccion`, mirando el log del deploy y
-   `/salud/` inmediatamente después, con el revert listo. Nunca de madrugada. De
-   las dos migraciones, la 0027 **no emite SQL** (`sqlmigrate` da `-- (no-op)`) y
-   la 0028 es reversible con `migrate signos_sintomas 0027`.
+1. **Consulta D-0 repetida** con dato fresco justo antes del push:
+   `a_sin_medico = 0` otra vez, sobre 2 pacientes y 0 activos. La restricción de
+   la 0028 no podía fallar por datos existentes.
+2. **Push publicado:** `2fe6815 → 0f51ec0`, 18 commits. Las tres tarjetas de
+   Railway (web y los dos cron) quedaron en **SUCCESS**, y `/salud/` respondió
+   **HTTP 200 en diez sondeos consecutivos** durante los cinco minutos
+   posteriores al deploy — el endpoint verifica base de datos y cache, así que
+   descarta tanto un fallo de migración como un Postgres o Redis inalcanzable.
+
+**Lo que queda, ya sin riesgo de producción** (guion completo en
+`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`):
+
+1. Revisión del diff completo contra `origin/Desarrollo` (~117 commits).
+2. PR y merge a `Desarrollo`. **No despliega nada.**
+3. **Crear la rama `produccion` desde `Desarrollo` y reapuntar Railway allí.**
+   Este es el paso que libera `sprint-5-produccion`: mergear no basta, porque
+   Railway la sigue mirando y cualquier push por costumbre saldría al aire.
+4. Abrir la rama siguiente desde `Desarrollo`.
 
 **Después del push:** revisión del diff completo contra `origin/Desarrollo`, PR y
 merge. Solo entonces se crea la rama `produccion` desde `Desarrollo` y se apunta

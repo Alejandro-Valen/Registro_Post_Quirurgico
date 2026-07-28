@@ -60,14 +60,18 @@ código antes de aceptarlas.
 > Es lo primero que debe leer quien retome el trabajo.
 
 **Última actualización:** 27/07/2026
-**Punto alcanzado:** **LOOP D CERRADO Y VERIFICADO. FALTA EL PUSH.** Los nueve
-pasos están hechos en 15 commits locales; la suite quedó en **337 tests OK** y la
-verificación independiente del Arquitecto pasó sus 8 bloques. **Nada se ha
-desplegado:** Railway sigue esta rama, así que el push es único y sale a
-producción con las migraciones 0027 y 0028. La compuerta D-0 se repitió con dato
-fresco justo antes: cero activos sin responsable. Siguiente paso: **el push**,
-mirando el log del deploy y `/salud/`; después, diff completo contra
-`origin/Desarrollo` y PR.
+**Punto alcanzado:** **LOOP D CERRADO, VERIFICADO Y EN PRODUCCIÓN.** Los nueve
+pasos están hechos; la suite quedó en **337 tests OK** y la verificación
+independiente del Arquitecto pasó sus 8 bloques. El push salió el 27/07
+(`2fe6815 → 0f51ec0`) con las migraciones **0027** y **0028**: Railway en SUCCESS
+y `/salud/` en 200 sostenido. La compuerta D-0 se repitió con dato fresco justo
+antes (cero activos sin responsable).
+
+**Siguiente paso: cerrar la rama** — diff completo contra `origin/Desarrollo`,
+PR y merge, y después **crear `produccion` desde `Desarrollo` y reapuntar Railway
+allí**, que es lo que libera `sprint-5-produccion`. Guion completo en
+`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`. El **Loop E** (D14)
+va después del PR.
 Los Loops A, B, C y D están cerrados y verificados. La auditoría de cierre
 (Codex, 27/07) había vuelto a **BLOQUEAR el PR** con dos hallazgos ALTOS; los
 cuatro se reprodujeron contra el código antes de aceptarlos, y la verificación
@@ -213,7 +217,7 @@ Nace de la auditoría de cierre del 27/07/2026. Decisiones D11-D13 aprobadas
 - [x] Cierre: **337 tests OK** · `check` sin issues · `makemigrations --check` limpio · script de verificación `5eff498`
 - [x] **Verificación del Arquitecto:** corrí `docs/proceso/verificaciones/2026-07-27_verificacion_loop_d.py` — **8 bloques, OK**. Confirmé las dos líneas que distinguen la verificación del trámite: la ficha histórica inactiva **sí** se sigue creando (la restricción no es `NOT NULL`), y el aviso del tablero da **0** con un médico que sí puede atender (no salta siempre)
 - [x] **D-0 repetido antes del push** (27/07, dato fresco): `a_sin_medico = 0` otra vez. La 0028 no puede fallar por datos existentes
-- [ ] **Un solo push** a `origin/sprint-5-produccion` con todo en verde, mirando el log del deploy y `/salud/`
+- [x] **Un solo push** a `origin/sprint-5-produccion` (`2fe6815 → 0f51ec0`, 18 commits). Las tres tarjetas de Railway en **SUCCESS** y `/salud/` en **HTTP 200 durante diez sondeos consecutivos** tras el deploy. **El Loop D está en producción**
 
 **Los dos falsos verdes de D-1, porque son la lección del loop.** La prueba del
 Admin no mandaba el checkbox `activo`: el paciente nacía inactivo y el filtro por

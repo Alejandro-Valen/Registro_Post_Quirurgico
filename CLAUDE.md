@@ -222,14 +222,13 @@ se verifica por qué está verde.*
 variables y los gotchas están en `docs/railway_deploy.md`.
 
 **Próximo paso exacto (al retomar):** verificar el estado real contra `git log` y
-la suite antes de proponer nada, y continuar por el "Estado de avance" de
-`docs/decisiones_correccion_auditoria.md` — hoy: **el push del Loop D**, que
-sigue pendiente. Hay **15 commits locales sin publicar** y ese push sale a
-producción con dos migraciones. Antes de hacerlo, **repetir la consulta de la
-compuerta D-0** (`docs/proceso/verificaciones/2026-07-28_consulta_d0_responsables.py`,
-o su versión SQL): si `a_sin_medico` no da 0, la migración 0028 falla y deja el
-contenedor sin arrancar. Después del push: diff completo contra
-`origin/Desarrollo`, PR y merge. El **Loop E** (D14) va después del PR.
+la suite antes de proponer nada, y seguir el guion de
+**`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`** — los cuatro
+loops ya están en producción; lo que falta es **cerrar la rama**: revisar el diff
+contra `origin/Desarrollo`, PR y merge, y después **crear `produccion` desde
+`Desarrollo` y reapuntar Railway allí**. Ese último paso es el que libera
+`sprint-5-produccion`: mergear no basta, porque Railway la sigue mirando y
+cualquier push a ella saldría a producción. El **Loop E** (D14) va después del PR.
 
 Las dos auditorías **ya se ejecutaron — no repetirlas.** Las decisiones D1-D14
 están tomadas; no se reabren salvo que el Arquitecto lo pida.
