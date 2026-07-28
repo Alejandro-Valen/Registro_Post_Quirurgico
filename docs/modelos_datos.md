@@ -32,7 +32,10 @@ medico_responsable    ForeignKey(User, PROTECT, null=True, blank=True)
                       # la cuenta mientras tenga pacientes: hay que reasignarlos.
                       # Regla operativa: las cuentas de médico NO se borran, se
                       # desactivan (is_active=False), y antes de desactivar una
-                      # se reasignan sus pacientes activos.
+                      # se reasignan sus pacientes activos. Si se olvida, el
+                      # tablero de triage del superusuario lo avisa: "pacientes
+                      # activos sin atención efectiva" (D12 capa 3, cuenta
+                      # desactivada / sin is_staff / sin correo).
                       # null=True sigue: las fichas históricas e inactivas
                       # conservan lo que tengan, incluido NULL. Exigirles un
                       # médico obligaría a inventarles uno.
