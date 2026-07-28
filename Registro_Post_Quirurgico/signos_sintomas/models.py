@@ -48,12 +48,21 @@ class Paciente(models.Model):
     )
     medico_responsable = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
+        # D12 (capa 2), la puerta de atrás: con SET_NULL, borrar la cuenta de un
+        # médico convertía a TODOS sus pacientes en huérfanos invisibles, en
+        # silencio — fuera del listado del médico y fuera de los KPI del
+        # tablero. Quién atendió a un paciente es historia clínica, no
+        # configuración. PROTECT obliga a reasignarlos antes.
+        # Regla operativa que la acompaña: las cuentas de médico NO se borran,
+        # se desactivan (is_active=False); y antes de desactivar una, se
+        # reasignan sus pacientes activos.
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name='pacientes',
         help_text="Usuario del sistema (médico) responsable del paciente. "
-                  "Debe existir como usuario en Django Admin."
+                  "Debe existir como usuario en Django Admin. Obligatorio "
+                  "mientras el paciente esté activo."
     )
     activo = models.BooleanField(
         default=True,
