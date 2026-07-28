@@ -170,6 +170,23 @@ class Command(BaseCommand):
         ))
 
     # ------------------------------------------------------------------- crear
+    @staticmethod
+    def _faltas_del_medico(medico):
+        """Las tres condiciones de la capa 3 de D12, en lenguaje del operador.
+
+        Son las mismas que vigila el aviso del tablero: una cuenta que falle
+        cualquiera de ellas deja al paciente sin nadie que lo mire, aunque el
+        campo `medico_responsable` esté lleno.
+        """
+        faltas = []
+        if not medico.is_active:
+            faltas.append('la cuenta está desactivada')
+        if not medico.is_staff:
+            faltas.append('no tiene acceso al panel (is_staff)')
+        if not medico.email:
+            faltas.append('no tiene correo configurado, así que no recibiría las alertas')
+        return faltas
+
     def _crear(self, medico_username):
         if Paciente.objects.filter(telefono_whatsapp__in=TELEFONOS_DEMO).exists():
             self.stdout.write(self.style.WARNING(
@@ -188,11 +205,30 @@ class Command(BaseCommand):
                 return
         else:
             medico = User.objects.filter(is_superuser=True).order_by('pk').first()
-            if medico is None:
-                self.stdout.write(self.style.WARNING(
-                    'No hay superusuario en la base: los pacientes de ejemplo '
-                    'quedarán sin médico asignado. Usa --medico <username> para asignarlos.'
-                ))
+
+        # D12: el comando se NIEGA a crear pacientes sin un médico que pueda
+        # atenderlos. Antes advertía y los creaba igual, y aceptaba cualquier
+        # username en --medico sin comprobar que sirviera: el paciente no quedaba
+        # huérfano —el campo estaba lleno— pero nadie podía verlo ni recibir su
+        # alerta, y ningún aviso lo detectaba.
+        if medico is None:
+            self.stderr.write(self.style.ERROR(
+                'No hay ningún médico al que asignar los pacientes de ejemplo. '
+                'Crea la cuenta primero y vuelve a intentarlo con '
+                '--medico <username>. Abortando sin crear nada.'
+            ))
+            return
+
+        faltas = self._faltas_del_medico(medico)
+        if faltas:
+            self.stderr.write(self.style.ERROR(
+                f'El usuario "{medico.username}" no puede ser médico responsable: '
+                f'{"; ".join(faltas)}. Un paciente asignado a esa cuenta no '
+                f'aparecería en ningún listado y sus alertas no llegarían a '
+                f'nadie. Corrige la cuenta o usa --medico <username>. '
+                f'Abortando sin crear nada.'
+            ))
+            return
 
         total_alertas = 0
         for demo in DEMOS:

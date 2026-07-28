@@ -4870,6 +4870,9 @@ class SeedDemoTests(TestCase):
             username='medico_seed_prod',
             password='pass',
             is_staff=True,
+            # D12: sin correo, el comando ahora rechaza la cuenta — un médico
+            # que no recibe las alertas no puede ser responsable de nadie.
+            email='medico_seed_prod@ejemplo.com',
         )
         call_command(
             'seed_demo_produccion',
@@ -6086,6 +6089,31 @@ class PacienteActivoExigeMedicoTests(TestCase):
 
         call_command(
             'seed_demo_produccion', '--confirmar',
+            stdout=StringIO(), stderr=StringIO(),
+        )
+
+        self.assertFalse(
+            Paciente.objects.filter(cedula__startswith='DEMO-').exists()
+        )
+
+    def test_el_seed_de_produccion_rechaza_un_medico_inservible(self):
+        """La segunda vía, más callada: el campo se llena con una cuenta inútil.
+
+        `--medico` aceptaba cualquier username sin comprobar que la cuenta
+        pudiera atender a nadie. El paciente resultante NO es huérfano —el campo
+        está lleno, así que ni la restricción ni el aviso de huérfanos lo
+        detectan— pero nadie puede verlo ni recibir su alerta.
+        """
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        inservible = get_user_model().objects.create_user(
+            username='dr_inservible', password='x', is_staff=False,
+        )
+
+        call_command(
+            'seed_demo_produccion', '--confirmar', '--medico', inservible.username,
             stdout=StringIO(), stderr=StringIO(),
         )
 
