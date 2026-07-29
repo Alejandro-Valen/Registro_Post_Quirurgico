@@ -185,6 +185,17 @@ exclusivamente cierres históricos previos donde ese motivo no se capturó.
 ### ConversacionWhatsApp (Sprint 3, ampliado en Sprint 3.5)
 ```python
 paciente                  OneToOneField(Paciente, PROTECT)
+checkin_actual            OneToOneField(CheckInProgramado, SET_NULL, null=True,
+                          editable=False)
+                          # Migración 0021. Fija el turno EXACTO que el paciente
+                          # está respondiendo, desde que inicia el cuestionario.
+                          # Es lo que coordina el bot con el cron: al cerrar
+                          # turnos vencidos, cerrar_checkins_vencidos consulta
+                          # este vínculo y omite los check-ins cuya conversación
+                          # tuvo actividad dentro de las 10 horas de gracia — un
+                          # paciente que está contestando en ese momento no
+                          # recibe una alerta SILENCIO. Una conversación
+                          # abandonada fuera de esa ventana sí se cierra.
 estado                     CharField choices=[INICIO, ESPERANDO_TEMPERATURA,
                            ESPERANDO_DOLOR, ESPERANDO_TIENE_DRENAJE,
                            ESPERANDO_ASPECTO_DRENAJE,
@@ -220,5 +231,84 @@ fecha_actualizacion         DateTimeField auto_now=True
 HTTP independiente — Django no "recuerda" en qué pregunta iba el paciente entre
 un mensaje y otro. Este modelo persiste el estado de la máquina de estados en
 la base de datos en lugar de en memoria.
+
+### CheckInProgramado (Sprint 4, Bloque 4)
+```python
+paciente         ForeignKey(Paciente, PROTECT, related_name='checkins')
+fecha_dia        DateField
+                 # Día calendario del evento. Se CONGELA al crear y nunca se
+                 # recalcula en save(): recalcularlo hacía que un turno creado
+                 # antes de medianoche cambiara de día al guardarse después.
+orden            PositiveSmallIntegerField   # 1=mañana, 2=tarde
+                 # Clave robusta del turno. La escalera de SILENCIO cuenta
+                 # sobre (fecha_dia, orden), no sobre la etiqueta ni la hora.
+etiqueta         CharField choices=[MAÑANA, TARDE]
+                 # Solo para que el médico lo lea. La fija el scheduler al
+                 # crear el evento, NUNCA la hora en que el paciente responde:
+                 # un paciente que contesta el turno de la mañana a las 8 p.m.
+                 # sigue respondiendo el turno de la mañana.
+hora_programada  DateTimeField
+                 # Momento en que el sistema disparó (o debía disparar) el
+                 # prompt. Es el origen del corte de 10 horas de gracia.
+fecha_respuesta  DateTimeField nullable   # null = aún no respondió
+estado           CharField choices=[PENDIENTE, COMPLETADO, NO_RESPONDIDO]
+registro         OneToOneField(RegistroDiario, SET_NULL, null=True,
+                 related_name='checkin')
+                 # RegistroDiario creado al completar el flujo. Se vincula en
+                 # transacción atómica con el cambio de estado.
+```
+
+**Restricciones en base de datos**
+
+| Nombre | Qué garantiza |
+|---|---|
+| `unique_checkin_paciente_dia_orden` | Un solo turno por paciente/día/orden. Es la mitad de lo que hace idempotentes a `crear_checkins_diarios` y `cerrar_checkins_vencidos` — la otra mitad es que ambos verifican el estado antes de actuar, así que una segunda corrida no reprocesa |
+| `checkin_estado_valido` | `estado` ∈ PENDIENTE / COMPLETADO / NO_RESPONDIDO |
+| `checkin_etiqueta_valida` | `etiqueta` ∈ MAÑANA / TARDE |
+| `checkin_turno_coherente` | `orden=1 ⇒ MAÑANA` y `orden=2 ⇒ TARDE` — impide que el número del turno y su nombre se contradigan |
+
+**Por qué existe:** es el registro de que el sistema *intentó* contactar al
+paciente. Sin él, un paciente que no responde es indistinguible de un paciente
+al que nunca se le preguntó — y esa diferencia es justamente la alerta
+SILENCIO. Solo se persisten datos crudos (`hora_programada`, `fecha_respuesta`);
+latencia y porcentaje de respuesta tardía se derivan en el dashboard.
+
+**Quién lo escribe:** `crear_checkins_diarios` crea los 2 turnos de cada
+paciente activo; `bot.py` los marca `COMPLETADO`; `cerrar_checkins_vencidos`
+cierra como `NO_RESPONDIDO` los que pasaron 10 horas de su `hora_programada` y
+calcula sobre ellos la racha de la escalera de SILENCIO — regla y umbrales en
+`docs/reglas_clinicas.md`, razonamiento en la ficha **D1** de
+`docs/decisiones_correccion_auditoria.md`.
+
+### RecepcionWebhookTwilio (Sprint 5, Loop 2 — migración 0020)
+```python
+message_sid          CharField(64) unique
+                     # Identificador OPACO que Twilio asigna al webhook.
+                     # No es el teléfono ni el contenido.
+idempotency_token    CharField(128) blank
+estado               CharField choices=[PROCESANDO, COMPLETADO, ERROR]
+                     # ERROR es reintentable; COMPLETADO es terminal.
+intentos             PositiveSmallIntegerField default=1
+fecha_recepcion      DateTimeField auto_now_add=True
+fecha_actualizacion  DateTimeField auto_now=True
+```
+
+**Restricciones en base de datos**
+
+| Nombre | Qué garantiza |
+|---|---|
+| `webhook_twilio_estado_valido` | `estado` ∈ PROCESANDO / COMPLETADO / ERROR |
+| `webhook_twilio_intentos_positivo` | `intentos >= 1` |
+
+**Por qué existe:** Twilio reintenta un webhook que no respondió a tiempo, así
+que el mismo mensaje del paciente puede llegar dos veces. Sin este recibo, un
+reintento avanzaría la máquina de estados dos preguntas o duplicaría una
+medición en la historia clínica. La unicidad de `message_sid` convierte el
+segundo intento en un no-op.
+
+**No guarda PHI.** Ni teléfono ni cuerpo del mensaje: solo el identificador
+opaco de Twilio y los datos de control. Es deliberado — es una tabla técnica de
+idempotencia, no un registro clínico. En el Admin es de solo lectura y visible
+únicamente para superusuarios.
 
 ---
