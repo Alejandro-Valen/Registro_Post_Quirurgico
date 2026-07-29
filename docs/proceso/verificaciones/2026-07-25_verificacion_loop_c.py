@@ -141,7 +141,7 @@ class Verificacion3EstadoDelMotor(TestCase):
         _titulo("3. HALLAZGO 7 — estado de error del motor en la ruta del bot")
 
         paciente = Paciente.objects.create(medico_responsable=_medico_archivo(),
-            
+
             nombre_completo="Paciente Verificacion Loop C",
             telefono_whatsapp=self.TELEFONO,
             fecha_cirugia=timezone.localdate() - timedelta(days=3),
@@ -247,7 +247,7 @@ class Verificacion5HinchazonSinCambios(TestCase):
         (`Alerta.registro_origen` es PROTECT), así que no se pueden borrar
         entre escenario y escenario."""
         return Paciente.objects.create(medico_responsable=_medico_archivo(),
-            
+
             nombre_completo="Paciente Hinchazon {}".format(indice),
             telefono_whatsapp="+57300777660{}".format(indice),
             fecha_cirugia=self.hoy,
@@ -302,7 +302,7 @@ class Verificacion6Medianoche(TestCase):
         ahora = timezone.now()
         hoy = timezone.localdate(ahora)
         paciente = Paciente.objects.create(medico_responsable=_medico_archivo(),
-            
+
             nombre_completo="Paciente Medianoche",
             telefono_whatsapp="+573005554433",
             fecha_cirugia=hoy,
