@@ -11,8 +11,14 @@
 > **Nota de contexto:** este documento se escribió cuando la pregunta de
 > alcance (ERAS general vs. Sugarbaker exclusivo) todavía estaba abierta. Esa
 > pregunta ya se resolvió — ver `CLAUDE.md` y el campo `tipo_cirugia` en
-> `Paciente`. Lo que sigue vigente y sin resolver de este documento es
-> específicamente la comparación de umbrales, no la discusión de alcance.
+> `Paciente`. La comparación de umbrales se conserva como referencia; las reglas
+> vigentes y sus decisiones están en el código, `CLAUDE.md` y el roadmap.
+>
+> **Estado actual (21/07/2026):** el producto programa dos check-ins diarios
+> (mañana/tarde) y cada flujo contiene hasta 10 preguntas. El texto de
+> "decisión pendiente" más abajo se conserva como razonamiento histórico, no
+> como backlog vigente. El envío proactivo que inicia esos check-ins sí sigue
+> pendiente porque `enviar_recordatorios` es un stub.
 
 ---
 
@@ -29,7 +35,7 @@
 
 ---
 
-## Decisión pendiente — arquitectura de check-ins (no resuelta todavía)
+## Discusión histórica — arquitectura de check-ins
 
 Los 3 estudios más recientes y sofisticados (Lee 2022, Outersterp 2025,
 Coeckelberghs 2025) usan una arquitectura de seguimiento **2-3 veces al día**

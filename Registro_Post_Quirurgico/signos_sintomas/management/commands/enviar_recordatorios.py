@@ -45,18 +45,21 @@ class Command(BaseCommand):
             #     to=f'whatsapp:{telefono}',
             #     body="Buenos días 🌿 Es hora de tu reporte diario..."
             # )
+            # D11: ni nombre ni teléfono en la salida. El teléfono se sigue
+            # leyendo arriba porque la llamada real a Twilio lo necesita, pero
+            # no se escribe: bastaba bajar el nivel del logger a INFO para
+            # volcar la lista completa de pacientes con su celular.
             logger.info(
-                "enviar_recordatorios: check-in %d — paciente %s (%s) — "
+                "enviar_recordatorios: check-in %d — paciente pk=%d — "
                 "programado %s — [envío Twilio pendiente FASE 4]",
                 checkin.pk,
-                checkin.paciente.nombre_completo,
-                telefono,
+                checkin.paciente_id,
                 checkin.hora_programada.isoformat(),
             )
             enviados += 1
 
         resumen = (
-            f"enviar_recordatorios {ahora.date()}: "
+            f"enviar_recordatorios {timezone.localdate()}: "
             f"{enviados} check-ins procesados (envío Twilio diferido a FASE 4)."
         )
         logger.info(resumen)

@@ -2,29 +2,45 @@
 Management command: seed_demo
 
 Crea datos de demostración para mostrar el dashboard al equipo médico:
-- 1 superuser demo (si no existe)
+- 1 usuario demo is_staff (sin is_superuser — representa a un médico real)
 - 1 paciente ficticio (Camilo Rueda, tel +573001234567)
 - 10 días de RegistroDiario con variedad clínica (fiebre, drenaje, etc.)
 - Las alertas se generan automáticamente por el alert_engine
 
 Idempotente: si el paciente demo ya existe, omite la creación.
 
+Solo puede ejecutarse con DEBUG=True (A-3): crea una cuenta con contraseña
+conocida, por lo que en producción el comando aborta sin hacer nada.
+
 Uso:
     python manage.py seed_demo
     python manage.py seed_demo --borrar   # elimina y recrea todo
+    python manage.py seed_demo --limpiar  # elimina el paciente y se detiene
 """
 
 import logging
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.utils import timezone
 
-from signos_sintomas.alert_engine import evaluar_registro
+from signos_sintomas.evaluacion_alertas import evaluar_registro_con_estado
+from signos_sintomas.management.commands.crear_medico import (
+    NOMBRE_GRUPO_MEDICOS,
+    obtener_permisos_medico,
+)
 from signos_sintomas.models import (
-    Alerta, CheckInProgramado, Paciente, RegistroDiario
+    Alerta,
+    CheckInProgramado,
+    ConversacionWhatsApp,
+    NotificacionAlerta,
+    Paciente,
+    RegistroDiario,
 )
 
 logger = logging.getLogger(__name__)
@@ -63,18 +79,64 @@ class Command(BaseCommand):
     help = "Crea datos de demostración para el dashboard médico."
 
     def add_arguments(self, parser):
-        parser.add_argument(
+        grupo = parser.add_mutually_exclusive_group()
+        grupo.add_argument(
             '--borrar',
             action='store_true',
             help='Elimina el paciente demo y todos sus datos antes de recrear.',
         )
+        grupo.add_argument(
+            '--limpiar',
+            action='store_true',
+            help='Elimina el paciente demo y todos sus datos sin recrearlo.',
+        )
 
     def handle(self, *args, **options):
+        if not settings.DEBUG:
+            self.stderr.write(
+                self.style.ERROR(
+                    'seed_demo NO puede ejecutarse en producción (DEBUG=False). '
+                    'Este comando crea datos ficticios y una cuenta demo con '
+                    'contraseña conocida. Abortando.'
+                )
+            )
+            return
+
         User = get_user_model()
 
+        if options['limpiar']:
+            self._borrar_datos_demo()
+            self.stdout.write(self.style.SUCCESS('Datos demo locales eliminados.'))
+            return
+
         if options['borrar']:
-            Paciente.objects.filter(telefono_whatsapp=TELEFONO_DEMO).delete()
+            self._borrar_datos_demo()
             self.stdout.write(self.style.WARNING('Datos demo anteriores eliminados.'))
+
+        # Usuario demo — is_staff sin is_superuser, para representar la
+        # experiencia real de un médico (ve solo sus propios pacientes; sin
+        # acceso a Usuarios ni AXES). A-3, hallazgo de auditoría 02/07/2026.
+        if not User.objects.filter(username=USERNAME_DEMO).exists():
+            medico = User.objects.create_user(
+                username=USERNAME_DEMO,
+                password='demo1234',
+                email='demo@medico.com',
+                first_name='Demo',
+                last_name='Médico',
+                is_staff=True,
+                is_superuser=False,
+            )
+            self.stdout.write(f'  Usuario demo creado: {USERNAME_DEMO} / demo1234')
+        else:
+            medico = User.objects.get(username=USERNAME_DEMO)
+
+        grupo, _ = Group.objects.get_or_create(name=NOMBRE_GRUPO_MEDICOS)
+        grupo.permissions.set(obtener_permisos_medico())
+        medico.is_staff = True
+        medico.is_superuser = False
+        medico.save(update_fields=['is_staff', 'is_superuser'])
+        medico.groups.set([grupo])
+        medico.user_permissions.clear()
 
         if Paciente.objects.filter(telefono_whatsapp=TELEFONO_DEMO).exists():
             self.stdout.write(self.style.WARNING(
@@ -83,29 +145,19 @@ class Command(BaseCommand):
             ))
             return
 
-        # Superuser demo
-        if not User.objects.filter(username=USERNAME_DEMO).exists():
-            medico = User.objects.create_superuser(
-                username=USERNAME_DEMO,
-                password='demo1234',
-                email='demo@medico.com',
-                first_name='Demo',
-                last_name='Médico',
-            )
-            self.stdout.write(f'  Superuser creado: {USERNAME_DEMO} / demo1234')
-        else:
-            medico = User.objects.get(username=USERNAME_DEMO)
-
         # Paciente ficticio
         hoy = timezone.localdate()
         fecha_cirugia = hoy - timedelta(days=10)
         paciente = Paciente.objects.create(
             nombre_completo='Camilo Andrés Rueda Vargas',
+            cedula='DEMO-LOCAL-001',
             telefono_whatsapp=TELEFONO_DEMO,
             fecha_cirugia=fecha_cirugia,
             tipo_cirugia='colectomia_electiva',
             medico_responsable=medico,
             activo=True,
+            consentimiento_informado=True,
+            fecha_consentimiento=timezone.now(),
         )
         self.stdout.write(f'  Paciente demo creado: {paciente.nombre_completo}')
 
@@ -121,6 +173,7 @@ class Command(BaseCommand):
             tiene_drenaje = aspecto is not None
             registro = RegistroDiario.objects.create(
                 paciente=paciente,
+                fecha_registro=fecha_reg,
                 temperatura=Decimal(str(temp)),
                 dolor_eva=dolor,
                 tiene_drenaje=tiene_drenaje,
@@ -131,11 +184,6 @@ class Command(BaseCommand):
                 tolero_liquidos=tolero,
                 frecuencia_cardiaca=fc,
             )
-            # Fijar fecha_registro al día correcto (auto_now_add no es controlable)
-            RegistroDiario.objects.filter(pk=registro.pk).update(
-                fecha_registro=fecha_reg
-            )
-            registro.refresh_from_db()
 
             # Crear check-in completado para ese día
             CheckInProgramado.objects.create(
@@ -149,7 +197,7 @@ class Command(BaseCommand):
                 registro=registro,
             )
 
-            alertas = evaluar_registro(
+            alertas = evaluar_registro_con_estado(
                 registro,
                 fecha_referencia=registro.fecha_registro.date(),
             )
@@ -163,3 +211,19 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'\nSeed demo completo. Accede al admin con: {USERNAME_DEMO} / demo1234'
         ))
+
+    @transaction.atomic
+    def _borrar_datos_demo(self):
+        pacientes = Paciente.objects.filter(telefono_whatsapp=TELEFONO_DEMO)
+        pids = list(pacientes.values_list('pk', flat=True))
+        if not pids:
+            return
+
+        # Las relaciones clínicas usan PROTECT. Se eliminan de hijo a padre;
+        # borrar Alerta también retira sus DeteccionAlerta por CASCADE.
+        NotificacionAlerta.objects.filter(alerta__paciente_id__in=pids).delete()
+        Alerta.objects.filter(paciente_id__in=pids).delete()
+        CheckInProgramado.objects.filter(paciente_id__in=pids).delete()
+        RegistroDiario.objects.filter(paciente_id__in=pids).delete()
+        ConversacionWhatsApp.objects.filter(paciente_id__in=pids).delete()
+        pacientes.delete()

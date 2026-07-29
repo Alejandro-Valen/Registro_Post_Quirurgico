@@ -1,6 +1,10 @@
 # Análisis de Transcripciones — Presentaciones del Médico (Dr. Juan Camilo Correa)
 ## MVP Sugarbaker / Clínica Somer — Fuentes primarias del proponente
 
+> **Documento histórico (junio de 2026).** Las frases sobre pasos o decisiones
+> pendientes reflejan la sesión original. Para el estado vigente consulta
+> `CLAUDE.md` y `ROADMAP_MONITOREO_POSQUIRURGICO.md`.
+
 > A diferencia de los 9 PDFs científicos, estos dos documentos no son literatura
 > revisada por pares — son transcripciones de presentaciones del propio médico
 > que originó la idea del proyecto. Su valor no es evidencia clínica, es

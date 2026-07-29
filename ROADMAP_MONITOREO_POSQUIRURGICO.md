@@ -3,7 +3,7 @@
 > **Para agentes IA:** Lee este archivo completo antes de sugerir cualquier acción.
 > Contiene el contexto clínico, el estado actual del proyecto, y los pasos pendientes.
 > El repositorio es: https://github.com/Alejandro-Valen/Registro_Post_Quirurgico
-> Rama principal: `Desarrollo` | Rama activa: `sprint-4-dashboard` (Sprint 4 completo, 135 tests OK — pendiente merge a Desarrollo)
+> Rama principal: `Desarrollo` | Rama activa: `sprint-5-produccion` (Sprint 4 mergeado a Desarrollo 01/07/2026, 135 tests OK)
 
 ---
 
@@ -16,7 +16,7 @@ exclusivamente por WhatsApp. Un bot le hace preguntas diarias de telemetría. El
 sistema clasifica los datos, detecta alertas rojas automáticas y notifica al
 médico a través de un dashboard en Django Admin.
 
-**Stack:** Django 6.0.5 + PostgreSQL 18 + WhatsApp Bot (Twilio) + Python 3.13
+**Stack:** Django 6.0.7 + PostgreSQL 18 + WhatsApp Bot (Twilio) + Python 3.13
 **OS de desarrollo:** Windows 11
 **Ruta del proyecto en máquina de León:**
 `C:\Users\león\Documents\ProyectoLeonAlejo\Registro_Post_Quirurgico`
@@ -33,123 +33,91 @@ médico a través de un dashboard en Django Admin.
 
 ---
 
-## Variables Clínicas que Registra el Sistema
+## Reglas clínicas y variables que registra el sistema
 
-Capturadas 2 veces al día por WhatsApp (decisión jun 2026 — Gignoux 2018
-como referencia parcial; **pendiente de implementar en bot.py**, hoy el
-bot sigue capturando 1 vez/día):
-
-| # | Variable | Tipo | Unidad |
-|---|----------|------|--------|
-| 1 | Temperatura corporal | Decimal | °C |
-| 2 | Dolor EVA | Entero | Escala 1-10 |
-| 3 | ¿Tiene drenaje activo? | Booleano nullable | sí/no/no capturado |
-| 4 | Aspecto del drenaje | Choices | seroso/hemático/turbio/purulento/fecaloide/sin_drenaje |
-| 5 | Cantidad del drenaje | Choices | poco/normal/mucho/sin_drenaje (cualitativo) |
-| 6 | Volumen del drenaje | Entero opcional | ml — solo si el paciente lo mide |
-| 7 | Presencia de gases | Booleano | sí/no |
-| 8 | Episodios de náuseas/vómito | Entero | cantidad por check-in |
-| 9 | ¿Toleró líquidos sin vomitar? | Booleano nullable | sí/no/no capturado |
-| 10 | Hinchazón/distensión abdominal | Choices nullable | nada/algo/mucho |
-| 11 | Frecuencia cardíaca | Entero nullable | lpm — alerta TAQUICARDIA si >= 101 |
-| 12 | Frecuencia respiratoria | Entero nullable | rpm — SOLO dashboard, sin alerta |
-
----
-
-## Reglas del Motor de Alertas (alert_engine.py)
-
-**Archivo:** `signos_sintomas/alert_engine.py`
-**Función principal:** `evaluar_registro(registro: RegistroDiario) -> list[Alerta]`
-**Principio de diseño (decisión jun 2026):** modelo de alta sensibilidad
-(Lee 2022, Outersterp 2025) — escalera BAJA/MEDIA/ALTA en vez de un solo
-nivel de alerta. **Las 5 variables están reescritas bajo este
-modelo — fase de decisiones de arquitectura clínica completa.**
-
-| Regla | Condición exacta | Tipo Alerta | Severidad | Base clínica |
-|-------|-----------------|-------------|-----------|--------------|
-| 1a | temperatura >= 37.9°C (cualquier registro del día) | SEPSIS | ALTA | Outersterp 2025 — umbral de notificación domiciliaria |
-| 1b | temperatura 37.5–37.8°C en 2 días calendario consecutivos | SEPSIS | MEDIA | Subfebrícula persistente — construcción propia |
-| 2a | tiene_drenaje is True AND aspecto in ['purulento','fecaloide'] | FUGA_ANASTOMOTICA | ALTA | Fuga anastomótica confirmada |
-| 2b | tiene_drenaje is True AND aspecto in ['turbio','hematico'] | FUGA_ANASTOMOTICA | MEDIA | Drenaje sospechoso — seguimiento |
-| 2c | tiene_drenaje is True AND aspecto == 'seroso' | FUGA_ANASTOMOTICA | BAJA | Drenaje dentro de lo esperado |
-| 3a | sin gases 1 día calendario | ILEO_PARALITICO | BAJA | Gases = criterio de alta ERAS; ausencia = regresión |
-| 3b | sin gases 2 días calendario consecutivos | ILEO_PARALITICO | MEDIA | ídem |
-| 3c | sin gases 3 días calendario consecutivos | ILEO_PARALITICO | ALTA | ídem — umbral histórico del proyecto |
-| 4a | suma episodios_nauseas del día: 1-2 | ILEO_PARALITICO | BAJA | Lee 2022, Outersterp 2025 — cualquier episodio es señal |
-| 4b | suma episodios_nauseas del día: 3-4 | ILEO_PARALITICO | MEDIA | ídem |
-| 4c | suma episodios_nauseas del día: 5+ | ILEO_PARALITICO | ALTA | ídem |
-| 4d | náuseas (≥1 episodio/día) en 2 días calendario consecutivos | ILEO_PARALITICO | MEDIA (mínimo) | Persistencia — solo sube severidad, nunca la baja |
-| 4e | náuseas (≥1 episodio/día) en 4 días calendario consecutivos | ILEO_PARALITICO | ALTA | Delaney 2008 — íleo en 27.8% con estancia 4+ días vs 11% general |
-| 5a | dolor_eva >= umbral según ventana de dia_postoperatorio (ver nota) | DOLOR_AGUDO | BAJA/MEDIA/ALTA según ventana | Delaney 2008, Lee 2022, Outersterp 2025, Coeckelberghs 2025 |
-| 5b | promedio dolor_eva últimos 2 días - promedio 2 días anteriores >= 3 | DOLOR_AGUDO | sube un nivel sobre 5a (techo ALTA) | Tendencia alcista — construcción propia |
-| 6a | tolero_liquidos=False en 1 día calendario | INTOLERANCIA_ORAL | MEDIA | Deshidratación = causa #1 de readmisión (Lawrence 2013); tolerancia oral es criterio de alta ERAS |
-| 6b | tolero_liquidos=False en 2 días calendario consecutivos | INTOLERANCIA_ORAL | ALTA | Riesgo de deshidratación establecida |
-| 7a | hinchazón: nivel de hoy > nivel de ayer (empeoramiento puntual) | ILEO_PARALITICO | BAJA | Distensión = signo de íleo; empeoramiento leve |
-| 7b | hinchazón: hoy > antier sostenido sin bajar >2 días | ILEO_PARALITICO | MEDIA | Empeoramiento sostenido — posible íleo en progreso |
-| 7c | hinchazón "mucho" sostenido 4 días calendario consecutivos | ILEO_PARALITICO | ALTA | Distensión severa persistente — posible íleo paralítico |
-| 8a | frecuencia_cardiaca 101-109 lpm | TAQUICARDIA | BAJA | Taquicardia leve, probablemente fisiológica |
-| 8b | frecuencia_cardiaca 110-149 lpm | TAQUICARDIA | MEDIA | CREWS 2022 (110 lpm, 75% sens. fuga/sangrado); Cleveland NCT04574908 (>110 intervención) |
-| 8c | frecuencia_cardiaca >= 150 lpm | TAQUICARDIA | ALTA | Escalamiento inmediato (protocolos hospitalarios) |
-
-**Nota Regla 8 (FC — valor absoluto):** la taquicardia se evalúa por el
-valor de cada registro, sin lógica de días calendario ni persistencia.
-Solo se vigila FC alta, no bradicardia.
-
-**Frecuencia respiratoria (FR): SOLO DASHBOARD, sin regla.** Se captura y
-almacena pero el `alert_engine` NO la evalúa — Outersterp 2025 halló que
-el 77% de las falsas alertas venían del sensor de FR. Por eso FR no tiene
-fila de reglas; solo aparece como variable y campo del modelo.
-
-**Nota sobre lógica de días calendario (Reglas 1, 3, 4, 6, 7):** agrupan
-registros por `fecha_registro__date`, no por número de registro — el
-sistema captura 2 check-ins/día, así que 2 registros del mismo día
-cuentan como 1 día, no como 2.
-
-**Nota Regla 5 (Dolor/DOLOR_AGUDO — implementado):** escalera por
-`dia_postoperatorio`: POD 1-2 → BAJA 5-6/MEDIA 7-8/ALTA 9-10; POD 3-5
-→ BAJA 4-5/MEDIA 6-7/ALTA 8-10; POD 6+ → BAJA 3-4/MEDIA 5-6/ALTA
-7-10. Capa de tendencia: si el promedio de los últimos 2 días
-calendario sube >=3 puntos vs. el promedio de los 2 días anteriores,
-escala un nivel de severidad sobre el valor de la tabla (nunca baja
-una severidad ya alcanzada). Base: Delaney 2008, Lee 2022, Outersterp
-2025, Coeckelberghs 2025.
+> **Movidas a `docs/reglas_clinicas.md` (24/07/2026).** Estaban duplicadas aquí
+> y en `CLAUDE.md`, así que cada cambio de umbral había que hacerlo en dos
+> lugares — y el día que alguien olvidara uno, el proyecto tendría dos versiones
+> de un umbral médico sin forma de saber cuál manda.
+>
+> `docs/reglas_clinicas.md` es ahora la **fuente única**: las 8 reglas del
+> `alert_engine`, la regla operativa SILENCIO y las 12 variables clínicas con su
+> tipo y unidad. Se actualiza en el mismo lote de commits que
+> `signos_sintomas/alert_engine.py`.
+>
+> El razonamiento de cada decisión clínica sigue en
+> `docs/decisiones_correccion_auditoria.md` (fichas D1-D10), y la evidencia que
+> las respalda en `docs/auditoria_literatura/`.
 
 ---
 
 ## Estructura del Proyecto Django
 
+> Actualizada 01/07/2026 contra el árbol real del repositorio (post-merge Sprint 4).
+
 ```
-Registro_Post_Quirurgico/              ← raíz del repositorio
-├── CLAUDE.md                          ← contexto para agentes IA
-├── BITACORA.md                        ← historial del equipo
+Registro_Post_Quirurgico/                    ← raíz del repositorio
+├── CLAUDE.md                                ← contexto para agentes IA
+├── BITACORA.md                              ← historial del equipo
+├── ROADMAP_MONITOREO_POSQUIRURGICO.md       ← este archivo
+├── AUDITORIA_SPRINT3_CIERRE.md              ← detalle de hallazgos A/B/C/D del hardening
 ├── .gitignore
 ├── inicio_entornoR.bat
-└── Registro_Post_Quirurgico/          ← proyecto Django (manage.py aquí)
-    ├── .env                           ← secretos locales (NUNCA a GitHub)
-    ├── .env.example                   ← plantilla de variables
-    ├── requirements.txt
+├── requirements.txt                         ← pip freeze completo (reproducir entorno dev)
+├── requirements-runtime.txt                 ← dependencias directas de runtime (producción)
+├── docs/
+│   └── auditoria_literatura/                ← auditoría de evidencia ERAS (9 PDFs + transcripciones)
+│       ├── README.md
+│       ├── ANALISIS_INDIVIDUAL_9_PDFS_ERAS.md
+│       ├── ANALISIS_4_ARCHIVOS_RESTANTES.md
+│       ├── ANALISIS_TRANSCRIPCIONES_MEDICO.md
+│       └── SINTESIS_CRUZADA_UMBRALES.md
+└── Registro_Post_Quirurgico/                ← proyecto Django (manage.py aquí)
+    ├── .env                                 ← secretos locales (NUNCA a GitHub)
+    ├── .env.example                         ← plantilla de variables
     ├── manage.py
-    ├── Registro_Post_Quirurgico/      ← configuración Django
-    │   ├── settings.py                ← PostgreSQL + decouple + Bogotá
+    ├── Registro_Post_Quirurgico/            ← configuración Django
+    │   ├── settings.py                      ← base: PostgreSQL + decouple + Bogotá
+    │   ├── settings_local.py                ← dev: EMAIL_BACKEND=console (Sprint 4)
+    │   ├── settings_production.py           ← prod: DEBUG=False, HSTS, cookies seguras, cache Redis (Sprint 3-Hardening)
     │   ├── urls.py
+    │   ├── asgi.py
     │   └── wsgi.py
-    ├── home/                          ← app portal web
-    │   ├── views.py                   ← index y contacto
+    ├── home/                                ← app portal web
+    │   ├── models.py                        ← MensajeContacto
+    │   ├── views.py                         ← index y contacto (rate limit)
+    │   ├── admin.py
     │   ├── urls.py
+    │   ├── migrations/                    ← 0001 a 0002
+    │   ├── tests.py                       ← 18 tests
     │   └── templates/home/
     │       ├── index.html
     │       └── contacto.html
-    └── signos_sintomas/               ← app núcleo clínico
-        ├── models.py                  ← ✅ Paciente, RegistroDiario, Alerta, ConversacionWhatsApp
-        ├── admin.py                   ← ✅ panel del oncólogo configurado
-        ├── migrations/
-        │   ├── 0001_initial.py        ← ✅ tablas creadas en PostgreSQL
-        │   └── 0002_...cantidad...    ← ✅ cantidad_drenaje + ConversacionWhatsApp
-        ├── views.py                   ← ⏳ paso 3: webhook WhatsApp
-        ├── urls.py                    ← ⏳ paso 3: rutas
-        ├── alert_engine.py            ← ✅ creado y mergeado (Sprint 2)
-        ├── knowledge_base.md          ← ✅ placeholder (RAG diferido a FASE 5)
-        └── bot.py                     ← ✅ máquina de estados, flujo de 10 pasos
+    └── signos_sintomas/                     ← app núcleo clínico
+        ├── models.py                        ← modelos clínicos + recibo técnico de Twilio
+        ├── admin.py                         ← panel del médico: scoping, badges severidad, historial, filtros
+        ├── alert_engine.py                  ← motor clínico + unicidad concurrente de alertas
+        ├── evaluacion_alertas.py            ← estado auditable y reintentos del motor
+        ├── bot.py                           ← máquina de estados WhatsApp (10 preguntas, 2×/día)
+        ├── signals.py                       ← crea outbox durable para alertas ALTA
+        ├── views.py                         ← webhook Twilio (firma + SID durable en PostgreSQL)
+        ├── urls.py
+        ├── knowledge_base.md                ← placeholder (RAG diferido a Sprint 6)
+        ├── management/commands/
+        │   ├── crear_admin.py
+        │   ├── crear_medico.py
+        │   ├── desactivar_pacientes_vencidos.py
+        │   ├── crear_checkins_diarios.py
+        │   ├── enviar_recordatorios.py
+        │   ├── cerrar_checkins_vencidos.py
+        │   ├── reintentar_evaluaciones_alertas.py
+        │   ├── procesar_notificaciones_email.py
+        │   ├── cron_matutino.py
+        │   ├── cron_operativo.py
+        │   ├── seed_demo.py                 ← solo desarrollo
+        │   └── seed_demo_produccion.py      ← demo reversible y confirmada
+        ├── migrations/                      ← 0001 a 0024
+        └── tests.py                         ← 262 tests (280 total con home)
 ```
 
 ---
@@ -171,7 +139,7 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 | Campo | Tipo | Descripción |
 |-------|------|-------------|
 | paciente | ForeignKey(Paciente) PROTECT | No borrar paciente con registros |
-| temperatura | DecimalField(4,1) | °C — alerta si >= 38.0 |
+| temperatura | DecimalField(4,1) | °C — alerta ALTA si >= 37.9 |
 | dolor_eva | PositiveSmallIntegerField | Escala 1-10 |
 | volumen_drenaje_ml | PositiveIntegerField nullable | ml |
 | tiene_drenaje | BooleanField nullable | null=no capturado, False=sin drenaje, True=con drenaje |
@@ -183,19 +151,41 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 | frecuencia_cardiaca | PositiveSmallIntegerField nullable | lpm — alerta TAQUICARDIA por valor absoluto |
 | frecuencia_respiratoria | PositiveSmallIntegerField nullable | rpm — SOLO dashboard, sin alerta (Outersterp 2025) |
 | fecha_registro | DateTimeField auto | Timestamp automático |
-| dia_postoperatorio | PositiveSmallIntegerField | Calculado automáticamente al guardar |
+| dia_postoperatorio | PositiveSmallIntegerField | Calculado con la fecha del registro al crear y luego congelado |
+| estado_evaluacion_alertas | CharField choices | PENDIENTE/PROCESANDO/COMPLETADA/ERROR; indexado |
+| intentos_evaluacion_alertas | PositiveSmallIntegerField | Número de intentos del motor |
+| fecha_ultima_evaluacion_alertas | DateTimeField nullable | Auditoría técnica del último intento |
+| ultimo_error_evaluacion_alertas | CharField(100) | Solo clase del error; nunca respuestas del paciente |
 
 ### Alerta
 | Campo | Tipo | Descripción |
 |-------|------|-------------|
 | paciente | ForeignKey(Paciente) PROTECT | — |
 | registro_origen | ForeignKey(RegistroDiario) PROTECT | Registro que disparó la alerta |
-| tipo | CharField choices | SEPSIS/FUGA_ANASTOMOTICA/ILEO_PARALITICO/DOLOR_AGUDO |
+| tipo | CharField choices | SEPSIS/FUGA_ANASTOMOTICA/ILEO_PARALITICO/DOLOR_AGUDO/INTOLERANCIA_ORAL/TAQUICARDIA/SILENCIO |
 | severidad | CharField choices | ALTA/MEDIA/BAJA |
 | mensaje | TextField | Descripción generada por alert_engine |
 | resuelta | BooleanField | El oncólogo marca cuando atiende |
 | fecha_alerta | DateTimeField auto | Timestamp automático |
 | fecha_resolucion | DateTimeField nullable | Cuándo fue atendida |
+| veces | PositiveSmallIntegerField | Cantidad de detecciones mientras permanece abierta |
+
+Restricción: como máximo una alerta abierta por `(paciente, tipo)`.
+
+### DeteccionAlerta
+- Modelo hijo de solo lectura creado en el Loop 3 (migración 0022).
+- Cada fila conserva exactamente una fuente: `RegistroDiario` para una
+  detección clínica o `CheckInProgramado` para SILENCIO.
+- Guarda fecha, severidad y mensaje de esa detección; las restricciones de BD
+  impiden duplicar la misma fuente dentro de una alerta.
+- Empieza a registrar desde esta versión. El contador histórico `veces` se
+  conserva, pero no se reconstruyen eventos que nunca fueron almacenados.
+
+### ConversacionWhatsApp / RecepcionWebhookTwilio
+- `ConversacionWhatsApp.checkin_actual` fija el evento exacto que el paciente
+  está respondiendo y permite coordinar el bot con el cron.
+- `RecepcionWebhookTwilio` conserva solo `MessageSid`, token idempotente,
+  estado, intentos y timestamps. No guarda teléfono ni cuerpo del mensaje.
 
 ---
 
@@ -258,8 +248,8 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 
 ---
 
-### ⏳ FASE 3 — Bot WhatsApp — FUNCIONAL END-TO-END (pendiente solo merge)
-> Rama: `sprint-3-whatsapp` (pusheada a origin)
+### ✅ FASE 3 — Bot WhatsApp — COMPLETADA (mergeada a Desarrollo)
+> Rama: `sprint-3-whatsapp` (mergeada a `Desarrollo` antes de `sprint-3-hardening`; confirmado por historial git)
 
 **Paso 1 — Modelos (commit `68950ef`):**
 - [x] Modelo ConversacionWhatsApp (persiste estado de la máquina de estados)
@@ -291,14 +281,17 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
 - [x] Resolver 400 DisallowedHost → ALLOWED_HOSTS configurable por .env (.ngrok-free.dev)
 - [x] Resolver 403 firma → usar Auth Token PRIMARIO (no Test Credentials)
 - [x] Prueba end-to-end con WhatsApp real → RegistroDiario + Alerta verificados en BD
-- [ ] **Merge sprint-3-whatsapp → Desarrollo (con aprobación del Arquitecto)** ← único pendiente
+- [x] **Merge sprint-3-whatsapp → Desarrollo (con aprobación del Arquitecto)** — confirmado presente en `Desarrollo` (commits 68950ef, 109afc7, 832873d, de48db9), previo a la rama `sprint-3-hardening`
 
 > **Resuelto:** la validación de firma detrás de ngrok funciona; el 403 NO era por
 > la URL (build_absolute_uri() era correcta) sino por usar el Test Auth Token en
 > vez del primario. Detalle completo en BITACORA.md (sesión Twilio+ngrok).
 >
-> **Diferido:** envío automático matutino 7-10 AM Bogotá → FASE 4 (Celery).
-> Capa RAG sobre knowledge_base.md real → FASE 5 (pendiente acceso Drive médico).
+> **Diferido:** el envío automático matutino sigue en stub; antes del piloto
+> requiere WhatsApp Business, plantillas aprobadas y una decisión explícita de
+> horario. No se activará por arrastre de una fase anterior.
+> Capa RAG sobre `knowledge_base.md` real → Sprint 6 (requiere corpus validado
+> por el médico).
 
 ---
 
@@ -376,20 +369,18 @@ Registro_Post_Quirurgico/              ← raíz del repositorio
   Por eso modelo + scheduler se construyen como UNA unidad en Sprint 4.
   → Handoff de implementación detallado en FASE 4.
 
-- [ ] **NUEVA alerta clínica: silencio del paciente.** Si un
-  CheckInProgramado pasa a NO_RESPONDIDO, generar alerta para que el
-  equipo médico contacte al paciente. DEPENDE del scheduler (solo una
-  tarea programada detecta la ausencia de respuesta) → SPRINT 4.
-  DECISIÓN ABIERTA (resolver en Sprint 4): severidad, y si dispara con
-  un silencio o con dos consecutivos.
+- [x] **NUEVA alerta clínica: silencio del paciente.** RESUELTO en Sprint 4
+  (Bloque 4, 26/06/2026, ver FASE 4 abajo): tipo `SILENCIO`, racha check a
+  check, implementado en `cerrar_checkins_vencidos`. **La escalera vigente
+  (1→BAJA, 2→MEDIA, 4→ALTA) la fija `docs/reglas_clinicas.md`**, corregida en
+  el Loop A por la decisión D1 — este archivo no la duplica.
 
-- [ ] **Gating del alert_engine — 2 políticas (se deciden CON el código
-  del bot en Sprint 4, no antes):**
-  - DECISIÓN ABIERTA: alertas duplicadas con 2 check-ins/día — ¿una
-    alerta por condición por día, o una por cada check-in que la detecte?
-  - DECISIÓN ABIERTA: gating pre-operatorio (dia_postoperatorio=0) —
-    ¿filtra el bot antes de llamar al engine, o el engine salta la
-    evaluación?
+- [x] **Gating del alert_engine — 2 políticas.** RESUELTO en Sprint 4
+  (Bloque 2B, 26/06/2026, ver FASE 4 abajo):
+  - Deduplicación: Opción A+ — una alerta por tipo/día, escalamiento
+    intra-día permitido (`_deduplicar()`).
+  - Gating pre-operatorio: `VENTANAS_DOLOR[0]` ya cubre POD 0-2, sin
+    cambio de lógica adicional.
 
 **Camino de cierre del Sprint 3 (REVISADO — entregable del Paso 1 = la
 DECISIÓN de arquitectura documentada, no el código de frecuencia):**
@@ -431,7 +422,7 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 
 > Rama: `sprint-3-hardening` (desde `Desarrollo` post-merge)
 > Prerequisito: merge de `sprint-3-whatsapp` → `Desarrollo`.
-> Detalle completo de cada hallazgo en `AUDITORIA_SPRINT3_CIERRE.md`.
+> Detalle completo de cada hallazgo en `docs/proceso/auditorias/2026-06_informe_sprint3_cierre.md`.
 
 **Grupo A — Obligatorio antes de pacientes reales:**
 - [x] A1 — Conversación abandonada no reinicia al día siguiente
@@ -463,17 +454,17 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 - [x] D1 — Cache local-memory no comparte estado entre workers (A3/A5/C7 rompen en multi-worker)
 - [x] D2 — Admin scoping sin `formfield_for_foreignkey` ni `has_*_permission` por objeto
 - [x] D3 — `X-Forwarded-For` spoofeable en rate limit del formulario de contacto
-  > ⚠️ **Pendiente de producción (FASE 5):** Nginx debe configurar
-  > `proxy_set_header REMOTE_ADDR $remote_addr;` para que el rate limit funcione
-  > correctamente con la IP real del cliente. El código Django usa `REMOTE_ADDR`
-  > de forma segura — el ajuste requerido es exclusivamente de infraestructura.
+  > **Resuelto en Railway (Loop 4):** el código acepta `X-Real-IP` únicamente
+  > cuando `TRUST_RAILWAY_PROXY=True`, existe una marca `X-Railway-Edge` válida
+  > y la IP tiene formato correcto. En cualquier otro despliegue usa
+  > `REMOTE_ADDR`; `X-Forwarded-For` se descarta.
 - [x] D4 — `requirements.txt` interno con Django 6.0.5 / duplicado con el de raíz
 - [x] D5 — Sin tests de acceso admin para médico no-superuser (changelist + URL directa)
 
 ---
 
-### ⏳ FASE 4 — Dashboard Oncólogo y Notificaciones — EN CURSO
-> Rama activa: `sprint-4-dashboard` (creada, sin código todavía — arranca aquí)
+### ✅ FASE 4 — Dashboard Oncólogo y Notificaciones — COMPLETADA (mergeada a Desarrollo 01/07/2026)
+> Rama: `sprint-4-dashboard` — 6 bloques, 135 tests OK, mergeada (fast-forward) a `Desarrollo`
 
 **Bloque 0 — Decisiones arquitectónicas (cerradas 26/06/2026):**
 - [x] **0-① Fecha autoritativa:** Opción B — parámetro opcional
@@ -488,8 +479,12 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
   `_ORDEN_SEVERIDAD = {'BAJA': 1, 'MEDIA': 2, 'ALTA': 3}`.
 - [x] **0-③ Alerta de silencio:** tipo `SILENCIO` (choice nuevo en
   `Alerta.tipo`). Racha contada check a check (mañana→tarde→mañana…):
-  1 silencio → BAJA, 2 consecutivos → MEDIA, 3+ → ALTA. La racha se
-  rompe con cualquier check-in COMPLETADO entre medias.
+  **1 silencio → BAJA, 2 → MEDIA, 4 → ALTA** (corregido en el Loop A,
+  decisión D1: el umbral ALTA cae en dos días calendario completos sin
+  una sola señal). La racha se rompe con cualquier check-in COMPLETADO
+  entre medias; un PENDIENTE anterior se ignora sin romperla.
+  **La escalera vigente la fija `docs/reglas_clinicas.md`** — este
+  documento solo la refiere.
 - [x] **0-④ Scheduler:** Opción A — management commands + cron del SO.
   Tres commands: `crear_checkins_diarios`, `cerrar_checkins_vencidos`,
   `enviar_recordatorios`. Monitoreo y evaluación de migración a Celery
@@ -504,7 +499,10 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 - [x] Personalizar Django Admin con colores según severidad de alertas
   (Bloque 5A — 26/06/2026: badge HTML inline, acción marcar_resuelta)
 - [x] Crear vista detalle_paciente con historial y gráfica temperatura/dolor
-  (Bloque 5B — 26/06/2026: historial_ultimos_7_dias como readonly_field en PacienteAdmin)
+  (Bloque 5B — 26/06/2026: historial_ultimos_7_dias como readonly_field en PacienteAdmin.
+  **Nota de precisión (01/07/2026):** lo implementado es una tabla/lista de texto,
+  NO una gráfica. La gráfica real queda pendiente — ver propuesta Chart.js en
+  discusión de Sprint 5, sección de seguridad más abajo antes de implementarla.)
 - [x] Implementar notificación al médico por email/SMS cuando hay alerta roja
   (Bloque 5C — 26/06/2026: signals.py post_save + on_commit; backend consola en dev)
 - [x] **Implementación 2×/día (arquitectura CERRADA en FASE 3.6 — leer D1–D5
@@ -523,7 +521,8 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
     guard por CheckInProgramado PENDIENTE; 3 tests nuevos; 122 tests OK)
   - [x] Alerta de silencio (NO_RESPONDIDO) — **DECISIÓN TOMADA (0-③):**
     tipo `SILENCIO` (choice nuevo). Racha check a check:
-    1 → BAJA, 2 consecutivos → MEDIA, 3+ → ALTA.
+    1 → BAJA, 2 → MEDIA, **4 → ALTA** (corregido en el Loop A, D1;
+    la escalera vigente vive en `docs/reglas_clinicas.md`).
     (Bloque 4 — 26/06/2026: cerrar_checkins_vencidos + modelo Alerta actualizado)
   - [x] Resolver los 2 gatings (Bloque 2B — 26/06/2026):
     - Deduplicación — **IMPLEMENTADA (0-②):** `_deduplicar()` en cada
@@ -551,27 +550,37 @@ del alert_engine, jun 2026):**
   mucho tiempo sin marcarse `resuelta`, ¿debería escalar sola a ALTA?
   Depende de los campos `resuelta`/`fecha_resolucion` que ya existen en
   el modelo `Alerta` pero no se usan activamente todavía.
-- [ ] Campo de "motivo de resolución" en `Alerta` para diferenciar caso
-  real vs. falso positivo — útil si se quiere ajustar umbrales del
-  alert_engine con datos reales en el futuro, no indispensable para el
-  primer dashboard.
-- [ ] Duración del seguimiento del bot por paciente: ¿cuándo se
-  desactiva automáticamente `Paciente.activo`? Hoy nada lo cambia solo
-  — definir si es un número fijo de días postoperatorios, o si el
-  médico lo cierra manualmente desde el dashboard.
-- [ ] Interfaz del médico para gestionar alertas: cómo marcar
-  `resuelta`, cómo distinguir falsos positivos de casos reales, y cómo
-  se visualiza la escalera de severidad BAJA/MEDIA/ALTA en pantalla.
+  **(02/07/2026: diferido explícitamente a Sprint 6.)**
+- [x] **Campo de "motivo de resolución" en `Alerta` (Bloque A, 02/07/2026).**
+  Implementado: `motivo_resolucion` (7 opciones + "Otro") +
+  `motivo_resolucion_detalle` (migración 0017). La acción "Marcar como
+  resuelta" del Admin exige elegir el motivo en un formulario intermedio
+  antes de resolver ("Otro" pide detalle); scoping por médico en cada paso.
+  Útil para ajustar umbrales del alert_engine con datos reales. 6 tests.
+- [x] **Duración del seguimiento del bot por paciente — RESUELTO (Sprint 5
+  Bloque 1 + A-1, P-5).** `Paciente.activo` se desactiva automáticamente a
+  los `DIAS_SEGUIMIENTO = 10` días postoperatorios vía el command
+  `desactivar_pacientes_vencidos` (con guard `DIAS_GRACIA_INGRESO = 2` para
+  ingresos tardíos), o manualmente por el médico desde el Admin. Corre por
+  cron antes de `crear_checkins_diarios`.
+- [x] **Interfaz del médico para gestionar alertas — RESUELTO (Sprint 4
+  Bloque 5A + Sprint 5 Bloque A).** Marcar `resuelta`: acción "Marcar como
+  resuelta" del Admin con formulario intermedio de motivo obligatorio.
+  Distinguir falso positivo vs. caso real: opciones `FP_MEDICION` /
+  `FP_RANGO` del `motivo_resolucion`. Visualización de la escalera
+  BAJA/MEDIA/ALTA: badge de color por severidad (`severidad_badge`) en la
+  lista de alertas + puntos rojos de alerta ALTA en las gráficas Chart.js
+  (Bloque 4).
 
 **Mejoras futuras (decisiones diferidas explícitamente, no bloqueantes):**
-- [ ] **Vista de historial del paciente — versión completa (Sprint 5+):**
+- [ ] **Vista de historial del paciente — versión completa (Sprint 6+):**
   Sprint 4 implementa el historial como sección dentro del admin
   (`change_view` de `PacienteAdmin`, Opción A). La versión completa sería
   una URL y template propios (`/signos_sintomas/paciente/<id>/historial/`)
   con gráfica de temperatura, EVA y alertas a lo largo del tiempo. Requiere
   decisión de si el dashboard médico permanece en Django Admin o evoluciona
   a una app independiente.
-- [ ] **Integración IA/RAG en el chat del paciente (Sprint 5+):**
+- [ ] **Integración IA/RAG en el chat del paciente (Sprint 6):**
   Cuando el paciente escribe fuera de un check-in programado, hoy recibe
   un mensaje neutro + FAQ predefinidos. La mejora es conectar ese flujo a
   un agente IA con acceso a un sistema RAG (NotebookLM u otro) que responda
@@ -583,30 +592,387 @@ del alert_engine, jun 2026):**
 
 ---
 
-### ⏳ FASE 5 — Producción — PENDIENTE
-> Crear rama: `git checkout -b sprint-5-produccion`
+### ⏳ FASE 5 — Producción — CIERRE TÉCNICO, AUDITORÍA PRE-MERGE PENDIENTE
+> Rama: `sprint-5-produccion` (creada desde `Desarrollo` post-merge Sprint 4)
 
-- [ ] Desplegar en Railway o Render con PostgreSQL en la nube
-- [ ] Configurar HTTPS y deshabilitar DEBUG
-- [ ] **Scheduler — monitoreo de infraestructura (viene de decisión Sprint 4):**
-  El scheduler usa management commands + cron del SO (Opción A — decisión
-  tomada en Sprint 4). En producción Linux:
-  - Agregar `MAILTO=email-del-desarrollador` al inicio del crontab para
-    recibir email automático cuando cualquier command falle.
-  - Verificar que los tres commands corren correctamente el primer día en
-    producción y que sus logs de resumen son legibles:
-    `crear_checkins_diarios`, `cerrar_checkins_vencidos`,
-    `enviar_recordatorios`.
-  - Evaluar migración a Celery beat si los fallos de cron son frecuentes
-    o se necesita retry automático. La lógica ya está encapsulada en los
-    management commands — la migración es decorar con `@shared_task`.
+**Decisiones de producto — confirmadas explícitamente por el Arquitecto en
+sesión el 01/07/2026 (no re-discutir, ejecutar):**
+
+| # | Decisión | Resolución |
+|---|----------|-----------|
+| P-1 | ¿Un médico o varios? | Un solo médico cliente. El equipo son admins; el médico llama si hay un problema. |
+| P-2 | Titularidad de cuentas | Cuentas del proyecto (Railway, Twilio, Gmail) a nombre del equipo; se transfieren al médico cuando se venda. |
+| P-3 | Mantenimiento en producción | El equipo mantiene con intervención mínima: si el cron falla → email automático → resolución en ~30 min. |
+| P-4 | Identificador del paciente | Cédula obligatoria y única, además del teléfono. |
+| P-5 | Desactivación de paciente | Automática a los 10 días postoperatorios, O manual por el médico — lo que ocurra primero. El scheduler no crea check-ins para pacientes inactivos. |
+| P-6 | Email de notificación | Solo alertas ALTA disparan email; MEDIA y BAJA solo se ven en el dashboard. |
+| P-7 | Check-ins por día | 2 check-ins/día fijos; el médico no los modifica desde el panel. |
+| P-8 | Historial del paciente | Configurable por el médico desde el Admin; default 7 días. |
+| P-9 | Visual del dashboard | Gráficas dentro del Admin (Chart.js), sin panel separado. |
+| P-10 | Bot fuera de horario | Mantener las respuestas predefinidas actuales (`MSG_SIN_CHECKIN`) sin ampliar. RAG diferido a Sprint 6. |
+| P-11 | Emojis en el bot | Eliminar todos los emojis de los mensajes del bot. |
+| P-12 | Landing page | Página de presentación personal del médico (estática, contenido lo define él) — Sprint 5. |
+| P-13 | RAG/MCP | Sprint 6, con corpus de `knowledge_base.md` validado por el médico — no antes. |
+| P-14 | OpenMed | No se integra ahora; referencia futura para anonimización PII (exportación, HABEAS DATA) en Sprint 6. |
+| P-15 | HABEAS DATA | Sprint 5 — consentimiento informado mínimo antes de que cualquier paciente real use el sistema. |
+
+**Notas de implementación de las decisiones anteriores:**
+- P-4/P-5 requieren migración en `models.py` (campo `cedula`, lógica de
+  desactivación) — ver bloque de tareas abajo.
+- P-9 requiere revisar primero la nota de seguridad de esta sesión: los
+  datos que alimentan las gráficas deben ir con `json.dumps()`, nunca
+  interpolados directo en un f-string dentro de `<script>`.
+- P-15 (HABEAS DATA) bloquea el uso con pacientes reales, no el desarrollo
+  del resto de Sprint 5. Requiere texto de consentimiento redactado o
+  validado por el médico — no inventar contenido clínico/legal.
+
+**Preguntas de arquitectura — resueltas en sesión (01/07/2026):**
+- [x] Ubicación del cron: **Linux** (Railway/Render, ya decidido como destino
+  de deploy — cron del contenedor o el servicio nativo de "Cron Jobs" de la
+  plataforma). Windows Task Scheduler queda descartado: el plan es cuentas
+  del proyecto en la nube (P-1/P-2), no correr desde la máquina de Alejandro.
+- [x] Proveedor SMTP real: **Gmail con contraseña de aplicación** —
+  coherente con P-2/P-3 (cuentas del equipo, mantenimiento mínimo) y con
+  volumen bajo de correo (solo alertas ALTA, un médico).
+
+**Tareas de código (orden sugerido):**
+- [x] **Bloque 1 (01/07/2026):** Campo `cedula` en `Paciente` — `unique=True`,
+  `null=True` (no rompe pacientes/tests previos), `blank=False` (obligatorio
+  en formularios nuevos). Migración `0014_paciente_cedula`. Agregado a
+  `list_display`/`search_fields` en `PacienteAdmin` (P-4).
+- [x] **Bloque 1 (01/07/2026):** Management command
+  `desactivar_pacientes_vencidos` — `DIAS_SEGUIMIENTO=10`, usa
+  `timezone.localdate()`, soporta `--dry-run`, idempotente (solo actúa
+  sobre `activo=True`). La desactivación manual desde el Admin sigue
+  disponible sin cambios (P-5). 9 tests nuevos (`PacienteCedulaTests`,
+  `DesactivarPacientesVencidosTests`). **144 tests OK.**
+- [x] **Bloque 2 (01/07/2026):** Emojis eliminados de todos los mensajes
+  del bot (`MSG_*` en `bot.py`). Las preguntas numeradas (`1️⃣`…`🔟`) pasan
+  a `"1. "`…`"10. "`; el resto de emojis decorativos (🌿✅👋) se quitan sin
+  reemplazo. Sin cambios de contenido clínico ni de la máquina de estados.
+  Tests existentes usan `assertIn` con substrings — no requirieron cambios,
+  **144 tests OK** (P-11).
+- [x] **Bloque 3A (01/07/2026):** Filtros en `PacienteAdmin` — `activo`,
+  `tipo_cirugia`, `medico_responsable` (ya existía) y `TieneAlertaActivaFilter`
+  (`SimpleListFilter` nuevo: "Con alertas sin resolver" / "Sin alertas
+  pendientes", vía `alertas__resuelta` — corregido el `related_name` real
+  del modelo, que es `alertas`, no `alerta` como en el borrador original).
+- [x] **Bloque 3B (01/07/2026):** Historial configurable por días (P-8).
+  `_historial_7_dias` renombrada a `_historial_paciente(paciente, dias=7)`.
+  Selector de rango (3/7/10 días desde Loop 3, 19/07/2026) como enlaces
+  `?dias=N` en el propio
+  HTML del campo — el médico cambia el rango recargando la misma página
+  de detalle. `PacienteAdmin.get_readonly_fields()` captura `?dias=` de la
+  URL y acepta solo 3/7/10 porque los `readonly_fields` solo reciben `obj`, no
+  `request`. 8 tests (filtro de alertas + selector e inclusión exacta).
+  **150 tests OK.**
+- [x] **Bloque 4 (01/07/2026, con rediseño post-revisión visual):** Gráficas
+  Chart.js en la ficha del paciente (P-9) — 3 gráficas separadas
+  (temperatura con línea punteada de umbral 37.9°C, dolor EVA 0-10, FC con
+  líneas punteadas de umbral 101/110 lpm), cada una con su propio
+  `new Chart()`, no una sola gráfica multi-eje.
+  - **Selector de período independiente del historial:** los 3 rangos
+    (3/7/10 días desde Loop 3, 19/07/2026) se precalculan en el servidor y
+    se embeben una sola
+    vez como JSON; el médico cambia de rango en el navegador sin recargar
+    la página. El selector del historial en tabla (Bloque 3B, `?dias=`)
+    sigue siendo aparte, con recarga de página.
+  - **Puntos rojos = alerta ALTA sin resolver** en ese registro exacto,
+    vía `registro_origen` (no por coincidencia de fecha).
+  - **Turno (M/T) por `CheckInProgramado.etiqueta` real**, no por la hora
+    de respuesta del paciente — corrige un enfoque propuesto que violaba
+    la decisión D2 ya cerrada (Sprint 3.6: "el turno lo fija el evento,
+    nunca la hora en que el paciente responde"). Fallback por hora solo
+    para registros legado sin check-in vinculado.
+  - **Bug de zona horaria corregido:** el fallback por hora y las fechas
+    del historial en tabla usaban `fecha_registro.hour`/`.strftime()`
+    crudo — con `USE_TZ=True` eso está en UTC, no en hora de Bogotá. Un
+    registro de las 8am Bogotá se habría clasificado como tarde. Ahora
+    usa `timezone.localtime()`.
+  - **FC nula viaja como `null` (hueco en la línea), nunca como `0`** —
+    ya estaba bien desde la primera versión (el "bug" reportado en la
+    instrucción externa no existía en el código real).
+  - Todos los datos van por `json.dumps()` en un único objeto `DATOS`,
+    nunca interpolados directo en el HTML/JS.
+  - Simplificación consciente: las "bandas de color" de FC quedaron como
+    líneas de umbral punteadas, no zonas de fondo — evita depender de un
+    plugin adicional de Chart.js solo por estética. Versión de Chart.js
+    fijada (`4.4.0`, no "latest") para evitar romperse con actualizaciones
+    del CDN.
+  - **9 tests nuevos** (`GraficaSignosVitalesTests`, reemplazan los 3 de
+    la primera versión): sin registros no carga Chart.js; FC nula
+    serializa `null`; los 3 períodos llegan precalculados; turno por
+    check-in vinculado (no por hora); respaldo por hora en zona horaria
+    correcta para datos legado; punto de alerta ALTA marcado/no marcado;
+    versión fija del CDN; selector de gráfica independiente del
+    historial. **159 tests OK.** `manage.py check` limpio.
+  - **Evidencia histórica de la versión 01/07/2026:** con la ventana de 7
+    días solo se ven 3 de los 10 registros del paciente demo — no es un
+    bug, es correcto: `seed_demo` fija fechas del 17-26 de junio de 2026,
+    y con la fecha real del sistema (01/07/2026) esos registros quedan
+    entre 5 y 14 días atrás. Con "14 días" o "30 días" se ven los 10.
+  - **No verificado:** la renderización real de Chart.js en un navegador
+    (fuera de las herramientas disponibles en esta sesión) — sí se
+    verificó con el test client de Django que el HTML/JSON generado es
+    válido y con los valores esperados.
+  - **Hallazgo colateral — resuelto en A-3 (02/07/2026):** `demo_medico`
+    (creado por `seed_demo`) era superusuario — veía *todo* `/admin/`
+    (Usuarios, Grupos, pacientes de cualquiera), a diferencia de una
+    cuenta de médico real (staff, no-superuser). `seed_demo` ahora crea
+    `demo_medico` con `is_staff=True, is_superuser=False`, representando
+    la experiencia real del médico.
+- [x] **Desplegado en Railway con PostgreSQL + Redis en la nube (06/07/2026).**
+  App viva en `registropostquirurgico-production-1f96.up.railway.app`. Build
+  con **Dockerfile** (`python:3.13-slim`) tras descartar Railpack (ignora
+  `nixpacks.toml`) y Nixpacks (`pip: command not found` por Nix). Migraciones
+  aplicadas, estáticos con WhiteNoise, **bot de WhatsApp respondiendo
+  end-to-end** (Sandbox de Twilio), acceso al Admin resuelto con el comando
+  `crear_admin`, y limpieza de seguridad hecha. Detalle completo (incluida la
+  causa raíz: placeholders `< >` pegados literalmente en las variables) en
+  BITACORA.md, sesión 06/07/2026. **194 tests OK.** **Pendiente del despliegue:
+  cron jobs** (ver `docs/cron_setup.md` + Bloque 6, abajo).
+- [x] **Bloque 5 (01/07/2026):** SMTP real. Variables `EMAIL_*` agregadas
+  al `settings_production.py` **existente** (append, no reemplazo —
+  conserva DEBUG=False, HSTS, cookies seguras y cache Redis del Sprint
+  3-Hardening). `EMAIL_HOST_USER`/`EMAIL_HOST_PASSWORD` sin default en
+  `config()` → falla fuerte (fail-clear) si faltan en el `.env` de
+  producción, en vez de arrancar sin poder enviar correo.
+  `DEFAULT_FROM_EMAIL` con default = `EMAIL_HOST_USER`. Plantilla agregada
+  a `.env.example` (sin secretos reales).
+  **Prueba real end-to-end:** alerta ALTA real disparada con
+  `DJANGO_SETTINGS_MODULE=...settings_production` → correo recibido en
+  `seguimientolionalejo@gmail.com`. Confirmado por el Arquitecto.
+  Datos de prueba (paciente, registro, alertas, usuario de prueba)
+  eliminados después de confirmar. **159 tests OK** (sin tests nuevos —
+  el envío real de SMTP no se puede probar con `manage.py test`, que
+  usa el backend de consola; la lógica del signal ya tenía cobertura
+  desde Sprint 4, `AlertaEmailNotificacionTests`).
+  **Mejora implementada en A-4 (02/07/2026):** el cuerpo ahora incluye
+  teléfono y cédula del paciente y la hora en zona Bogotá
+  (`timezone.localtime`, no el datetime crudo en UTC).
+- [x] **Bloque 6 (01/07/2026):** `docs/cron_setup.md` — creado. Cubre los
+  **4** management commands (los 3 originales + `desactivar_pacientes_vencidos`
+  del Bloque 1), horarios en UTC, `MAILTO` para fallos, y el orden
+  obligatorio `desactivar_pacientes_vencidos` **antes** de
+  `crear_checkins_diarios` (nunca al revés). **Bug de documentación
+  corregido de paso:** el docstring de `desactivar_pacientes_vencidos.py`
+  decía que debía correr *después* de `crear_checkins_diarios`, lo cual
+  contradice su propio propósito (evitar que un paciente reciba un
+  check-in el día que vence) y el orden que ya prueba
+  `test_scheduler_no_crea_checkins_tras_desactivacion`. Corregido el
+  comentario para que diga "antes", no "después".
+- [x] **Bloque 6 (01/07/2026):** `docs/transferencia_cuentas.md` —
+  creado. Protocolo de transferencia (P-1/P-2/P-13), tabla de cuentas del
+  proyecto, manual mínimo de operación para el médico, y nota de que
+  HABEAS DATA (Bloque 7) bloquea el uso con pacientes reales, no el resto
+  del despliegue técnico. **159 tests OK**, `manage.py check` limpio.
+- [x] **Correcciones pre-Bloque 7, A-1 a A-4 (02/07/2026):**
+  - **A-1:** guard `DIAS_GRACIA_INGRESO=2` en `desactivar_pacientes_vencidos`
+    (no desactiva hasta que el paciente lleve ≥2 días registrado en el
+    sistema) + advertencia (no bloqueante) en `PacienteAdmin.save_model`
+    al crear un paciente con `dia_postoperatorio >= 8`. Decisión del
+    Arquitecto: implementar ambas opciones, no son excluyentes.
+  - **A-2:** `Paciente.clean()` exige cédula solo para pacientes nuevos
+    (`pk is None`). **Bug real corregido durante la implementación:** el
+    diseño original dejaba `cedula` con `blank=False` a nivel de campo,
+    lo que rompía `full_clean()` para *cualquier* paciente sin cédula,
+    incluidos los migrados — no solo los nuevos. Corregido con
+    `blank=True` a nivel de campo (migración `0015`) + la exigencia real
+    viviendo en `clean()`.
+  - **A-3:** `seed_demo` aborta si `DEBUG=False` (evita crear una cuenta
+    con contraseña conocida en producción por error). Su usuario demo
+    pasó de `create_superuser` a `create_user(is_staff=True,
+    is_superuser=False)` — resuelve también el hallazgo pendiente del
+    Bloque 4 sobre que `demo_medico` no representaba la experiencia real.
+  - **A-4:** email de alerta ALTA mejorado (ver nota en Bloque 5 arriba).
+  - **12 tests nuevos. 171 tests OK** tras esta corrección. `manage.py check`
+    limpio.
+- [x] **Bloque 7 — HABEAS DATA (02/07/2026):** `consentimiento_informado`
+  (default `False`) y `fecha_consentimiento` en `Paciente` (migración
+  `0016`), auto-registrada/limpiada en `PacienteAdmin.save_model` en
+  sincronía con el checkbox; `fecha_consentimiento` es readonly en el
+  Admin. Guard en `bot.procesar_mensaje`: paciente sin consentimiento
+  recibe mensaje neutro y no entra a la máquina de estados. Texto de
+  `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` confirmado como ya
+  aprobado por el Arquitecto en sesión — copiado sin modificar (P-15).
+  **6 tests nuevos.** El guard rompió 22 tests preexistentes del bot/webhook
+  (fixtures de paciente que no marcaban el consentimiento) — corregidos
+  agregando `consentimiento_informado=True` en los fixtures afectados, sin
+  tocar la lógica del guard. **177 tests OK**, `manage.py check` limpio.
+  **Pendiente antes de pacientes reales:** completar los campos entre
+  corchetes del formato (datos del médico/institución) antes de
+  imprimirlo.
+- [x] **Bloque A — Motivo de resolución en Alerta (02/07/2026):** ver
+  detalle en "Decisiones de diseño pendientes" arriba (checkbox marcado).
+  `motivo_resolucion` + `motivo_resolucion_detalle` (migración 0017),
+  formulario intermedio obligatorio en el Admin. **183 tests OK.**
+  - [x] **Hardening Loop 1:** formulario de alerta completamente de solo lectura,
+    cierre obligatorio con fecha/motivo a nivel de base de datos y migración
+    conservadora de cierres históricos como `LEGACY` (migración 0019).
+- [x] **Bloque B — Tono de cierre del bot según severidad (02/07/2026):**
+  el check-in con alerta MEDIA/ALTA cierra con recomendación de acción al
+  paciente (MEDIA: contactar médico; ALTA: urgencias), sin revelar tipo de
+  alerta ni valores. `evaluar_registro` pasó de `on_commit` a síncrono
+  dentro de `_crear_registro` (savepoint defensivo — un fallo del engine
+  nunca pierde el reporte del paciente). **191 tests OK** en ese bloque.
+  **Validación posterior completada en Loop 6:** mensajes MEDIA y ALTA probados
+  por el Sandbox real el 21/07/2026, sin exponer tipo ni valor clínico.
+- [x] **Bloque C — Limpieza de Sugarbaker en index.html (02/07/2026):
+  no-op verificado.** No existe ninguna mención de "Sugarbaker"/"HIPEC" en
+  `index.html` ni en `home`; el único uso es la opción legítima
+  `sugarbaker_hipec` de `tipo_cirugia` (no se toca) y migraciones
+  (inmutables). Nada que limpiar; sin cambios de código.
 - [ ] Configurar monitoreo externo básico (ping al servidor cada 5 min)
-  para detectar caídas totales independientemente del cron.
-- [ ] Nginx: `proxy_set_header REMOTE_ADDR $remote_addr;` para que el
-  rate limit funcione correctamente con la IP real del cliente.
-- [ ] Integrar capa RAG para respuestas a preguntas frecuentes del postoperatorio
-- [ ] Revisión cumplimiento HABEAS DATA Colombia
+  para detectar caídas totales independientemente del cron
+- [x] IP real para rate limit en Railway: `X-Real-IP` solo se acepta con
+  `TRUST_RAILWAY_PROXY=True`, una marca `X-Railway-Edge` válida y una IP bien
+  formada; `X-Forwarded-For` se descarta por ser spoofeable.
+- [x] Landing page de presentación del médico (P-12) — hecha en la app `home`
+  (Django, no estática): `/` como landing del médico + sistema de diseño
+  compartido (`base.html` + `static/home/css/site.css`); contenido en
+  marcadores `[corchetes]` + flag `MOSTRAR_AVISO_BOCETO`. **Pendiente:** datos
+  reales del médico y deploy a Railway.
+- [x] Demo del dashboard — comando `seed_demo_produccion` (seguro para prod,
+  2 pacientes de ejemplo, reversible con `--limpiar`)
+- [x] Panel del médico (Admin): branding "calma clínica" + tablero de triage
+  como índice (sin forkear el admin; se conservan listas/filtros/gráficas)
+- [x] Agrupación de alertas por problema: una alerta abierta por (paciente,tipo)
+  con contador `veces` (badge ×N); correo ALTA solo al escalar (migración 0018)
+- [x] **Loop 4 — entrega durable de alertas ALTA:** outbox
+  `NotificacionAlerta`, timeout, reintentos crecientes y procesamiento fuera
+  del webhook. Correo genérico sin datos del paciente (migración 0024).
+- [x] **Canal real de correo en Railway:** Resend por API HTTPS activo con
+  idempotencia. El aviso controlado de la alerta demo #90 fue aceptado y
+  recibido en `seguimientolionalejo@gmail.com` el 21/07/2026.
+- [x] **Loop 4 — hardening web/dependencias:** Django 6.0.7, dependencias
+  directas fijadas y auditadas, CSP activo y Chart.js 4.5.1 servido localmente.
+- [x] **Loop 5 — validación:** firma Twilio positiva, SID concurrente,
+  concurrencia de outbox, rollback parcial del motor y flujo completo por
+  webhook cubiertos. Carga local: 50 pacientes concurrentes, 550 webhooks y
+  50 registros en 5,03 s, sin superar 15 s por solicitud. Suite: **280 OK**.
+- [x] **Loop 6 — cierre técnico:** flujos reales MEDIA y ALTA verificados con
+  `medico_piloto`; panel y correo ALTA confirmados; respuesta silenciosa del
+  rate limit corregida; reintento durable de Resend comprobado; Requests 2.33.0
+  y `pip-audit` limpio; smoke de producción correcto. Los datos ficticios se
+  eliminaron. **280 tests OK.** Auditoría independiente pre-merge pendiente.
+- [x] **Barrido documental y pausa segura (21/07/2026):** memoria, roadmap,
+  bitácora, despliegue, cron, transferencia, variables, base de conocimiento y
+  material histórico reconciliados. `docs/README.md` define fuentes vigentes y
+  protocolo de reanudación. Sin cambios funcionales ni PR.
+- [x] Comando idempotente `crear_medico` + grupo "Médicos" de privilegio mínimo
+- [x] **Hardening Loop 2 — confiabilidad del webhook y alertas:** recibo
+  persistente por `MessageSid` en PostgreSQL (sin teléfono ni Body), reintento
+  después de error, estado PENDIENTE/COMPLETADA/ERROR por `RegistroDiario`,
+  comando `reintentar_evaluaciones_alertas`, unicidad de alerta abierta bajo
+  concurrencia y vínculo de la conversación al check-in exacto. Punto de
+  restauración publicado en `sprint-5-produccion` hasta `442ccc2` (18/07/2026).
+- [x] **Loop 3 — experiencia médica (cerrado 19/07/2026):** auditoría real con cuenta
+  médica, navegación y revisión responsiva del Admin.
+  - [x] Primera iteración segura: contraste y ancho del tablero, pendientes
+    acumulados, prioridad por gravedad/recurrencia/última detección, periodos
+    exactos 3/7/10, historial activado/desactivado, seed demo íntegro y flujo
+    de resolución sin encabezado duplicado.
+  - [x] Propiedad por médico de `MensajeContacto`: destinatario configurable
+    por `MEDICO_CONTACTO_USERNAME`, scoping en Admin/tablero y mensajes
+    anteriores sin asignar visibles solo para superusuario (`home.0002`).
+  - [x] Trazabilidad de cada detección nueva que compone ×N mediante
+    `DeteccionAlerta`; fuente única e idempotente por registro/check-in,
+    inline de solo lectura y resumen explícito del contador histórico sin
+    backfill ficticio (`signos_sintomas.0022`).
+  - [x] Panel de mensajes de contacto debajo de Silencios y filtro de fecha
+    renombrado a "Todas las fechas". Revisión visual escritorio/móvil sin
+    desbordamientos.
+  - [x] Cierre UX posterior: el detalle dice "Detecciones de la alerta" sin
+    lenguaje interno de loops; se verificó el ordenamiento real de las tablas
+    y se robusteció la limpieza/recreación de datos demo con FKs protegidas
+    (`signos_sintomas.0023`). **256 tests OK.**
+    Commit base del Loop 3: `5ad1b71`.
+- [x] Desplegar Loops 1-3 en Railway: commit `de06ff8`, migraciones hasta
+  `signos_sintomas.0023` + `home.0002`, web y dos cron en `SUCCESS`, HTTPS 200
+  y `check --deploy` limpio. Demos remotos renovados (2 activos, 10 alertas
+  abiertas, 36 detecciones). `SECRET_KEY` remoto rotado (19/07/2026).
+- [x] Cron frecuente verificado en Railway (`*/5 * * * *`):
+  `cron_operativo` ejecuta cierre idempotente, reintento del motor y bandeja de
+  notificaciones. Temporalmente reutiliza `cron-tarde` por el límite del plan.
+- [ ] Al mejorar el plan de Railway, crear un servicio `cron-operativo`
+  independiente y restaurar `cron-tarde` a su horario original de las 6 PM.
+- [x] Provisionar y verificar en Railway la cuenta `medico_piloto` con
+  privilegio mínimo y correo configurado. Los demos y pacientes ficticios de
+  las validaciones ya fueron eliminados.
 - [ ] Entrega final al equipo médico
+
+**Diferido explícitamente a Sprint 6:**
+- [ ] Integrar capa RAG/MCP para respuestas del bot (P-13) — prerrequisito:
+  corpus de `knowledge_base.md` validado por el médico
+- [ ] OpenMed para anonimización PII de exportación (P-14)
+
+---
+
+## Requisitos para un PILOTO REAL con pacientes
+
+> Estado a 06/07/2026: la app **ya está desplegada y probada** en Railway con
+> el Sandbox de Twilio. Esto es lo que falta para pasar de "pruebas" a
+> "pacientes reales". Ninguno bloquea seguir probando el sistema con el Sandbox.
+
+**Infraestructura / operación (con costo):**
+- [ ] **Monitoreo externo:** alerta independiente si la web cae o si un cron de
+  Railway deja de ejecutarse. Los reintentos internos no detectan por sí solos
+  una ausencia total de ejecuciones.
+- [ ] **Dominio propio para correo:** verificarlo en Resend y configurar
+  SPF/DKIM/DMARC antes del piloto. La entrega con `onboarding@resend.dev`
+  funciona, pero la prueba del 21/07/2026 llegó a spam.
+- [ ] **Plan de pago en Railway.** Además de sostener web + Postgres + Redis,
+  debe permitir separar el cron operativo frecuente. El plan actual rechazó
+  un tercer cron por límite de recursos.
+- [x] **Cron jobs en Railway:** `cron-manana` (`0 11 * * *` UTC) ejecuta
+  `cron_matutino`; `cron-tarde` está reutilizado temporalmente cada 5 minutos
+  para `cron_operativo` (cierre + reintento + notificaciones). Verificado en
+  vivo el 19/07/2026.
+- [ ] **Después del upgrade del plan:** crear `cron-operativo` como servicio
+  dedicado cada 5 minutos y devolver `cron-tarde` a `0 23 * * *` UTC como
+  respaldo de cierre.
+
+**Canal de WhatsApp (con costo y aprobación):**
+- [ ] **Pasar del Sandbox de Twilio a la API de WhatsApp Business.** El Sandbox
+  es solo para pruebas (regla de 72 h por teléfono, número compartido). Para
+  pacientes reales se requiere: número propio aprobado por Meta/WhatsApp,
+  **facturación de Twilio** (costo por conversación), y **plantillas
+  pre-aprobadas** para mensajes iniciados por el sistema.
+- [ ] **Implementar el envío saliente real de Twilio** en `enviar_recordatorios`
+  (hoy es un stub). Solo necesario si se quieren recordatorios proactivos; hoy
+  el sistema es reactivo (responde cuando el paciente escribe primero).
+
+**Legal / clínico:**
+- [ ] **HABEAS DATA:** completar los `[corchetes]` de
+  `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` con los datos reales del
+  médico/institución, imprimirlo y firmarlo con cada paciente antes de marcar
+  `consentimiento_informado=True`.
+- [ ] **Validación médica de las respuestas predefinidas del bot** (decisión D4,
+  22/07/2026). Son las únicas frases que el bot le dice al paciente fuera del
+  cuestionario; hoy están redactadas por el equipo técnico y ninguna fue
+  validada clínicamente. La consulta está preparada como tres preguntas
+  concretas (~10 minutos) en
+  `Registro_Post_Quirurgico/signos_sintomas/knowledge_base.md`, sección
+  "Consulta pendiente al médico". No bloquea el merge a `Desarrollo`; sí debe
+  resolverse antes de un paciente real.
+
+**Validación end-to-end (con el Sandbox alcanza):**
+- [x] Crear un **paciente de prueba** en el Admin (con `consentimiento_informado`),
+  correr `crear_checkins_diarios`, y hacer una **prueba real de WhatsApp
+  completa**. Ejecutada el 21/07/2026 con valores normales: registro y turno
+  tarde completados, motor en `COMPLETADA`, sin alerta clínica. El turno mañana
+  creado a las 18:00 fue cerrado por cron con `SILENCIO/BAJA`, comportamiento
+  operativo esperado. Todos los datos ficticios se eliminaron al terminar.
+- [x] Prueba manual del **tono del bot** (Bloque B): alerta MEDIA provocada por
+  drenaje turbio y alerta ALTA por temperatura de 38,5 °C. Ambos mensajes de
+  cierre `MSG_CIERRE_ALERTA_*` se recibieron sin exponer tipo ni valor clínico.
+  Registro, check-in, motor y alertas quedaron coherentes y luego se limpiaron.
+
+**Limpieza técnica menor (no bloqueante):**
+- [ ] Revisar/limpiar el dominio duplicado en Railway (si quedaron dos).
+- [ ] `inicio_entornoR.bat` apunta a un venv (`entorno_registro`) que ya no
+  existe; recrear el venv o borrar el `.bat` (hoy todo corre en el Python
+  global).
 
 ---
 
@@ -699,16 +1065,11 @@ DB_PORT=5432
 
 ---
 
-*Última actualización: Fase 3.6 — las 5 reglas del núcleo del
-alert_engine completas (drenaje, temperatura, gases, náuseas, dolor) y
-el Paso 2 de variables nuevas COMPLETO (4/4): tolerancia a líquidos
-(Regla 6, INTOLERANCIA_ORAL), hinchazón abdominal (Regla 7,
-ILEO_PARALITICO), frecuencia cardíaca (Regla 8, TAQUICARDIA) y
-frecuencia respiratoria (solo-dashboard, sin alerta) — 69 tests OK. El
-flujo del bot pasó a 10 preguntas. Pendiente: implementar 2×/día en
-bot.py (con los 2 gatings pendientes) y repaso final de alert_engine.py
-antes del merge.*
-*Siguiente paso: implementar frecuencia de check-ins (2×/día) en
-bot.py resolviendo los 2 pendientes de gating, luego repaso final de
-alert_engine.py completo, luego merge `sprint-3-whatsapp` →
-`Desarrollo` con aprobación del Arquitecto.*
+*Última actualización: 21/07/2026. Sprint 5 en cierre sobre
+`sprint-5-produccion`: Loops 1-6 completados técnicamente, 280 tests OK y
+producción validada con flujos NORMAL/MEDIA/ALTA. Siguiente paso: ejecutar la
+auditoría independiente descrita en `docs/proceso/auditorias/2026-07-22_instruccion_loops_1_6.md`, resolver
+hallazgos bloqueantes y solo entonces preparar el PR hacia `Desarrollo`. Los
+requisitos externos de WhatsApp Business, correo con dominio propio, plan
+Railway, Habeas Data y datos definitivos del médico siguen siendo compuertas
+separadas para el piloto real.*

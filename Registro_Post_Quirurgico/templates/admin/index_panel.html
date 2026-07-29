@@ -1,0 +1,9 @@
+{% extends "admin/index.html" %}
+{% load panel_admin %}
+
+{# Inyecta el tablero de triage ENCIMA del índice real de Django.
+   {{ block.super }} conserva la lista de apps/modelos tal cual. #}
+{% block content %}
+{% panel_triage %}
+{{ block.super }}
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block content %}
+<p>Se resolverán <strong>{{ alertas.count }}</strong> alerta(s):</p>
+<ul>
+  {% for alerta in alertas %}
+  <li>{{ alerta.paciente }} — {{ alerta.get_tipo_display }} ({{ alerta.get_severidad_display }})</li>
+  {% endfor %}
+</ul>
+
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <input type="hidden" name="action" value="{{ accion }}">
+  <input type="hidden" name="aplicar" value="1">
+  {% for alerta in alertas %}
+    <input type="hidden" name="_selected_action" value="{{ alerta.pk }}">
+  {% endfor %}
+  <button type="submit" class="button default">Confirmar resolución</button>
+  <a href="../" class="button">Cancelar</a>
+</form>
+
+<script src="{% static 'admin/js/motivo_resolucion.js' %}" defer></script>
+{% endblock %}

@@ -1,6 +1,8 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import CheckConstraint, Q
+from django.utils import timezone
 
 
 class Paciente(models.Model):
@@ -13,6 +15,21 @@ class Paciente(models.Model):
         ('otra',                'Otra cirugía colorrectal'),
     ]
     nombre_completo = models.CharField(max_length=200)
+    cedula = models.CharField(
+        max_length=20,
+        unique=True,
+        null=True,
+        blank=True,
+        verbose_name="Cédula",
+        help_text=(
+            "Número de documento de identidad — identificador principal del "
+            "paciente (P-4, decisión 01/07/2026). Obligatorio para pacientes "
+            "nuevos (exigido por clean(), A-2); null solo permitido en "
+            "registros previos a esta versión. blank=True a nivel de campo "
+            "porque full_clean() no debe fallar para pacientes existentes "
+            "sin cédula — la exigencia para pacientes nuevos vive en clean()."
+        ),
+    )
     telefono_whatsapp = models.CharField(
         max_length=20,
         unique=True,
@@ -31,16 +48,40 @@ class Paciente(models.Model):
     )
     medico_responsable = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
+        # D12 (capa 2), la puerta de atrás: con SET_NULL, borrar la cuenta de un
+        # médico convertía a TODOS sus pacientes en huérfanos invisibles, en
+        # silencio — fuera del listado del médico y fuera de los KPI del
+        # tablero. Quién atendió a un paciente es historia clínica, no
+        # configuración. PROTECT obliga a reasignarlos antes.
+        # Regla operativa que la acompaña: las cuentas de médico NO se borran,
+        # se desactivan (is_active=False); y antes de desactivar una, se
+        # reasignan sus pacientes activos.
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name='pacientes',
         help_text="Usuario del sistema (médico) responsable del paciente. "
-                  "Debe existir como usuario en Django Admin."
+                  "Debe existir como usuario en Django Admin. Obligatorio "
+                  "mientras el paciente esté activo."
     )
     activo = models.BooleanField(
         default=True,
         help_text="Desactivar cuando el paciente termina el seguimiento"
+    )
+    consentimiento_informado = models.BooleanField(
+        default=False,
+        verbose_name="Consentimiento informado",
+        help_text=(
+            "El paciente autorizó el tratamiento de sus datos de salud (Ley 1581/2012). "
+            "Marcar solo después de obtener la firma física del formato de consentimiento. "
+            "Desmarcar si el paciente revoca su autorización."
+        ),
+    )
+    fecha_consentimiento = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha de consentimiento",
+        help_text="Se registra automáticamente al marcar el consentimiento informado.",
     )
     fecha_registro = models.DateTimeField(auto_now_add=True)
 
@@ -56,7 +97,30 @@ class Paciente(models.Model):
                 ),
                 name='paciente_tipo_cirugia_valido',
             ),
+            # D12 (capa 4), la garantía: activo ⇒ tiene médico responsable.
+            # El formulario cubre el camino de todos los días y PROTECT cubre el
+            # borrado, pero ninguno de los dos ve un script, el shell ni una
+            # carga de datos. Esto sí.
+            # Condicional y no NOT NULL a propósito: las filas históricas e
+            # inactivas conservan lo que tengan, incluido NULL. Exigirles un
+            # médico obligaría a inventarles una atribución clínica.
+            CheckConstraint(
+                condition=(
+                    Q(activo=False) | Q(medico_responsable__isnull=False)
+                ),
+                name='paciente_activo_con_medico_responsable',
+            ),
         ]
+
+    def clean(self):
+        """A-2: exige cédula en pacientes nuevos. Los pacientes migrados
+        (pk existente, cedula=None) quedan como están — no se les exige
+        retroactivamente."""
+        super().clean()
+        if self.pk is None and not self.cedula:
+            raise ValidationError({
+                'cedula': 'La cédula es obligatoria para pacientes nuevos.'
+            })
 
     def __str__(self):
         if self.medico_responsable is None:
@@ -173,10 +237,47 @@ class RegistroDiario(models.Model):
             "falsas alertas provenían del sensor de FR)."
         )
     )
-    fecha_registro = models.DateTimeField(auto_now_add=True, db_index=True)
+    fecha_registro = models.DateTimeField(
+        default=timezone.now,
+        editable=False,
+        db_index=True,
+    )
     dia_postoperatorio = models.PositiveSmallIntegerField(
         editable=False,
         default=0
+    )
+    EVALUACION_PENDIENTE = 'PENDIENTE'
+    EVALUACION_PROCESANDO = 'PROCESANDO'
+    EVALUACION_COMPLETADA = 'COMPLETADA'
+    EVALUACION_ERROR = 'ERROR'
+    ESTADO_EVALUACION_CHOICES = [
+        (EVALUACION_PENDIENTE, 'Pendiente'),
+        (EVALUACION_PROCESANDO, 'Procesando'),
+        (EVALUACION_COMPLETADA, 'Completada'),
+        (EVALUACION_ERROR, 'Error; requiere reintento'),
+    ]
+    estado_evaluacion_alertas = models.CharField(
+        max_length=12,
+        choices=ESTADO_EVALUACION_CHOICES,
+        default=EVALUACION_PENDIENTE,
+        db_index=True,
+        editable=False,
+    )
+    intentos_evaluacion_alertas = models.PositiveSmallIntegerField(
+        default=0,
+        editable=False,
+    )
+    fecha_ultima_evaluacion_alertas = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+    )
+    ultimo_error_evaluacion_alertas = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        editable=False,
+        help_text='Solo conserva el tipo de error; nunca respuestas del paciente.',
     )
 
     class Meta:
@@ -204,17 +305,24 @@ class RegistroDiario(models.Model):
                 ),
                 name='registrodiario_hinchazon_abdominal_valido',
             ),
+            CheckConstraint(
+                condition=Q(estado_evaluacion_alertas__in=[
+                    'PENDIENTE', 'PROCESANDO', 'COMPLETADA', 'ERROR',
+                ]),
+                name='registro_estado_evaluacion_valido',
+            ),
         ]
 
     def save(self, *args, **kwargs):
-        from django.utils import timezone
-        hoy = timezone.localdate()
-        # Piso en 0: un registro en el día de la cirugía o anterior (paciente
-        # pre-registrado con cirugía a futuro, o typo en fecha_cirugia) nunca
-        # debe producir un dia_postoperatorio negativo — violaría el CHECK del
-        # PositiveSmallIntegerField y haría crashear el save() del bot. Se
-        # conserva el dato para revisión del médico en vez de rechazarlo.
-        self.dia_postoperatorio = max(0, (hoy - self.paciente.fecha_cirugia).days)
+        if self._state.adding:
+            fecha_referencia = timezone.localdate(self.fecha_registro)
+            # Piso en 0: un registro del día de la cirugía o anterior nunca
+            # debe producir un PositiveSmallIntegerField negativo. El POD queda
+            # congelado al crear para preservar la historia ante ediciones.
+            self.dia_postoperatorio = max(
+                0,
+                (fecha_referencia - self.paciente.fecha_cirugia).days,
+            )
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -262,10 +370,84 @@ class Alerta(models.Model):
         help_text="El oncólogo marca esto cuando atiende la alerta"
     )
     fecha_alerta = models.DateTimeField(auto_now_add=True)
+    veces = models.PositiveSmallIntegerField(
+        default=1,
+        verbose_name="Detecciones",
+        help_text=(
+            "En cuántos check-ins se ha detectado este problema mientras la "
+            "alerta sigue abierta (contador de recurrencia). 1 = primera vez."
+        ),
+    )
+    fecha_ultima_deteccion = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Última detección",
+        help_text=(
+            "Último check-in en que se volvió a detectar el problema. "
+            "fecha_alerta = primera detección; esta = la más reciente."
+        ),
+    )
     fecha_resolucion = models.DateTimeField(
         null=True,
         blank=True,
         help_text="Cuándo fue atendida por el médico"
+    )
+
+    # Motivo de resolución (Bloque A, 02/07/2026) — el médico lo selecciona
+    # obligatoriamente al marcar la alerta como resuelta. Útil para ajustar
+    # umbrales clínicos con datos reales en el futuro.
+    MOTIVO_CONTACTO    = 'CONTACTO'
+    MOTIVO_URGENCIAS   = 'URGENCIAS'
+    MOTIVO_MEDICACION  = 'MEDICACION'
+    MOTIVO_FP_MEDICION = 'FP_MEDICION'
+    MOTIVO_FP_RANGO    = 'FP_RANGO'
+    MOTIVO_ESPONTANEO  = 'ESPONTANEO'
+    MOTIVO_OTRO        = 'OTRO'
+    MOTIVO_LEGACY      = 'LEGACY'
+
+    MOTIVOS_RESOLUCION_USUARIO = [
+        (MOTIVO_CONTACTO,    'Atendido — contacté al paciente'),
+        (MOTIVO_URGENCIAS,   'Atendido — derivado a urgencias'),
+        (MOTIVO_MEDICACION,  'Atendido — ajuste de medicación'),
+        (MOTIVO_FP_MEDICION, 'Falso positivo — error de medición del paciente'),
+        (MOTIVO_FP_RANGO,    'Falso positivo — dato fuera de rango esperado'),
+        (MOTIVO_ESPONTANEO,  'Resuelto espontáneamente — sin intervención'),
+        (MOTIVO_OTRO,        'Otro'),
+    ]
+    MOTIVOS_RESOLUCION = [
+        *MOTIVOS_RESOLUCION_USUARIO,
+        (MOTIVO_LEGACY, 'Registro histórico — motivo no capturado'),
+    ]
+
+    motivo_resolucion = models.CharField(
+        max_length=20,
+        choices=MOTIVOS_RESOLUCION,
+        null=True,
+        blank=True,
+        verbose_name='Motivo de resolución',
+        help_text=(
+            'Por qué se marcó esta alerta como resuelta. '
+            'Útil para ajustar umbrales clínicos con datos reales en el futuro.'
+        ),
+    )
+    motivo_resolucion_detalle = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        verbose_name='Detalle del motivo',
+        help_text='Solo requerido cuando el motivo es "Otro".',
+    )
+    # Quién resolvió la alerta (D3, corrección post-auditoría). SET_NULL para no
+    # bloquear el borrado de una cuenta médica; null también en cierres previos a
+    # esta versión (sin backfill: rellenar sería fabricar una atribución clínica).
+    resuelta_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='alertas_resueltas',
+        verbose_name='Resuelta por',
+        help_text='Médico que marcó esta alerta como resuelta.',
     )
 
     class Meta:
@@ -284,11 +466,211 @@ class Alerta(models.Model):
                 condition=Q(severidad__in=['ALTA', 'MEDIA', 'BAJA']),
                 name='alerta_severidad_valida',
             ),
+            CheckConstraint(
+                condition=Q(veces__gte=1),
+                name='alerta_veces_positivo',
+            ),
+            CheckConstraint(
+                condition=(
+                    Q(motivo_resolucion__isnull=True)
+                    | Q(motivo_resolucion__in=[
+                        'CONTACTO', 'URGENCIAS', 'MEDICACION', 'FP_MEDICION',
+                        'FP_RANGO', 'ESPONTANEO', 'OTRO', 'LEGACY',
+                    ])
+                ),
+                name='alerta_motivo_resolucion_valido',
+            ),
+            CheckConstraint(
+                condition=(
+                    Q(resuelta=False)
+                    | (
+                        Q(fecha_resolucion__isnull=False)
+                        & Q(motivo_resolucion__isnull=False)
+                    )
+                ),
+                name='alerta_resuelta_con_cierre',
+            ),
+            CheckConstraint(
+                condition=(
+                    ~Q(motivo_resolucion='OTRO')
+                    | (
+                        Q(motivo_resolucion_detalle__isnull=False)
+                        & ~Q(motivo_resolucion_detalle='')
+                    )
+                ),
+                name='alerta_otro_con_detalle',
+            ),
+            models.UniqueConstraint(
+                fields=['paciente', 'tipo'],
+                condition=Q(resuelta=False),
+                name='unique_alerta_abierta_paciente_tipo',
+            ),
         ]
+
+    def clean(self):
+        super().clean()
+        errores = {}
+        if self.resuelta and not self.fecha_resolucion:
+            errores['fecha_resolucion'] = 'Una alerta resuelta requiere fecha de resolución.'
+        if self.resuelta and not self.motivo_resolucion:
+            errores['motivo_resolucion'] = 'Una alerta resuelta requiere un motivo.'
+        if self.motivo_resolucion == self.MOTIVO_OTRO \
+                and not self.motivo_resolucion_detalle:
+            errores['motivo_resolucion_detalle'] = (
+                'El motivo "Otro" requiere una explicación.'
+            )
+        if errores:
+            raise ValidationError(errores)
 
     def __str__(self):
         estado = "Resuelta" if self.resuelta else "ACTIVA"
         return f"[{estado}] {self.get_tipo_display()} — {self.paciente.nombre_completo}"
+
+
+class NotificacionAlerta(models.Model):
+    """Bandeja transaccional para el correo de una alerta ALTA.
+
+    Solo conserva la referencia a la alerta y el email destinatario. El cuerpo
+    se construye al enviar y no replica cédula, teléfono, síntomas ni el
+    mensaje clínico en esta tabla.
+    """
+
+    ESTADO_PENDIENTE = 'PENDIENTE'
+    ESTADO_ENVIADA = 'ENVIADA'
+    ESTADO_FALLIDA = 'FALLIDA'
+    ESTADO_CHOICES = [
+        (ESTADO_PENDIENTE, 'Pendiente'),
+        (ESTADO_ENVIADA, 'Enviada'),
+        # Estado terminal (D6): se agotaron los reintentos sin entregar. Un
+        # correo de alerta ALTA que falla de forma permanente es información
+        # clínica que no llegó, y debe hacerse visible en vez de reintentarse
+        # en silencio para siempre.
+        (ESTADO_FALLIDA, 'Fallida'),
+    ]
+
+    alerta = models.OneToOneField(
+        Alerta,
+        on_delete=models.PROTECT,
+        related_name='notificacion_email',
+    )
+    destinatario = models.EmailField(blank=True, default='')
+    estado = models.CharField(
+        max_length=10,
+        choices=ESTADO_CHOICES,
+        default=ESTADO_PENDIENTE,
+        db_index=True,
+    )
+    intentos = models.PositiveSmallIntegerField(default=0)
+    proximo_intento = models.DateTimeField(default=timezone.now, db_index=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_ultimo_intento = models.DateTimeField(null=True, blank=True)
+    fecha_envio = models.DateTimeField(null=True, blank=True)
+    ultimo_error = models.CharField(max_length=100, blank=True, default='')
+
+    class Meta:
+        verbose_name = 'Notificación de alerta'
+        verbose_name_plural = 'Notificaciones de alertas'
+        ordering = ['proximo_intento', 'pk']
+        indexes = [
+            models.Index(
+                fields=['estado', 'proximo_intento'],
+                name='notif_estado_proximo_idx',
+            ),
+        ]
+        constraints = [
+            CheckConstraint(
+                condition=Q(estado__in=['PENDIENTE', 'ENVIADA', 'FALLIDA']),
+                name='notificacion_alerta_estado_valido',
+            ),
+            CheckConstraint(
+                condition=(
+                    Q(estado='PENDIENTE', fecha_envio__isnull=True)
+                    | Q(estado='ENVIADA', fecha_envio__isnull=False)
+                    # FALLIDA nunca llegó a enviarse: sin fecha_envio.
+                    | Q(estado='FALLIDA', fecha_envio__isnull=True)
+                ),
+                name='notificacion_alerta_envio_coherente',
+            ),
+        ]
+
+    def __str__(self):
+        return f'Notificación alerta #{self.alerta_id} — {self.estado}'
+
+
+class DeteccionAlerta(models.Model):
+    """Evidencia de cada detección futura agrupada dentro de una alerta."""
+
+    alerta = models.ForeignKey(
+        Alerta,
+        on_delete=models.CASCADE,
+        related_name='detecciones',
+    )
+    registro = models.ForeignKey(
+        RegistroDiario,
+        on_delete=models.PROTECT,
+        related_name='detecciones_alerta',
+        null=True,
+        blank=True,
+        help_text='Registro clínico que produjo la detección.',
+    )
+    checkin = models.ForeignKey(
+        'CheckInProgramado',
+        on_delete=models.PROTECT,
+        related_name='detecciones_alerta',
+        null=True,
+        blank=True,
+        help_text='Check-in no respondido que produjo una alerta de silencio.',
+    )
+    severidad_detectada = models.CharField(
+        max_length=10,
+        choices=Alerta.SEVERIDAD_CHOICES,
+    )
+    mensaje_detectado = models.TextField(
+        help_text='Copia del mensaje clínico generado para esta detección.',
+    )
+    fecha_deteccion = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        verbose_name='Fecha de detección',
+    )
+
+    class Meta:
+        verbose_name = 'Detección de alerta'
+        verbose_name_plural = 'Detecciones de alerta'
+        ordering = ['-fecha_deteccion', '-pk']
+        indexes = [
+            models.Index(
+                fields=['alerta', '-fecha_deteccion'],
+                name='deteccion_alerta_fecha_idx',
+            ),
+        ]
+        constraints = [
+            CheckConstraint(
+                condition=(
+                    Q(registro__isnull=False, checkin__isnull=True)
+                    | Q(registro__isnull=True, checkin__isnull=False)
+                ),
+                name='deteccion_fuente_unica',
+            ),
+            CheckConstraint(
+                condition=Q(severidad_detectada__in=['ALTA', 'MEDIA', 'BAJA']),
+                name='deteccion_severidad_valida',
+            ),
+            models.UniqueConstraint(
+                fields=['alerta', 'registro'],
+                condition=Q(registro__isnull=False),
+                name='unique_det_alerta_registro',
+            ),
+            models.UniqueConstraint(
+                fields=['alerta', 'checkin'],
+                condition=Q(checkin__isnull=False),
+                name='unique_det_alerta_checkin',
+            ),
+        ]
+
+    def __str__(self):
+        fuente = f'registro {self.registro_id}' if self.registro_id else f'check-in {self.checkin_id}'
+        return f'Detección #{self.pk} — {fuente}'
 
 
 class ConversacionWhatsApp(models.Model):
@@ -336,6 +718,15 @@ class ConversacionWhatsApp(models.Model):
         related_name='conversacion',
         help_text="Cada paciente tiene una sola conversación activa con el bot"
     )
+    checkin_actual = models.OneToOneField(
+        'CheckInProgramado',
+        on_delete=models.SET_NULL,
+        related_name='conversacion_activa',
+        null=True,
+        blank=True,
+        editable=False,
+        help_text='Check-in exacto cuyas respuestas se están recolectando.',
+    )
     estado = models.CharField(
         max_length=40,
         choices=ESTADO_CHOICES,
@@ -373,7 +764,17 @@ class ConversacionWhatsApp(models.Model):
     )
     temp_tolero_liquidos = models.BooleanField(null=True, blank=True)
 
-    # --- Control "un registro por día" ---
+    # --- Control "un registro por día" (OBSOLETO) ---
+    # OBSOLETO (D9): resto del modelo anterior de "un registro por día". Hoy el
+    # control lo lleva CheckInProgramado, con dos turnos diarios. El campo se
+    # escribe (bot.py) pero NADIE lo lee: cero lecturas en todo el código.
+    #
+    # Se conserva a propósito: borrar una columna en producción exige migración
+    # y despliegue, y el beneficio es cosmético. La limpieza real —quitar campo
+    # y escritura— queda para después del merge, cuando no haya nada en juego.
+    # La marca va en comentario y no en help_text para no arrastrar una
+    # migración: el modelo no está registrado en el Admin, así que el único
+    # lector posible de ese texto es quien esté leyendo este archivo.
     fecha_ultimo_registro = models.DateField(
         null=True, blank=True,
         help_text="Día en que el paciente completó su último registro"
@@ -477,7 +878,61 @@ class CheckInProgramado(models.Model):
                 condition=Q(etiqueta__in=['MAÑANA', 'TARDE']),
                 name='checkin_etiqueta_valida',
             ),
+            CheckConstraint(
+                condition=(
+                    Q(orden=1, etiqueta='MAÑANA')
+                    | Q(orden=2, etiqueta='TARDE')
+                ),
+                name='checkin_turno_coherente',
+            ),
         ]
 
     def __str__(self):
         return f"{self.paciente} — {self.fecha_dia} {self.etiqueta} ({self.estado})"
+
+
+class RecepcionWebhookTwilio(models.Model):
+    """Recibo técnico para procesar cada mensaje entrante como máximo una vez.
+
+    No persiste teléfono ni contenido del mensaje. `message_sid` es el
+    identificador opaco que Twilio asigna al webhook.
+    """
+
+    ESTADO_PROCESANDO = 'PROCESANDO'
+    ESTADO_COMPLETADO = 'COMPLETADO'
+    ESTADO_ERROR = 'ERROR'
+    ESTADO_CHOICES = [
+        (ESTADO_PROCESANDO, 'Procesando'),
+        (ESTADO_COMPLETADO, 'Completado'),
+        (ESTADO_ERROR, 'Error; admite reintento'),
+    ]
+
+    message_sid = models.CharField(max_length=64, unique=True)
+    idempotency_token = models.CharField(max_length=128, blank=True, default='')
+    estado = models.CharField(
+        max_length=12,
+        choices=ESTADO_CHOICES,
+        default=ESTADO_PROCESANDO,
+        db_index=True,
+    )
+    intentos = models.PositiveSmallIntegerField(default=1)
+    fecha_recepcion = models.DateTimeField(auto_now_add=True, db_index=True)
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Recepción webhook Twilio'
+        verbose_name_plural = 'Recepciones webhook Twilio'
+        ordering = ['-fecha_recepcion']
+        constraints = [
+            CheckConstraint(
+                condition=Q(estado__in=['PROCESANDO', 'COMPLETADO', 'ERROR']),
+                name='webhook_twilio_estado_valido',
+            ),
+            CheckConstraint(
+                condition=Q(intentos__gte=1),
+                name='webhook_twilio_intentos_positivo',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.message_sid} — {self.estado}'

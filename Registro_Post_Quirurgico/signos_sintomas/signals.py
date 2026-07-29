@@ -1,79 +1,45 @@
-"""
-Señales de la app signos_sintomas.
-
-Bloque 5C — Notificación email al médico responsable cuando se crea una
-alerta de severidad ALTA. El envío se difiere con on_commit para garantizar
-que la alerta ya existe en BD antes de intentar enviar el correo.
-
-Backend de email:
-- Desarrollo: EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-  (imprime en consola, no envía nada real — ver settings.py).
-- Producción: configurar SMTP real en settings_production.py (Sprint 5).
-"""
+"""Señales de dominio de signos_sintomas."""
 
 import logging
 
-from django.core.mail import send_mail
-from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from .models import Alerta
+from .models import Alerta, NotificacionAlerta
 
 logger = logging.getLogger(__name__)
 
 
 @receiver(post_save, sender=Alerta)
 def notificar_alerta_alta(sender, instance, created, **kwargs):
-    """Envía email al médico responsable si la alerta nueva es de severidad ALTA."""
-    if not created or instance.severidad != 'ALTA':
+    """Encola una notificación cuando la alerta alcanza severidad ALTA.
+
+    La fila se crea dentro de la misma transacción que guarda la alerta. No se
+    realiza ninguna conexión de red en el webhook.
+    """
+    # Los seeds marcan sus pacientes con una cédula reservada. Excluirlos en
+    # la frontera de dominio evita correos demo incluso si se agregan nuevos
+    # comandos de poblado en el futuro.
+    if (instance.paciente.cedula or '').startswith('DEMO-'):
+        return
+    if instance.severidad != 'ALTA':
+        return
+    escalo_a_alta = getattr(instance, '_escalo_a_alta', False)
+    if not (created or escalo_a_alta):
         return
 
     medico = instance.paciente.medico_responsable
-    if medico is None or not medico.email:
+    destinatario = medico.email if medico and medico.email else ''
+    if not destinatario:
         logger.warning(
-            "Alerta ALTA (pk=%d, tipo=%s) sin médico responsable o sin email — "
-            "notificación no enviada.",
+            "Alerta ALTA pk=%d sin médico responsable o sin email; "
+            "la notificación permanecerá pendiente.",
             instance.pk,
-            instance.tipo,
         )
-        return
 
-    def _enviar():
-        asunto = (
-            f"[ALERTA ALTA] {instance.get_tipo_display()} — "
-            f"{instance.paciente.nombre_completo}"
-        )
-        cuerpo = (
-            f"Estimado/a {medico.get_full_name() or medico.username},\n\n"
-            f"Se ha generado una alerta de severidad ALTA para su paciente:\n\n"
-            f"  Paciente: {instance.paciente.nombre_completo}\n"
-            f"  Tipo: {instance.get_tipo_display()}\n"
-            f"  Severidad: {instance.get_severidad_display()}\n"
-            f"  Fecha: {instance.fecha_alerta.strftime('%Y-%m-%d %H:%M')}\n\n"
-            f"Detalle: {instance.mensaje}\n\n"
-            f"Por favor revise el dashboard y contacte al paciente si es necesario.\n\n"
-            f"— Sistema de Monitoreo Posquirúrgico"
-        )
-        try:
-            send_mail(
-                subject=asunto,
-                message=cuerpo,
-                from_email=None,  # usa DEFAULT_FROM_EMAIL de settings
-                recipient_list=[medico.email],
-                fail_silently=False,
-            )
-            logger.info(
-                "Notificación email enviada a %s por alerta ALTA pk=%d tipo=%s.",
-                medico.email,
-                instance.pk,
-                instance.tipo,
-            )
-        except Exception as exc:
-            logger.error(
-                "Error enviando email de alerta ALTA pk=%d: %s",
-                instance.pk,
-                exc,
-            )
-
-    transaction.on_commit(_enviar)
+    _, creada = NotificacionAlerta.objects.get_or_create(
+        alerta=instance,
+        defaults={'destinatario': destinatario},
+    )
+    if creada:
+        logger.info('Notificación encolada para alerta ALTA pk=%d.', instance.pk)

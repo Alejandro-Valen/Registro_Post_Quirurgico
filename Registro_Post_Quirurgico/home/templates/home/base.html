@@ -1,0 +1,58 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0E5A54">
+    <meta name="description" content="{% block description %}Acompañamiento médico remoto tras la cirugía: seguimiento diario por WhatsApp y alertas tempranas para tu equipo médico.{% endblock %}">
+    <title>{% block title %}Seguimiento Postquirúrgico Remoto{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'home/css/site.css' %}">
+</head>
+<body>
+
+{% if mostrar_aviso_boceto %}
+<div class="ribbon">
+    Boceto de presentación · lo que aparece <b>[entre corchetes]</b> son marcadores de ejemplo que reemplazamos con los datos reales del médico
+</div>
+{% endif %}
+
+<header class="top">
+    <div class="wrap nav">
+        {% comment %}
+        LOGO DEL MÉDICO: para usar su logo, reemplazar el <span class="mark"> por
+        <img class="brand-logo" src="{% static 'home/img/logo.png' %}" alt="Logo">
+        {% endcomment %}
+        <a class="brand" href="{% url 'home' %}">
+            <span class="mark" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 5 4-12 2 7h6"/></svg>
+            </span>
+            <span>Seguimiento Postquirúrgico<small>Monitoreo remoto</small></span>
+        </a>
+        <nav class="navlinks" aria-label="Principal">
+            <a href="{% url 'home' %}"{% if seccion == 'inicio' %} class="activo"{% endif %}>Inicio</a>
+            <a href="{% url 'home' %}#medico">El especialista</a>
+            <a href="{% url 'home' %}#como">Cómo funciona</a>
+            <a href="{% url 'contacto' %}"{% if seccion == 'contacto' %} class="activo"{% endif %}>Contacto</a>
+            <a href="{% url 'admin:index' %}" class="cta">Acceso médico</a>
+        </nav>
+    </div>
+</header>
+
+{% block content %}{% endblock %}
+
+<footer class="site">
+    <div class="wrap foot">
+        <div class="foot-brand">Seguimiento Postquirúrgico Remoto · <span class="ph">[Nombre del consultorio / institución]</span></div>
+        <div>
+            <a href="{% url 'home' %}#medico">El especialista</a> &nbsp;·&nbsp;
+            <a href="{% url 'home' %}#como">Cómo funciona</a> &nbsp;·&nbsp;
+            <a href="{% url 'contacto' %}">Contacto</a>
+        </div>
+        <div>© 2026 · <span class="ph">[Ciudad, país]</span></div>
+    </div>
+</footer>
+
+{% block extra_js %}{% endblock %}
+</body>
+</html>

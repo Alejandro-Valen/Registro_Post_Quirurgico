@@ -1,494 +1,222 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inicio | Seguimiento Postquirurgico</title>
+{% extends "home/base.html" %}
+{% load static %}
 
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: Arial, Helvetica, sans-serif;
-        }
+{% block title %}Seguimiento Postquirúrgico Remoto · Acompañamiento tras la cirugía{% endblock %}
 
-        :root {
-            --azul: #0d6efd;
-            --azul-oscuro: #084298;
-            --verde: #198754;
-            --amarillo: #ffc107;
-            --fondo: #eef5fb;
-            --texto: #233142;
-            --gris: #687385;
-            --borde: #d9e5f2;
-        }
-
-        body {
-            min-height: 100vh;
-            background: var(--fondo);
-            color: var(--texto);
-        }
-
-        header {
-            background: var(--azul);
-            color: white;
-            padding: 18px 8%;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            box-shadow: 0 8px 22px rgba(13, 110, 253, 0.22);
-        }
-
-        header h2 {
-            font-size: 20px;
-            line-height: 1.25;
-        }
-
-        nav {
-            display: flex;
-            gap: 10px;
-        }
-
-        nav a {
-            color: white;
-            text-decoration: none;
-            padding: 9px 14px;
-            border-radius: 6px;
-            font-weight: bold;
-            transition: background 0.2s ease, transform 0.2s ease;
-        }
-
-        nav a:hover,
-        nav a.activo {
-            background: rgba(255, 255, 255, 0.18);
-            transform: translateY(-1px);
-        }
-
-        main {
-            width: min(1120px, 92%);
-            margin: 42px auto;
-        }
-
-        .hero {
-            display: grid;
-            grid-template-columns: 1.1fr 0.9fr;
-            gap: 28px;
-            align-items: center;
-            padding: 38px;
-            border: 1px solid var(--borde);
-            border-radius: 12px;
-            background: linear-gradient(135deg, #ffffff 0%, #e7f1ff 100%);
-        }
-
-        .etiqueta {
-            display: inline-block;
-            color: var(--azul-oscuro);
-            background: #dcecff;
-            padding: 7px 12px;
-            border-radius: 999px;
-            font-size: 13px;
-            font-weight: bold;
-            margin-bottom: 16px;
-        }
-
-        h1 {
-            color: var(--azul-oscuro);
-            font-size: clamp(34px, 5vw, 54px);
-            line-height: 1.08;
-            margin-bottom: 16px;
-        }
-
-        .hero p {
-            color: var(--gris);
-            font-size: 18px;
-            line-height: 1.65;
-            max-width: 720px;
-        }
-
-        .acciones {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-top: 26px;
-        }
-
-        .btn {
-            display: inline-block;
-            padding: 14px 20px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: bold;
-            transition: transform 0.2s ease, background 0.2s ease;
-        }
-
-        .btn:hover {
-            transform: translateY(-1px);
-        }
-
-        .btn-principal {
-            background: var(--verde);
-            color: white;
-        }
-
-        .btn-principal:hover {
-            background: #146c43;
-        }
-
-        .btn-secundario {
-            background: white;
-            color: var(--azul-oscuro);
-            border: 1px solid var(--borde);
-        }
-
-        .hero-panel {
-            background: white;
-            border: 1px solid var(--borde);
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: 0 14px 30px rgba(18, 38, 63, 0.08);
-        }
-
-        .hero-panel h3 {
-            color: var(--azul-oscuro);
-            font-size: 22px;
-            margin-bottom: 18px;
-        }
-
-        .indicador {
-            display: flex;
-            justify-content: space-between;
-            gap: 14px;
-            padding: 14px 0;
-            border-bottom: 1px solid var(--borde);
-        }
-
-        .indicador:last-child {
-            border-bottom: none;
-        }
-
-        .indicador strong {
-            display: block;
-            margin-bottom: 4px;
-        }
-
-        .estado {
-            min-width: 92px;
-            align-self: center;
-            padding: 7px 10px;
-            border-radius: 999px;
-            text-align: center;
-            font-size: 13px;
-            font-weight: bold;
-            color: #0f5132;
-            background: #d1e7dd;
-        }
-
-        .seccion {
-            margin-top: 34px;
-        }
-
-        .seccion-titulo {
-            display: flex;
-            align-items: end;
-            justify-content: space-between;
-            gap: 20px;
-            margin-bottom: 18px;
-        }
-
-        .seccion-titulo h2 {
-            color: var(--azul-oscuro);
-            font-size: 30px;
-        }
-
-        .seccion-titulo p {
-            max-width: 560px;
-            color: var(--gris);
-            line-height: 1.55;
-        }
-
-        .cards {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-        }
-
-        .card,
-        .paso,
-        .alerta {
-            background: white;
-            border: 1px solid var(--borde);
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: 0 14px 30px rgba(18, 38, 63, 0.08);
-        }
-
-        .icono {
-            width: 46px;
-            height: 46px;
-            display: grid;
-            place-items: center;
-            border-radius: 10px;
-            background: var(--azul);
-            color: white;
-            font-weight: bold;
-            margin-bottom: 16px;
-        }
-
-        .card h3,
-        .paso h3,
-        .alerta h3 {
-            color: var(--azul-oscuro);
-            margin-bottom: 10px;
-        }
-
-        .card p,
-        .paso p,
-        .alerta p {
-            color: var(--gris);
-            line-height: 1.6;
-        }
-
-        .pasos {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 16px;
-        }
-
-        .numero {
-            width: 34px;
-            height: 34px;
-            display: grid;
-            place-items: center;
-            border-radius: 50%;
-            background: #dcecff;
-            color: var(--azul-oscuro);
-            font-weight: bold;
-            margin-bottom: 14px;
-        }
-
-        .alerta {
-            display: grid;
-            grid-template-columns: auto 1fr auto;
-            gap: 18px;
-            align-items: center;
-            border-left: 5px solid var(--amarillo);
-        }
-
-        .alerta .icono {
-            margin-bottom: 0;
-            background: var(--amarillo);
-            color: #533f03;
-        }
-
-        footer {
-            background: var(--azul-oscuro);
-            color: white;
-            text-align: center;
-            padding: 22px;
-            margin-top: 50px;
-        }
-
-        @media (max-width: 900px) {
-            .hero,
-            .cards,
-            .pasos {
-                grid-template-columns: 1fr;
-            }
-
-            .seccion-titulo {
-                display: block;
-            }
-
-            .seccion-titulo p {
-                margin-top: 8px;
-            }
-
-            .alerta {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        @media (max-width: 760px) {
-            header {
-                flex-direction: column;
-                align-items: flex-start;
-                padding: 18px 5%;
-            }
-
-            nav {
-                width: 100%;
-            }
-
-            nav a {
-                flex: 1;
-                text-align: center;
-            }
-
-            main {
-                margin-top: 28px;
-            }
-
-            .hero {
-                padding: 24px;
-            }
-
-            .acciones a {
-                width: 100%;
-                text-align: center;
-            }
-        }
-    </style>
-</head>
-<body>
-
-<header>
-    <h2>Seguimiento Postquirúrgico Remoto</h2>
-
-    <nav>
-        <a href="/" class="activo">Inicio</a>
-        <a href="/contacto/">Contacto</a>
-    </nav>
-</header>
-
-<main>
+{% block content %}
+<main id="inicio">
     <section class="hero">
-        <div>
-            <span class="etiqueta">Cuidado despues de la cirugia</span>
-            <h1>Monitoreo claro para una recuperacion segura</h1>
-            <p>
-                Plataforma para acompanar a pacientes despues de procedimientos quirurgicos,
-                registrar signos y sintomas, identificar alertas tempranas y facilitar el
-                seguimiento del equipo medico.
-            </p>
-
-            <div class="acciones">
-                <a href="#" class="btn btn-principal">Iniciar sesion</a>
-                <a href="/contacto/" class="btn btn-secundario">Contactar soporte</a>
+        <canvas id="pulse" aria-hidden="true"></canvas>
+        <div class="wrap hero-grid">
+            <div>
+                <span class="eyebrow"><span class="dot"></span> Acompañamiento tras la cirugía</span>
+                <h1>Nadie debería recuperarse <em>en silencio.</em></h1>
+                <p class="lead">
+                    Un seguimiento cercano después de tu operación, desde tu casa y por WhatsApp.
+                    Tu equipo médico revisa cómo evolucionas cada día y actúa a tiempo si algo cambia.
+                </p>
+                <div class="actions">
+                    <a href="#contacto" class="btn btn-primary">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        Quiero saber más
+                    </a>
+                    <a href="{% url 'admin:index' %}" class="btn btn-ghost">Acceso del equipo médico</a>
+                </div>
             </div>
+
+            <aside class="monitor" aria-label="Ejemplo de seguimiento de un paciente">
+                <div class="monitor-head">
+                    <div class="who">
+                        <span class="avatar-sm" aria-hidden="true">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+                        </span>
+                        <div>
+                            <strong>Paciente de ejemplo</strong><br>
+                            <span>Día 4 tras la cirugía</span>
+                        </div>
+                    </div>
+                    <span class="live"><span class="beat"></span> En seguimiento</span>
+                </div>
+
+                <div class="spark" aria-hidden="true">
+                    <svg viewBox="0 0 320 66" preserveAspectRatio="none">
+                        <defs>
+                            <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0" stop-color="var(--primary)" stop-opacity=".22"/>
+                                <stop offset="1" stop-color="var(--primary)" stop-opacity="0"/>
+                            </linearGradient>
+                        </defs>
+                        <path d="M0,48 L34,44 L68,46 L102,38 L136,40 L170,30 L204,33 L238,22 L272,26 L306,16 L320,18 L320,66 L0,66 Z" fill="url(#fill)"/>
+                        <path d="M0,48 L34,44 L68,46 L102,38 L136,40 L170,30 L204,33 L238,22 L272,26 L306,16 L320,18" fill="none" stroke="var(--primary)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                        <circle cx="306" cy="16" r="4" fill="var(--accent)"/>
+                    </svg>
+                </div>
+
+                <div class="vitals">
+                    <div class="vital"><div class="k">Temperatura</div><div class="v">37.1<small>°C</small></div></div>
+                    <div class="vital"><div class="k">Dolor</div><div class="v">3<small>/10</small></div></div>
+                    <div class="vital warn"><div class="k">Frec. card.</div><div class="v">104<small>lpm</small></div></div>
+                </div>
+            </aside>
         </div>
+    </section>
 
-        <div class="hero-panel">
-            <h3>Resumen del seguimiento</h3>
+    <hr class="divider">
 
-            <div class="indicador">
-                <div>
-                    <strong>Registro diario</strong>
-                    <span>Dolor, temperatura y sintomas</span>
+    <!-- EL ESPECIALISTA -->
+    <section class="block" id="medico">
+        <div class="wrap">
+            <span class="kicker">Quién te acompaña</span>
+            <h2>Detrás del sistema hay un médico que te conoce.</h2>
+            <div class="doc">
+                <div class="doc-photo" aria-hidden="true">
+                    <svg width="88" height="88" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" opacity=".55"><circle cx="12" cy="8" r="4.2"/><path d="M4 21c0-4.4 3.8-6.5 8-6.5s8 2.1 8 6.5"/></svg>
+                    <span>[ Foto del especialista ]</span>
                 </div>
-                <span class="estado">Activo</span>
-            </div>
-
-            <div class="indicador">
                 <div>
-                    <strong>Alertas clinicas</strong>
-                    <span>Revision de signos de alarma</span>
+                    <h3><span class="ph">Dr. [Nombre y apellido]</span></h3>
+                    <p class="role"><span class="ph">[Especialidad — p. ej. Cirugía oncológica / colorrectal]</span></p>
+                    <p class="bio">
+                        <span class="ph">[Un párrafo breve del médico: su formación, dónde ejerce, su enfoque
+                        de la recuperación postoperatoria y por qué creó este acompañamiento. 2–3 frases.]</span>
+                    </p>
+                    <div class="chips">
+                        <span class="chip"><span class="ph">[Universidad / título]</span></span>
+                        <span class="chip"><span class="ph">[Institución donde ejerce]</span></span>
+                        <span class="chip"><span class="ph">[Años de experiencia]</span></span>
+                    </div>
+                    <blockquote class="quote">
+                        “<span class="ph">[Frase personal del médico sobre cómo cuida a sus pacientes en la recuperación.]</span>”
+                    </blockquote>
                 </div>
-                <span class="estado">Vigente</span>
-            </div>
-
-            <div class="indicador">
-                <div>
-                    <strong>Equipo medico</strong>
-                    <span>Acompanamiento y orientacion</span>
-                </div>
-                <span class="estado">Disponible</span>
             </div>
         </div>
     </section>
 
-    <section class="seccion">
-        <div class="seccion-titulo">
-            <h2>Funciones principales</h2>
-            <p>
-                El sistema centraliza informacion importante para que el seguimiento sea
-                mas ordenado, oportuno y facil de revisar.
-            </p>
-        </div>
+    <hr class="divider">
 
-        <div class="cards">
-            <article class="card">
-                <div class="icono">01</div>
-                <h3>Registro diario</h3>
-                <p>
-                    Permite reportar sintomas, dolor, temperatura y cambios relevantes
-                    durante la recuperacion.
-                </p>
-            </article>
-
-            <article class="card">
-                <div class="icono">02</div>
-                <h3>Seguimiento medico</h3>
-                <p>
-                    Ayuda al personal medico a revisar la evolucion del paciente y tomar
-                    decisiones con mejor informacion.
-                </p>
-            </article>
-
-            <article class="card">
-                <div class="icono">03</div>
-                <h3>Alertas tempranas</h3>
-                <p>
-                    Facilita identificar posibles complicaciones postoperatorias para
-                    actuar a tiempo.
-                </p>
-            </article>
-        </div>
-    </section>
-
-    <section class="seccion">
-        <div class="seccion-titulo">
-            <h2>Como funciona</h2>
-            <p>
-                Un flujo sencillo para registrar informacion y mantener conectado al
-                paciente con el equipo responsable.
-            </p>
-        </div>
-
-        <div class="pasos">
-            <article class="paso">
-                <div class="numero">1</div>
-                <h3>Ingreso</h3>
-                <p>El paciente accede al sistema con sus datos asignados.</p>
-            </article>
-
-            <article class="paso">
-                <div class="numero">2</div>
-                <h3>Reporte</h3>
-                <p>Registra sintomas, temperatura, dolor y observaciones.</p>
-            </article>
-
-            <article class="paso">
-                <div class="numero">3</div>
-                <h3>Revision</h3>
-                <p>El equipo medico revisa la informacion enviada.</p>
-            </article>
-
-            <article class="paso">
-                <div class="numero">4</div>
-                <h3>Orientacion</h3>
-                <p>Se brindan indicaciones o se activa atencion si hay alarma.</p>
-            </article>
+    <!-- QUÉ VIGILA -->
+    <section class="block" id="que-vigila">
+        <div class="wrap">
+            <span class="kicker">Qué se revisa cada día</span>
+            <h2>Señales sencillas de reportar, importantes de vigilar.</h2>
+            <p class="sub">Cada día respondes unas preguntas cortas por WhatsApp. El sistema organiza tus respuestas y avisa a tu equipo médico si aparece alguna señal de alarma temprana.</p>
+            <div class="grid-3">
+                <article class="feat">
+                    <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 14.76V5a2 2 0 0 0-4 0v9.76a4 4 0 1 0 4 0z"/></svg></span>
+                    <h3>Temperatura</h3>
+                    <p>Para detectar fiebre a tiempo, una de las primeras señales de complicación.</p>
+                </article>
+                <article class="feat">
+                    <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 5 4-12 2 7h6"/></svg></span>
+                    <h3>Dolor</h3>
+                    <p>Cuánto dolor sientes y cómo cambia con los días, para ajustar tu cuidado.</p>
+                </article>
+                <article class="feat">
+                    <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/></svg></span>
+                    <h3>Frecuencia cardíaca</h3>
+                    <p>El pulso ayuda a reconocer temprano signos que merecen una revisión.</p>
+                </article>
+                <article class="feat">
+                    <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 21c-2 0-3-1.5-3-3.5S6 12 6 9a6 6 0 0 1 12 0c0 3 2 6.5 2 8.5S19 21 17 21z"/></svg></span>
+                    <h3>Digestión y drenaje</h3>
+                    <p>Náuseas, gases, tolerancia a los líquidos y el aspecto del drenaje, si lo tienes.</p>
+                </article>
+                <article class="feat">
+                    <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 13s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01M15 9h.01"/></svg></span>
+                    <h3>Cómo te sientes</h3>
+                    <p>Hinchazón abdominal y bienestar general, en lenguaje sencillo, sin tecnicismos.</p>
+                </article>
+                <article class="feat">
+                    <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span>
+                    <h3>Alarmas al médico</h3>
+                    <p>Si algo se sale de lo esperado, tu equipo recibe un aviso para contactarte pronto.</p>
+                </article>
+            </div>
         </div>
     </section>
 
-    <section class="seccion alerta">
-        <div class="icono">!</div>
-        <div>
-            <h3>Atencion ante signos de alarma</h3>
-            <p>
-                Si presenta fiebre, dolor intenso, sangrado, dificultad para respirar o
-                deterioro rapido, no espere una respuesta por el sistema y acuda a urgencias.
-            </p>
+    <hr class="divider">
+
+    <!-- CÓMO FUNCIONA -->
+    <section class="block" id="como">
+        <div class="wrap">
+            <span class="kicker">Cómo funciona</span>
+            <h2>Cuatro pasos, todo desde tu WhatsApp.</h2>
+            <div class="steps">
+                <div class="step"><div class="n">01</div><h3>Te damos de alta</h3><p>Tu médico te registra y da su consentimiento. Recibes el primer mensaje.</p></div>
+                <div class="step"><div class="n">02</div><h3>Respondes cada día</h3><p>El bot te hace preguntas cortas sobre cómo te sientes. Tú respondes con tus palabras.</p></div>
+                <div class="step"><div class="n">03</div><h3>El sistema clasifica</h3><p>Ordena tus respuestas y revisa si hay señales que ameriten atención.</p></div>
+                <div class="step"><div class="n">04</div><h3>Tu médico revisa</h3><p>Ve tu evolución en su panel y te contacta si hace falta. Nunca te quedas solo.</p></div>
+            </div>
         </div>
-        <a href="/contacto/" class="btn btn-secundario">Ver contacto</a>
+    </section>
+
+    <!-- PREVIEW DEL DASHBOARD -->
+    <section class="block dash-band">
+        <div class="wrap dash">
+            <div>
+                <span class="kicker">La vista del médico</span>
+                <h2>Todo lo que reportas, ordenado y priorizado.</h2>
+                <p class="sub">Tu equipo médico ve un panel con tus registros, tus gráficas de evolución y las alertas ordenadas por nivel: alta, media o baja. Así atienden primero lo más importante.</p>
+            </div>
+            <div class="alert-list" aria-label="Ejemplo de alertas en el panel médico">
+                <div class="lh"><span>Alertas · panel del médico</span><span>Ejemplo</span></div>
+                <div class="alert-row">
+                    <span class="sev alta" aria-hidden="true"></span>
+                    <div><div class="pt">Paciente de ejemplo · fiebre</div><div class="meta">día 3 · 38.2 °C</div></div>
+                    <span class="pill alta">Alta</span>
+                </div>
+                <div class="alert-row">
+                    <span class="sev media" aria-hidden="true"></span>
+                    <div><div class="pt">Paciente de ejemplo · náuseas</div><div class="meta">día 2 · 3 episodios</div></div>
+                    <span class="pill media">Media</span>
+                </div>
+                <div class="alert-row">
+                    <span class="sev baja" aria-hidden="true"></span>
+                    <div><div class="pt">Paciente de ejemplo · dolor</div><div class="meta">día 4 · 4/10</div></div>
+                    <span class="pill baja">Baja</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- SEGURIDAD -->
+    <section class="block">
+        <div class="wrap">
+            <div class="safety">
+                <span class="ic" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+                </span>
+                <div>
+                    <h3>Ante una emergencia, no esperes al sistema.</h3>
+                    <p>Si presentas fiebre alta, dolor intenso, sangrado, dificultad para respirar o un deterioro rápido, acude directamente a urgencias o comunícate con tu médico. Este seguimiento acompaña tu recuperación, pero no reemplaza la atención de urgencia.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CONTACTO / CTA -->
+    <section class="block" id="contacto">
+        <div class="wrap">
+            <div class="cta-band">
+                <h2>¿Hablamos sobre tu recuperación?</h2>
+                <p>Déjanos tus datos y el equipo del <span class="ph" style="color:#fff;background:rgba(255,255,255,.14)">Dr. [Nombre]</span> se pondrá en contacto contigo.</p>
+                <div class="actions">
+                    <a href="{% url 'contacto' %}" class="btn btn-primary">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        Escribir al equipo
+                    </a>
+                    <a href="{% url 'admin:index' %}" class="btn btn-ghost">Ingreso del equipo médico</a>
+                </div>
+            </div>
+        </div>
     </section>
 </main>
+{% endblock %}
 
-<footer>
-    <p>Sistema de Seguimiento Postquirurgico (c) 2026</p>
-</footer>
-
-</body>
-</html>
+{% block extra_js %}
+<script src="{% static 'home/js/pulse.js' %}" defer></script>
+{% endblock %}

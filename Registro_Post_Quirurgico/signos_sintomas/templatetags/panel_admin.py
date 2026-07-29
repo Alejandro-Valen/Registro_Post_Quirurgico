@@ -1,0 +1,194 @@
+"""
+Template tag del tablero de triage del Admin (Panel del médico).
+
+`{% panel_triage %}` calcula, con las alertas/check-ins/pacientes reales, lo que
+el médico necesita ver de primero al entrar a /admin/. Respeta el scoping por
+médico: un usuario staff no-superusuario solo ve lo de SUS pacientes; el
+superusuario ve todo. No modifica nada — solo consulta y muestra.
+"""
+
+from django import template
+from django.db.models import Count, Q
+from django.utils import timezone
+
+from home.models import MensajeContacto
+from signos_sintomas.models import (
+    Alerta,
+    CheckInProgramado,
+    NotificacionAlerta,
+    Paciente,
+)
+
+register = template.Library()
+
+# Orden de gravedad para el triage (menor = más urgente).
+_RANK_SEV = {'ALTA': 0, 'MEDIA': 1, 'BAJA': 2}
+
+# Etiquetas del tipo de alerta en lenguaje del médico (para el tablero).
+_DIAG_LABEL = {
+    'SEPSIS':            'Fiebre — posible sepsis',
+    'FUGA_ANASTOMOTICA': 'Fuga anastomótica',
+    'ILEO_PARALITICO':   'Íleo paralítico',
+    'DOLOR_AGUDO':       'Dolor agudo',
+    'INTOLERANCIA_ORAL': 'Intolerancia oral',
+    'TAQUICARDIA':       'Taquicardia',
+    'SILENCIO':          'Sin respuesta',
+}
+
+
+def _pod(paciente, hoy):
+    """Día postoperatorio del paciente hoy (piso en 0)."""
+    return max(0, (hoy - paciente.fecha_cirugia).days)
+
+
+@register.inclusion_tag('admin/panel_triage.html', takes_context=True)
+def panel_triage(context):
+    request = context['request']
+    user = request.user
+    hoy = timezone.localdate()
+
+    pacientes = Paciente.objects.all()
+    alertas = Alerta.objects.all()
+    checkins = CheckInProgramado.objects.filter(fecha_dia=hoy)
+    mensajes_contacto = MensajeContacto.objects.filter(revisado=False)
+    # Correos de alerta ALTA que agotaron los reintentos (D6): información
+    # clínica que no llegó. Se avisa en el tablero, también al médico.
+    fallidas = NotificacionAlerta.objects.filter(
+        estado=NotificacionAlerta.ESTADO_FALLIDA,
+    )
+
+    # Scoping por médico: el no-superusuario solo ve lo suyo.
+    if not user.is_superuser:
+        pacientes = pacientes.filter(medico_responsable=user)
+        alertas = alertas.filter(paciente__medico_responsable=user)
+        checkins = checkins.filter(paciente__medico_responsable=user)
+        mensajes_contacto = mensajes_contacto.filter(medico_destinatario=user)
+        fallidas = fallidas.filter(alerta__paciente__medico_responsable=user)
+
+    activos = pacientes.filter(activo=True)
+    pendientes = alertas.filter(resuelta=False)
+
+    # D12 (capa 3) — pacientes activos que NADIE puede atender.
+    #
+    # Las otras tres capas impiden que el paciente quede huérfano; ninguna
+    # impide que su médico exista pero no pueda atenderlo. Las cuatro
+    # condiciones producen el mismo daño clínico —nadie mira a ese paciente— y
+    # por eso comparten un solo aviso:
+    #   · sin médico responsable  (imposible desde la migración 0028 en un
+    #     paciente activo; se conserva por si la restricción se retirara)
+    #   · médico desactivado      (el riesgo del día a día: se desactiva al
+    #     médico que se fue y sus pacientes siguen vivos)
+    #   · médico sin is_staff     (no puede entrar al Admin: no lo ve nadie)
+    #   · médico sin correo       (la alerta ALTA no tiene a dónde ir, y
+    #     procesar_notificaciones_email queda en rojo permanente)
+    #
+    # Solo para el superusuario: es información de administración de cuentas, y
+    # un médico no puede ver pacientes que no son suyos.
+    sin_atencion = 0
+    if user.is_superuser:
+        sin_atencion = Paciente.objects.filter(activo=True).filter(
+            Q(medico_responsable__isnull=True)
+            | Q(medico_responsable__is_active=False)
+            | Q(medico_responsable__is_staff=False)
+            | Q(medico_responsable__email='')
+        ).count()
+
+    total_checkins = checkins.count()
+    respondidos = checkins.filter(estado=CheckInProgramado.ESTADO_COMPLETADO).count()
+    kpi = {
+        'alta':        pendientes.filter(severidad='ALTA').count(),
+        'silencios':   checkins.filter(estado=CheckInProgramado.ESTADO_NO_RESPONDIDO).count(),
+        'pendientes':  checkins.filter(estado=CheckInProgramado.ESTADO_PENDIENTE).count(),
+        'respondidos': respondidos,
+        'total':       total_checkins,
+        'activos':     activos.count(),
+        'pct':         int(round(100 * respondidos / total_checkins)) if total_checkins else 0,
+    }
+
+    # Triage acumulado: toda alerta sin resolver (menos SILENCIO), aunque se
+    # haya originado en un día anterior.
+    pend = list(
+        pendientes.exclude(tipo='SILENCIO')
+        .select_related('paciente', 'registro_origen')
+    )
+    pend.sort(key=lambda a: (
+        _RANK_SEV.get(a.severidad, 3),
+        -a.veces,
+        -(a.fecha_ultima_deteccion or a.fecha_alerta).timestamp(),
+    ))
+    atencion = []
+    for a in pend[:10]:
+        if a.registro_origen_id:
+            pod = a.registro_origen.dia_postoperatorio
+        else:
+            pod = _pod(a.paciente, hoy)
+        atencion.append({
+            'nombre':      a.paciente.nombre_completo,
+            'paciente_id': a.paciente_id,
+            'alerta_id':   a.id,
+            'sev':         a.severidad.lower(),
+            'sev_label':   a.severidad.capitalize(),
+            'diag':        _DIAG_LABEL.get(a.tipo, a.get_tipo_display()),
+            'pod':         pod,
+            'telefono':    a.paciente.telefono_whatsapp,
+            'fecha':       a.fecha_ultima_deteccion or a.fecha_alerta,
+            'veces':       a.veces,
+        })
+
+    # Silencios de hoy.
+    silencios = [
+        {
+            'nombre':      c.paciente.nombre_completo,
+            'paciente_id': c.paciente_id,
+            'pod':         _pod(c.paciente, hoy),
+            'etiqueta':    c.get_etiqueta_display(),
+        }
+        for c in (checkins.filter(estado=CheckInProgramado.ESTADO_NO_RESPONDIDO)
+                  .select_related('paciente')[:8])
+    ]
+
+    total_mensajes_contacto = mensajes_contacto.count()
+    contactos = [
+        {
+            'id': mensaje.id,
+            'nombre': mensaje.nombre,
+            'telefono': mensaje.telefono,
+            'fecha': mensaje.fecha_creacion,
+        }
+        for mensaje in mensajes_contacto[:6]
+    ]
+
+    # Pacientes en seguimiento (activos), con conteo de alertas activas.
+    tabla = (
+        activos.annotate(
+            n_alta=Count('alertas', filter=Q(alertas__resuelta=False, alertas__severidad='ALTA')),
+            n_media=Count('alertas', filter=Q(alertas__resuelta=False, alertas__severidad='MEDIA')),
+        ).order_by('-n_alta', '-n_media', 'nombre_completo')
+    )
+    pacientes_tabla = []
+    for p in tabla[:12]:
+        ult = (p.registros.order_by('-fecha_registro')
+               .values_list('fecha_registro', flat=True).first())
+        pacientes_tabla.append({
+            'nombre':  p.nombre_completo,
+            'id':      p.id,
+            'pod':     _pod(p, hoy),
+            'ultima':  timezone.localtime(ult) if ult else None,
+            'cirugia': p.get_tipo_cirugia_display() if p.tipo_cirugia else '—',
+            'n_alta':  p.n_alta,
+            'n_media': p.n_media,
+        })
+
+    return {
+        'kpi': kpi,
+        'atencion': atencion,
+        'total_atencion': len(pend),
+        'silencios': silencios,
+        'contactos': contactos,
+        'total_mensajes_contacto': total_mensajes_contacto,
+        'notificaciones_fallidas': fallidas.count(),
+        'sin_atencion': sin_atencion,
+        'pacientes': pacientes_tabla,
+        'hoy': hoy,
+        'es_super': user.is_superuser,
+    }

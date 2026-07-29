@@ -1,6 +1,10 @@
 # Análisis de los 4 Archivos Restantes — Documentos Institucionales y Académicos
 ## MVP Sugarbaker / Clínica Somer — Fuentes primarias del proponente (parte 2)
 
+> **Documento histórico (junio de 2026).** Las frases sobre pasos o decisiones
+> pendientes reflejan la sesión original. Para el estado vigente consulta
+> `CLAUDE.md` y `ROADMAP_MONITOREO_POSQUIRURGICO.md`.
+
 > Estos 4 documentos son distintos en naturaleza a todo lo analizado antes: no
 > son literatura científica ni presentaciones informales, son **los documentos
 > formales que el Dr. Juan Camilo Correa Cote presentó a la Universidad CES**

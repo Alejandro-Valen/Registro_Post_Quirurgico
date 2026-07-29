@@ -8,7 +8,7 @@ Diseño:
 - El estado de la conversación se persiste en el modelo ConversacionWhatsApp,
   porque cada mensaje de WhatsApp llega como una petición independiente.
 - El bot NO diagnostica ni muestra alertas al paciente. Solo captura telemetría,
-  delega en alert_engine.evaluar_registro() y responde una confirmación neutra.
+  ejecuta el motor con estado persistente y responde una confirmación neutra.
 
 Máquina de estados (10 preguntas):
     INICIO
@@ -25,6 +25,7 @@ Máquina de estados (10 preguntas):
       -> COMPLETADO
 """
 
+import logging
 import re
 import unicodedata
 
@@ -33,8 +34,10 @@ from decimal import Decimal, InvalidOperation
 from django.db import transaction
 from django.utils import timezone
 
-from .alert_engine import evaluar_registro
+from .evaluacion_alertas import evaluar_registro_con_estado, registrar_fallo_evaluacion
 from .models import CheckInProgramado, ConversacionWhatsApp, Paciente, RegistroDiario
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -42,39 +45,66 @@ from .models import CheckInProgramado, ConversacionWhatsApp, Paciente, RegistroD
 # alertas; la confirmación final es siempre neutra.
 # ---------------------------------------------------------------------------
 MSG_NO_REGISTRADO = (
-    "Hola 🌿 Tu número aún no está registrado en nuestro programa de seguimiento. "
+    "Hola. Tu número aún no está registrado en nuestro programa de seguimiento. "
     "Por favor comunícate con tu médico para activarlo. Estamos para acompañarte."
 )
+MSG_SIN_CONSENTIMIENTO = (
+    "Tu médico aún no ha confirmado tu registro en el sistema. "
+    "Por favor contáctalo para completar el proceso de ingreso. "
+    "Una vez confirmado, podrás comenzar tu seguimiento."
+)
 MSG_YA_REGISTRADO = (
-    "¡Tus datos de hoy ya están registrados! ✅ "
-    "Si tienes alguna duda sobre tu recuperación, puedes escribirme aquí 🌿"
+    "¡Tus datos de hoy ya están registrados! "
+    "Si tienes alguna duda sobre tu recuperación, puedes escribirme aquí."
 )
 MSG_SIN_CHECKIN = (
     "Por ahora no tienes un reporte pendiente. "
-    "Te escribiré cuando sea la hora 🌿 "
+    "Te escribiré cuando sea la hora. "
     "Si tienes alguna duda sobre tu recuperación, puedes preguntarme aquí."
 )
 MSG_CONFIRMACION = (
-    "¡Listo! ✅ Hemos registrado tu reporte de hoy. Gracias por cuidarte 🌿 "
+    "¡Listo! Hemos registrado tu reporte de hoy. Gracias por cuidarte. "
     "Tu equipo médico está pendiente de tu seguimiento. ¡Que tengas un buen día!"
 )
+# Mensajes de cierre con recomendación según severidad de alertas
+# (decisión clínica 02/07/2026 — tono tranquilizador, sin diagnóstico).
+# Nunca mencionan el tipo de alerta ni valores específicos (regla del bot:
+# el paciente jamás ve la clasificación clínica). BAJA no lleva mensaje
+# adicional; usa MSG_CONFIRMACION.
+MSG_CIERRE_ALERTA_MEDIA = (
+    "Hemos registrado tu reporte de hoy.\n\n"
+    "Hemos notado algunos valores que vale la pena revisar. "
+    "Te recomendamos contactar a tu medico en las proximas "
+    "horas para contarle como te has sentido. No es urgente, "
+    "pero es importante que este al tanto.\n\n"
+    "Te escribiremos en tu proximo turno."
+)
+MSG_CIERRE_ALERTA_ALTA = (
+    "Hemos registrado tu reporte de hoy.\n\n"
+    "Algunos de tus valores de hoy necesitan atencion pronto. "
+    "Te recomendamos comunicarte con tu medico o dirigirte "
+    "al servicio de urgencias mas cercano. Esto es por "
+    "precaucion — ve con calma y cuentale al medico como "
+    "te has sentido estos dias.\n\n"
+    "Te escribiremos en tu proximo turno."
+)
 MSG_ABANDONO_REINICIO = (
-    "Hola 👋 Parece que ayer no pudimos terminar tu reporte. "
+    "Hola, parece que ayer no pudimos terminar tu reporte. "
     "Esos datos quedaron sin registrar.\n\n"
     "¡Empecemos el reporte de hoy!\n\n"
-    "1️⃣ ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5"
+    "1. ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5"
 )
 
 MSG_PREGUNTA_TEMPERATURA = (
-    "¡Hola! 🌿 Vamos con tu reporte de hoy.\n\n"
-    "1️⃣ ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5"
+    "¡Hola! Vamos con tu reporte de hoy.\n\n"
+    "1. ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5"
 )
 MSG_REINTENTO_TEMPERATURA = (
     "No logré entender la temperatura. Envíame solo el número en °C, por ejemplo: 37.5"
 )
 
 MSG_PREGUNTA_DOLOR = (
-    "2️⃣ Del 1 al 10, ¿cuánto dolor sientes hoy?\n"
+    "2. Del 1 al 10, ¿cuánto dolor sientes hoy?\n"
     "(1 es casi nada, 10 es insoportable)"
 )
 MSG_REINTENTO_DOLOR = (
@@ -82,7 +112,7 @@ MSG_REINTENTO_DOLOR = (
 )
 
 MSG_PREGUNTA_TIENE_DRENAJE = (
-    "3️⃣ ¿Tienes drenaje activo en este momento? Responde *sí* o *no*."
+    "3. ¿Tienes drenaje activo en este momento? Responde *sí* o *no*."
 )
 MSG_REINTENTO_TIENE_DRENAJE = (
     "No entendí tu respuesta. "
@@ -91,7 +121,7 @@ MSG_REINTENTO_TIENE_DRENAJE = (
 )
 
 MSG_PREGUNTA_ASPECTO = (
-    "4️⃣ ¿Cómo se ve el líquido del drenaje hoy? Responde con el número:\n"
+    "4. ¿Cómo se ve el líquido del drenaje hoy? Responde con el número:\n"
     "1. Amarillo claro o rosado\n"
     "2. Rojo con sangre\n"
     "3. Amarillo turbio\n"
@@ -103,7 +133,7 @@ MSG_REINTENTO_ASPECTO = (
 )
 
 MSG_PREGUNTA_CANTIDAD = (
-    "5️⃣ ¿Cuánto líquido salió por el drenaje hoy?\n"
+    "5. ¿Cuánto líquido salió por el drenaje hoy?\n"
     "Responde: poco, normal o mucho.\n"
     "Si puedes medirlo, agrega los ml (ej: 'poco, 30ml')"
 )
@@ -113,7 +143,7 @@ MSG_REINTENTO_CANTIDAD = (
 )
 
 MSG_PREGUNTA_GASES_NAUSEAS = (
-    "6️⃣ Ya casi terminamos 🌿\n"
+    "6. Ya casi terminamos.\n"
     "¿Has podido pasar gases o ir al baño hoy? (sí/no)\n"
     "Y ¿cuántas veces has tenido náuseas o vómito hoy? (si ninguna, 0)\n"
     "Puedes responder así: 'sí, 0'"
@@ -124,7 +154,7 @@ MSG_REINTENTO_GASES_NAUSEAS = (
 )
 
 MSG_PREGUNTA_HINCHAZON = (
-    "7️⃣ ¿Cómo siente la hinchazón o distensión de su abdomen hoy? 🌿\n"
+    "7. ¿Cómo siente la hinchazón o distensión de su abdomen hoy?\n"
     "Responda: *nada*, *algo* o *mucho*."
 )
 MSG_REINTENTO_HINCHAZON = (
@@ -133,7 +163,7 @@ MSG_REINTENTO_HINCHAZON = (
 )
 
 MSG_PREGUNTA_FRECUENCIA_CARDIACA = (
-    "8️⃣ ¿Cuál es su frecuencia cardíaca (pulso) en este momento? 🌿\n"
+    "8. ¿Cuál es su frecuencia cardíaca (pulso) en este momento?\n"
     "Escriba el número de latidos por minuto, por ejemplo: 78.\n"
     "Si no puede medirla ahora, responda con alguna de estas palabras:\n"
     "*saltar · omitir · no sé · no tengo · sin dato*"
@@ -144,7 +174,7 @@ MSG_REINTENTO_FRECUENCIA_CARDIACA = (
 )
 
 MSG_PREGUNTA_FRECUENCIA_RESPIRATORIA = (
-    "9️⃣ ¿Cuál es su frecuencia respiratoria? 🌿\n"
+    "9. ¿Cuál es su frecuencia respiratoria?\n"
     "Escriba el número de respiraciones por minuto, por ejemplo: 16.\n"
     "Si no puede medirla ahora, responda con alguna de estas palabras:\n"
     "*saltar · omitir · no sé · no tengo · sin dato*"
@@ -155,7 +185,7 @@ MSG_REINTENTO_FRECUENCIA_RESPIRATORIA = (
 )
 
 MSG_PREGUNTA_TOLERANCIA_LIQUIDOS = (
-    "🔟 Última pregunta 🌿\n"
+    "10. Última pregunta.\n"
     "¿Ha podido tomar líquidos (agua, caldo, jugo) sin vomitar? "
     "Responda *sí* o *no*."
 )
@@ -165,9 +195,17 @@ MSG_REINTENTO_TOLERANCIA_LIQUIDOS = (
 )
 
 # Respuestas predefinidas a dudas (espejo de knowledge_base.md mientras no haya RAG)
+#
+# D4: ninguna de estas respuestas puede contener un umbral clínico. El paciente
+# no necesita auto-evaluarse — el sistema le pregunta la temperatura dos veces al
+# día y el motor la evalúa. Un umbral aquí, además de contradecir al motor,
+# rompe la regla no negociable de que el paciente nunca ve los valores que
+# disparan una alerta. La redacción final está pendiente de validación médica:
+# ver knowledge_base.md, sección "Consulta pendiente al médico".
 RESP_FIEBRE = (
-    "Una temperatura leve los primeros días puede ser normal. Si supera 38°C "
-    "comunícate con tu médico de inmediato."
+    "Registramos tu temperatura en cada reporte y tu equipo médico la está "
+    "revisando. Si te sientes peor, con escalofríos o mucho malestar, "
+    "comunícate con tu médico. Si es urgente, ve al servicio de urgencias."
 )
 RESP_COMER = (
     "La alimentación se recupera gradualmente. Sigue las indicaciones de tu médico."
@@ -196,6 +234,13 @@ def procesar_mensaje(telefono, texto):
     if paciente is None:
         return MSG_NO_REGISTRADO
 
+    # Guard de consentimiento informado (HABEAS DATA — P-15, 01/07/2026).
+    # El médico debe haber marcado consentimiento_informado=True antes de que
+    # el paciente pueda usar el bot. Mensaje neutro: no menciona "consentimiento"
+    # ni "datos" para no confundir al paciente — el médico tiene el contexto.
+    if not paciente.consentimiento_informado:
+        return MSG_SIN_CONSENTIMIENTO
+
     # A4: bloqueo transaccional — dos mensajes simultáneos del mismo paciente
     # (doble tap) esperan en cola en vez de leer/escribir el mismo estado.
     with transaction.atomic():
@@ -218,11 +263,12 @@ def _procesar_con_conv(conv, paciente, texto, hoy):
         _limpiar_temporales(conv)
         # Si hay check-in PENDIENTE hoy, ir directo a TEMPERATURA (el mensaje
         # de abandono ya pregunta la temperatura — sin paso extra para el paciente).
-        checkin_hoy = CheckInProgramado.objects.filter(
+        checkin_hoy = CheckInProgramado.objects.select_for_update().filter(
             paciente=paciente,
             fecha_dia=hoy,
             estado=CheckInProgramado.ESTADO_PENDIENTE,
         ).order_by('orden').first()
+        conv.checkin_actual = checkin_hoy
         conv.estado = (
             ConversacionWhatsApp.ESTADO_TEMPERATURA if checkin_hoy
             else ConversacionWhatsApp.ESTADO_INICIO
@@ -232,7 +278,29 @@ def _procesar_con_conv(conv, paciente, texto, hoy):
 
     # Si ya estamos en mitad del flujo de hoy, continuar respondiendo.
     if en_flujo:
-        return _procesar_respuesta_flujo(conv, paciente, texto, hoy)
+        checkin = None
+        if conv.checkin_actual_id is not None:
+            checkin = CheckInProgramado.objects.select_for_update().filter(
+                pk=conv.checkin_actual_id,
+                paciente=paciente,
+                estado=CheckInProgramado.ESTADO_PENDIENTE,
+            ).first()
+        else:
+            # Compatibilidad con conversaciones iniciadas antes de la migración
+            # que incorporó checkin_actual.
+            checkin = CheckInProgramado.objects.select_for_update().filter(
+                paciente=paciente,
+                fecha_dia=hoy,
+                estado=CheckInProgramado.ESTADO_PENDIENTE,
+            ).order_by('orden').first()
+            if checkin is not None:
+                conv.checkin_actual = checkin
+                conv.save(update_fields=['checkin_actual', 'fecha_actualizacion'])
+
+        if checkin is None:
+            _reiniciar(conv)
+            return MSG_SIN_CHECKIN
+        return _procesar_respuesta_flujo(conv, paciente, texto, checkin)
 
     # Fuera del flujo (INICIO o COMPLETADO): FAQ disponible siempre.
     respuesta_duda = _responder_duda(texto)
@@ -240,13 +308,14 @@ def _procesar_con_conv(conv, paciente, texto, hoy):
         return respuesta_duda
 
     # Buscar el CheckInProgramado PENDIENTE de hoy.
-    checkin = CheckInProgramado.objects.filter(
+    checkin = CheckInProgramado.objects.select_for_update().filter(
         paciente=paciente,
         fecha_dia=hoy,
         estado=CheckInProgramado.ESTADO_PENDIENTE,
     ).order_by('orden').first()
 
     if checkin is not None:
+        conv.checkin_actual = checkin
         conv.estado = ConversacionWhatsApp.ESTADO_TEMPERATURA
         conv.save()
         return MSG_PREGUNTA_TEMPERATURA
@@ -265,7 +334,7 @@ def _procesar_con_conv(conv, paciente, texto, hoy):
 # ---------------------------------------------------------------------------
 # Despacho de cada pregunta del flujo
 # ---------------------------------------------------------------------------
-def _procesar_respuesta_flujo(conv, paciente, texto, hoy):
+def _procesar_respuesta_flujo(conv, paciente, texto, checkin):
     estado = conv.estado
 
     if estado == ConversacionWhatsApp.ESTADO_TEMPERATURA:
@@ -380,18 +449,35 @@ def _procesar_respuesta_flujo(conv, paciente, texto, hoy):
             conv.temp_tolero_liquidos = False
         else:
             return MSG_REINTENTO_TOLERANCIA_LIQUIDOS
-        _crear_registro(conv, paciente, hoy)
-        _finalizar(conv, hoy)
-        return MSG_CONFIRMACION
+        _registro, alertas_nuevas = _crear_registro(conv, paciente, checkin)
+        _finalizar(conv, checkin.fecha_dia)
+        return _mensaje_cierre(alertas_nuevas)
 
     # Estado inesperado: reiniciar de forma segura.
     _reiniciar(conv)
     return MSG_PREGUNTA_TEMPERATURA
 
 
-def _crear_registro(conv, paciente, hoy):
+def _mensaje_cierre(alertas_nuevas):
+    """Elige el mensaje de cierre según la severidad máxima de las alertas
+    generadas por este check-in (Bloque B). BAJA y sin alertas → cierre neutro.
+    ALTA tiene prioridad sobre MEDIA."""
+    severidades = {a.severidad for a in alertas_nuevas}
+    if 'ALTA' in severidades:
+        return MSG_CIERRE_ALERTA_ALTA
+    if 'MEDIA' in severidades:
+        return MSG_CIERRE_ALERTA_MEDIA
+    return MSG_CONFIRMACION
+
+
+def _crear_registro(conv, paciente, checkin):
     """Crea el RegistroDiario definitivo, lo vincula al CheckInProgramado
-    PENDIENTE de hoy (Bloque 3) y programa la evaluación de alertas.
+    fijado al iniciar la conversación y evalúa las alertas de forma síncrona.
+
+    Devuelve `(registro, alertas_nuevas)`. La evaluación es síncrona (Bloque B,
+    02/07/2026) — no diferida a on_commit — porque el bot necesita conocer la
+    severidad máxima de las alertas para elegir el mensaje de cierre correcto
+    ANTES de responderle al paciente.
 
     El vínculo OneToOne (checkin.registro) y el cambio de estado del check-in
     ocurren dentro del mismo bloque atomic que la creación del registro, así no
@@ -400,6 +486,14 @@ def _crear_registro(conv, paciente, hoy):
     fecha_referencia=checkin.fecha_dia corrige el cruce de medianoche: si el
     paciente responde un check-in de ayer después de las 00:00, el engine agrupa
     los datos por el día correcto (decisión 0-①).
+
+    Robustez (savepoint defensivo): la evaluación corre dentro de su propio
+    savepoint. Si el motor de alertas fallara (bug futuro), se descarta solo la
+    evaluación — el RegistroDiario y el check-in COMPLETADO SIEMPRE quedan
+    guardados, y el paciente recibe el mensaje de cierre neutro. Nunca se pierde
+    el reporte del paciente por un fallo del engine. El fallo sí queda anotado
+    en el registro (estado ERROR), fuera del savepoint revertido, para que sea
+    visible en el Admin y recuperable por `reintentar_evaluaciones_alertas`.
     """
     registro = RegistroDiario.objects.create(
         paciente=paciente,
@@ -417,26 +511,36 @@ def _crear_registro(conv, paciente, hoy):
         tolero_liquidos=conv.temp_tolero_liquidos,
     )
 
-    # Vincular al CheckInProgramado PENDIENTE de hoy (primero en orden).
-    checkin = CheckInProgramado.objects.filter(
-        paciente=paciente,
-        fecha_dia=hoy,
-        estado=CheckInProgramado.ESTADO_PENDIENTE,
-    ).order_by('orden').first()
+    checkin.registro = registro
+    checkin.estado = CheckInProgramado.ESTADO_COMPLETADO
+    checkin.fecha_respuesta = timezone.now()
+    checkin.save()
+    fecha_referencia = checkin.fecha_dia
 
-    if checkin is not None:
-        checkin.registro = registro
-        checkin.estado = CheckInProgramado.ESTADO_COMPLETADO
-        checkin.fecha_respuesta = timezone.now()
-        checkin.save()
-        fecha_referencia = checkin.fecha_dia
-    else:
-        fecha_referencia = hoy
+    alertas_nuevas = []
+    try:
+        with transaction.atomic():  # savepoint: aísla un posible fallo del engine
+            alertas_nuevas = evaluar_registro_con_estado(
+                registro, fecha_referencia=fecha_referencia
+            )
+    except Exception as exc:
+        # El reporte del paciente ya está guardado (fuera de este savepoint).
+        # No se pierde nada; el paciente recibe el cierre neutro.
+        #
+        # Al revertirse el savepoint se perdió también la constancia del fallo
+        # que el motor había escrito (estado ERROR, intento consumido y nombre
+        # de la excepción). Se vuelve a registrar aquí, ya fuera del savepoint,
+        # para que el registro no se vea como uno que jamás pasó por el motor
+        # (hallazgo 7).
+        registrar_fallo_evaluacion(registro, exc)
+        logger.exception(
+            "Fallo al evaluar alertas del registro pk=%s (paciente pk=%s); "
+            "queda marcado para reintento y se usa cierre neutro.",
+            registro.pk, paciente.pk,
+        )
+        alertas_nuevas = []
 
-    transaction.on_commit(
-        lambda: evaluar_registro(registro, fecha_referencia=fecha_referencia)
-    )
-    return registro
+    return registro, alertas_nuevas
 
 
 # ---------------------------------------------------------------------------
@@ -618,6 +722,7 @@ def _limpiar_temporales(conv):
 def _reiniciar(conv):
     """Prepara la conversación para un nuevo ciclo diario."""
     conv.estado = ConversacionWhatsApp.ESTADO_INICIO
+    conv.checkin_actual = None
     _limpiar_temporales(conv)
     conv.save()
 
@@ -626,5 +731,6 @@ def _finalizar(conv, hoy):
     """Cierra el registro del día: marca COMPLETADO y limpia parciales."""
     conv.estado = ConversacionWhatsApp.ESTADO_COMPLETADO
     conv.fecha_ultimo_registro = hoy
+    conv.checkin_actual = None
     _limpiar_temporales(conv)
     conv.save()
