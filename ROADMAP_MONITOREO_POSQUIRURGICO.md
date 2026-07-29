@@ -3,7 +3,9 @@
 > **Para agentes IA:** Lee este archivo completo antes de sugerir cualquier acción.
 > Contiene el contexto clínico, el estado actual del proyecto, y los pasos pendientes.
 > El repositorio es: https://github.com/Alejandro-Valen/Registro_Post_Quirurgico
-> Rama principal: `Desarrollo` | Rama activa: `sprint-5-produccion` (Sprint 4 mergeado a Desarrollo 01/07/2026, 135 tests OK)
+> Rama de integración: `Desarrollo` | Rama de **despliegue**: `produccion` (la miran
+> los tres servicios de Railway; nadie trabaja ahí) | Rama activa de trabajo:
+> `sprint-6-ci` (Sprint 5 mergeado a `Desarrollo` el 29/07/2026, 337 tests OK)
 
 ---
 
@@ -592,8 +594,13 @@ del alert_engine, jun 2026):**
 
 ---
 
-### ⏳ FASE 5 — Producción — CIERRE TÉCNICO, AUDITORÍA PRE-MERGE PENDIENTE
-> Rama: `sprint-5-produccion` (creada desde `Desarrollo` post-merge Sprint 4)
+### ✅ FASE 5 — Producción — COMPLETADA Y MERGEADA (29/07/2026)
+> Rama: `sprint-5-produccion` (creada desde `Desarrollo` post-merge Sprint 4).
+> **Mergeada a `Desarrollo` el 29/07/2026** — PR #3, merge commit `3a5c573`, con
+> las dos auditorías cerradas y los Loops A-D verificados. Etiqueta
+> `sprint-5-cierre` en el último commit de la rama (`a13038e`).
+> **Producción ya no despliega desde aquí:** los tres servicios de Railway
+> apuntan a `produccion` — ver `docs/railway_deploy.md` §4.1.
 
 **Decisiones de producto — confirmadas explícitamente por el Arquitecto en
 sesión el 01/07/2026 (no re-discutir, ejecutar):**

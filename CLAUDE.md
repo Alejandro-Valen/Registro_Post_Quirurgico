@@ -226,10 +226,13 @@ se verifica por qué está verde.*
 variables y los gotchas están en `docs/railway_deploy.md`.
 
 **Próximo paso exacto (al retomar):** verificar el estado real contra `git log` y
-la suite antes de proponer nada. **El cierre de la rama del Sprint 5 está
-completo** — los cuatro pasos del guion
-`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md` se ejecutaron el
-29/07/2026 salvo el paso 4, que es abrir la rama siguiente desde `Desarrollo`.
+la suite antes de proponer nada, y seguir el guion de
+**`docs/proceso/2026-07-30_instruccion_sprint6_ci.md`** — el objetivo de esa
+sesión es **uno solo: montar CI** en la rama `sprint-6-ci`, ya creada.
+
+El cierre de la rama del Sprint 5 está **completo**: los cuatro pasos del guion
+anterior (`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`) se
+ejecutaron el 29/07/2026.
 
 Lo que sigue, en este orden (razonamiento y detalle en
 `docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`):

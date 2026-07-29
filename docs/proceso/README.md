@@ -28,9 +28,21 @@ retome sin depender de una conversación que ya no existe.
 docs/proceso/
 ├── README.md              Este archivo
 ├── metodo_de_trabajo.md   Cómo se corrige algo en este proyecto: el método de loops
+├── AAAA-MM-DD_instruccion_*.md   El guion de una sesión concreta (ver abajo)
 ├── auditorias/            Instrucciones e informes de revisión independiente
 └── verificaciones/        Scripts que el Arquitecto ejecuta él mismo para comprobar
 ```
+
+## Instrucciones de sesión
+
+Cada una es el guion que deja una sesión para la siguiente: dónde quedamos, el
+prompt de arranque, el objetivo, y lo que NO se hace. Existen porque el trabajo
+lo hacen agentes que no comparten memoria.
+
+| Archivo | Objetivo | Estado |
+|---|---|---|
+| `2026-07-28_instruccion_cierre_rama_sprint5.md` | Cerrar la rama del Sprint 5: diff, PR, merge, rama `produccion` | **Ejecutada** el 29/07/2026. Sus 4 pasos están hechos |
+| `2026-07-30_instruccion_sprint6_ci.md` | Montar CI en `sprint-6-ci` — punto 1 de los 8 de la revisión del PR | **Vigente.** Es el guion de la próxima sesión |
 
 **Convención de nombres:** los archivos van con fecha al inicio
 (`2026-07-22_...`), porque son documentos de un momento y no fuentes vivas. La
