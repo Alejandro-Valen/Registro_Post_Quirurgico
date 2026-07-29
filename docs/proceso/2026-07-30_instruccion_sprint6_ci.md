@@ -163,11 +163,15 @@ SPF/DKIM/DMARC en Resend, monitoreo externo apuntando a `/salud/`, HABEAS DATA
 firmado, y la validación clínica de las cuatro frases del bot. Lista completa en
 el ROADMAP, "Requisitos para un PILOTO REAL con pacientes".
 
-**Lo estratégico:** los pendientes de B son **colas, no tareas** — la aprobación
-de Meta tarda y el médico tiene su agenda. Conviene arrancarlos en paralelo al
-trabajo técnico, no después. Los tres a iniciar ya: trámite de WhatsApp Business,
-dominio en Resend, y los ~10 minutos con el médico para las tres preguntas de
-`knowledge_base.md`, sección "Consulta pendiente al médico".
+**Decisión del Arquitecto (29/07/2026): B queda diferido a propósito.** Primero se
+lleva el sistema al mejor punto posible en desarrollo; los trámites del piloto se
+arrancan después. **No proponer iniciarlos** hasta que él lo indique.
+
+La consecuencia, para que esté escrita y no se descubra tarde: los pendientes de B
+son **colas, no tareas** — la aprobación de Meta para WhatsApp Business y la
+agenda del médico no se aceleran trabajando más. Diferirlos no atrasa el piloto
+por el tiempo que se difieran, sino por el tiempo que tarden **una vez
+iniciados**. Es una decisión tomada con eso a la vista, no un olvido.
 
 ---
 

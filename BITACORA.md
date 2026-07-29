@@ -4155,8 +4155,18 @@ En una línea: **montar CI en `sprint-6-ci`**, que es el punto 1 de los 8 de
 `docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`. Después, el Loop E
 (D14) en su propia sesión.
 
-**Cabos de esta sesión que no son código:** confirmar que el Postgres y el Redis
-en verde son los de `zooming-trust` (son producción y deben seguir online);
-arrancar los trámites de cola del piloto (WhatsApp Business, dominio en Resend) y
-agendar los 10 minutos con el médico para las tres preguntas de
-`knowledge_base.md`.
+**Decisión al cierre: los trámites del piloto quedan diferidos.** Se planteó
+arrancar en paralelo las tres colas de la línea B (WhatsApp Business, dominio en
+Resend, los 10 minutos con el médico) porque no se aceleran trabajando más. El
+Arquitecto decidió lo contrario: **primero llevar el sistema al mejor punto
+posible en desarrollo**, y los trámites después. Queda registrada la consecuencia
+—diferirlos no atrasa el piloto por el tiempo diferido, sino por lo que tarden una
+vez iniciados— para que conste que se decidió con eso a la vista.
+
+**Cabo verificado al cierre:** el Postgres y el Redis en verde son los de
+`zooming-trust`, o sea producción, y deben seguir online. Los de Alejandro también
+aparecen en verde **aunque su proyecto figure offline**: borró el servicio de la
+app, pero **las dos bases siguen corriendo**. En Railway borrar un servicio no
+borra el proyecto. Pendiente suyo, no bloqueante: confirmar que están vacías y
+eliminarlas — consumen recursos de su cuenta y, si alguna vez tuvieron datos,
+siguen ahí.
