@@ -136,43 +136,48 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 
 ## 4.1 Rama de despliegue
 
-**Hoy (27/07/2026): el servicio web sigue `sprint-5-produccion`**, con deploy
-automático. Consecuencias que hay que tener presentes mientras siga así:
+**Los tres servicios de `zooming-trust` despliegan desde `produccion`
+(29/07/2026).** El web, `cron-manana` y `cron-tarde` fueron reapuntados ese día,
+tras mergear el Sprint 5 a `Desarrollo`. Cómo funciona a partir de aquí:
 
-- **Cada push a `sprint-5-produccion` sale a producción de inmediato.** No hay
-  paso intermedio ni aprobación.
-- **Mergear a `Desarrollo` no despliega nada.** El PR es un cambio de registro
-  del proyecto, no un evento de producción.
+- **`Desarrollo` es integración y NO despliega.** Ahí aterriza el trabajo de cada
+  sprint, incluido lo que está a medio hacer.
+- **Desplegar es un merge explícito de `Desarrollo` a `produccion`.** Es un acto
+  deliberado, no una consecuencia de integrar. Esa es toda la razón de que
+  `produccion` exista como rama aparte.
+- **Cada push a `produccion` sale a producción de inmediato**, en los tres
+  servicios a la vez. No hay paso intermedio ni aprobación.
+- **Nadie trabaja en `produccion`.** No se commitea ahí directamente; solo
+  recibe merges desde `Desarrollo`.
 
-**A dónde va esto (pendiente, después del merge).** Una rama de sprint es un
-destino temporal: cuando el Sprint 5 termine, producción quedaría anclada a una
-rama muerta, o alguien seguiría commiteando a "sprint 5" para siempre.
+**Por qué el destino no era `Desarrollo`.** Apuntar producción a la rama de
+integración significa que todo lo que se integra queda delante de un paciente sin
+que nadie lo decida.
 
-El destino **no es `Desarrollo`**. `Desarrollo` es la rama de integración: ahí
-aterriza cada sprint, incluido el trabajo a medio terminar. Apuntar producción
-ahí significa que todo lo que se integra queda delante de un paciente sin que
-nadie lo decida.
+### Cómo se hizo la transición (29/07/2026)
 
-**Plan acordado:** tras el merge del Sprint 5, crear una rama **`produccion`**
-desde `Desarrollo` y apuntar Railway allí. `Desarrollo` sigue recibiendo el
-trabajo de cada sprint; desplegar pasa a ser un acto explícito —un merge de
-`Desarrollo` a `produccion`— en vez de una consecuencia de integrar.
+1. PR [#3](https://github.com/Alejandro-Valen/Registro_Post_Quirurgico/pull/3):
+   `sprint-5-produccion` → `Desarrollo`, con **merge commit** (`3a5c573`), no
+   squash — la documentación cita 42 SHAs individuales y un squash los habría
+   dejado huérfanos. Verificado: los 42 siguen alcanzables desde `Desarrollo`.
+2. `produccion` creada **desde `Desarrollo`**, en el mismo commit `3a5c573`.
+3. Los tres servicios reapuntados de `sprint-5-produccion` a `produccion`.
+4. Verificado: los tres deploys en **SUCCESS** sobre `3a5c573` y `/salud/` en
+   **200**.
 
-Orden, para no dejar producción atrás por accidente:
+**El reapuntado no cambió el código desplegado.** `produccion` y
+`sprint-5-produccion` eran idénticas byte por byte (`git diff` vacío, cero
+migraciones nuevas): fue un cambio de fuente, no de versión. Conviene repetir esa
+comprobación en cualquier reapuntado futuro antes de darlo por seguro.
 
-1. Cerrar el Loop D y verificarlo.
-2. PR y merge de `sprint-5-produccion` → `Desarrollo`.
-3. Crear `produccion` **desde `Desarrollo`** (mismo contenido, ya mergeado).
-4. Cambiar la rama del servicio web de Railway a `produccion` y **verificar
-   `/salud/` en 200** antes de dar el cambio por bueno.
-5. Repetir para los dos servicios cron: comparten repositorio y también tienen
-   rama propia configurada.
-6. Recién entonces archivar `sprint-5-produccion`.
+> **Advertencia para un reapuntado futuro:** antes de cambiar la rama de un
+> servicio, comparar el contenido de la rama nueva con la que está corriendo. Una
+> rama que va commits atrás revertiría producción a código anterior — en su
+> momento, apuntar a `Desarrollo` antes del merge habría revertido los cuatro
+> loops de corrección, incluida la escalera de alertas SILENCIO.
 
-> **Nunca apuntar Railway a `Desarrollo` mientras el Sprint 5 no esté mergeado.**
-> `Desarrollo` va 101 commits atrás: el cambio de rama revertiría producción a
-> código anterior a los cuatro loops de corrección, incluida la escalera de
-> alertas SILENCIO.
+**`sprint-5-produccion` quedó libre** al completarse el paso 3: ya no la mira
+ningún servicio y se puede archivar.
 
 ---
 

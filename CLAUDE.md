@@ -105,8 +105,12 @@ anotada para después.
 ## Repositorio
 
 - **URL:** https://github.com/Alejandro-Valen/Registro_Post_Quirurgico
-- **Rama principal:** `Desarrollo`
-- **Rama activa:** `sprint-5-produccion` (León)
+- **Rama principal (integración):** `Desarrollo`
+- **Rama de despliegue:** `produccion` — la miran los tres servicios de Railway.
+  Nadie trabaja aquí; solo recibe merges desde `Desarrollo`. Ver
+  `docs/railway_deploy.md` §4.1.
+- **Rama activa de trabajo:** ninguna. El Sprint 5 cerró y se mergeó el
+  29/07/2026; la siguiente se abre desde `Desarrollo`.
 
 ---
 
@@ -177,7 +181,7 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 del Paso 2 |
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo |
-| Sprint 5 | Producción, despliegue y cierre pre-merge (RAG diferido a Sprint 6) | ⏳ **En corrección post-auditoría.** Loops A, B, C y D cerrados; falta el push y el PR. Rama `sprint-5-produccion` |
+| Sprint 5 | Producción, despliegue y cierre pre-merge (RAG diferido a Sprint 6) | ✅ **Completado y mergeado** (29/07/2026, PR #3, merge commit `3a5c573`). Loops A-D cerrados y verificados; rama `produccion` creada y Railway reapuntado |
 
 **Qué pasó (22/07/2026).** Una auditoría independiente sobre `fbf62a8` confirmó
 las cuatro cifras que se reportaban (280 tests, `check --deploy`, `pip-audit`,
@@ -222,13 +226,24 @@ se verifica por qué está verde.*
 variables y los gotchas están en `docs/railway_deploy.md`.
 
 **Próximo paso exacto (al retomar):** verificar el estado real contra `git log` y
-la suite antes de proponer nada, y seguir el guion de
-**`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`** — los cuatro
-loops ya están en producción; lo que falta es **cerrar la rama**: revisar el diff
-contra `origin/Desarrollo`, PR y merge, y después **crear `produccion` desde
-`Desarrollo` y reapuntar Railway allí**. Ese último paso es el que libera
-`sprint-5-produccion`: mergear no basta, porque Railway la sigue mirando y
-cualquier push a ella saldría a producción. El **Loop E** (D14) va después del PR.
+la suite antes de proponer nada. **El cierre de la rama del Sprint 5 está
+completo** — los cuatro pasos del guion
+`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md` se ejecutaron el
+29/07/2026 salvo el paso 4, que es abrir la rama siguiente desde `Desarrollo`.
+
+Lo que sigue, en este orden (razonamiento y detalle en
+`docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`):
+
+1. **Montar CI** (GitHub Actions: suite + `check --deploy` +
+   `makemigrations --check`) en un PR aparte a `Desarrollo`. Va **antes** del
+   Loop E para que el PR del Loop E se verifique solo.
+2. **Loop E** — D14, aislar las tareas del cron conservando la dependencia
+   clínica declarada de `cron_matutino`. Dos commits (E-1 test en rojo, E-2
+   corrección). **Solo eso: un loop, un tema.**
+3. **Partir `tests.py`** (6.122 líneas, 45 clases) en un paquete `tests/`, en la
+   ventana en que ninguna rama avance en paralelo.
+4. **`crear_medico`** — decidir qué hacer antes de entregarle la cuenta al
+   médico (ver "Por resolver antes del piloto real", punto 2).
 
 Las dos auditorías **ya se ejecutaron — no repetirlas.** Las decisiones D1-D14
 están tomadas; no se reabren salvo que el Arquitecto lo pida.
@@ -241,10 +256,10 @@ Loop E es solo el punto 2** (D14, aislar el cron) y no se le agrega nada más �
 un loop, un tema. **Montar CI va antes del Loop E**; **partir `tests.py` va
 después**, en la ventana en que ninguna rama esté avanzando en paralelo.
 
-**Railway despliega desde `sprint-5-produccion`:** cada push a la rama activa
-sale a producción, y mergear a `Desarrollo` no despliega nada. La rama de
-despliegue definitiva y su plan de migración están en `docs/railway_deploy.md`,
-sección 4.1.
+**Railway despliega desde `produccion`** (desde el 29/07/2026, los tres
+servicios). Cada push a `produccion` sale a producción de inmediato; **mergear a
+`Desarrollo` no despliega nada**. Desplegar es un merge explícito de
+`Desarrollo` → `produccion`. Detalle en `docs/railway_deploy.md` §4.1.
 
 ### Por resolver antes del piloto real
 
