@@ -233,6 +233,14 @@ cualquier push a ella saldría a producción. El **Loop E** (D14) va después de
 Las dos auditorías **ya se ejecutaron — no repetirlas.** Las decisiones D1-D14
 están tomadas; no se reabren salvo que el Arquitecto lo pida.
 
+**Deuda técnica y su orden de atención (29/07/2026).** La revisión de cierre del
+PR dejó **8 puntos** de deuda que no bloquean el merge, con la secuencia decidida
+de dónde se atiende cada uno:
+`docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`. Lo esencial: **el
+Loop E es solo el punto 2** (D14, aislar el cron) y no se le agrega nada más —
+un loop, un tema. **Montar CI va antes del Loop E**; **partir `tests.py` va
+después**, en la ventana en que ninguna rama esté avanzando en paralelo.
+
 **Railway despliega desde `sprint-5-produccion`:** cada push a la rama activa
 sale a producción, y mergear a `Desarrollo` no despliega nada. La rama de
 despliegue definitiva y su plan de migración están en `docs/railway_deploy.md`,
@@ -247,6 +255,12 @@ sección 4.1.
    limitada correctamente. Antes de pacientes reales hay que decidir si esa
    cuenta se transfiere al médico o se crea la definitiva con el mismo comando
    y se reasignan los pacientes.
+   **Restricción que condiciona esa decisión:** `crear_medico` corre en **cada
+   arranque** del servicio web y reescribe la cuenta —contraseña, grupos y
+   permisos—, así que hoy esa cuenta **no puede tener una contraseña propia que
+   sobreviva a un despliegue**. Detalle en
+   `docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`, punto 8, y la
+   advertencia operativa en `docs/trampas_conocidas.md`.
 3. **Requisitos del piloto real** (ver ROADMAP, "Requisitos para un PILOTO REAL
    con pacientes"): plan de pago de Railway, salir del Sandbox de Twilio a
    **WhatsApp Business API**, dominio autenticado de Resend, monitoreo externo

@@ -115,6 +115,41 @@ UTC); mínimo de intervalo 5 min. Cambiar el Custom Start Command exige
   actualiza usuarios existentes). El interruptor `RESET_AXES=1` corre
   `axes_reset` al arranque para desbloquear axes; se quita tras usarlo.
 
+**Todo el arranque va encadenado con `&&`: si un eslabón falla, no hay error en
+el log — hay contenedor que no arranca.** El `CMD` del Dockerfile es
+`collectstatic && migrate && (axes_reset) && (crear_admin) && crear_medico &&
+gunicorn`. Solo `axes_reset` y `crear_admin` están protegidos con `|| true`. Dos
+consecuencias que hay que tener presentes:
+
+- **`migrate` puede fallar por los datos, no por el código.** La migración
+  **0028** añade un `CheckConstraint` (`paciente activo ⇒ médico responsable`) y
+  Postgres valida **todas** las filas al crearlo. En producción es seguro —la
+  compuerta D-0 se corrió dos veces y dio cero activos sin responsable— pero un
+  entorno restaurado de un dump viejo puede quedarse sin arrancar. **Antes de
+  migrar en un entorno nuevo, contar primero:** la consulta está escrita en el
+  docstring de la propia migración 0028.
+- **`crear_medico` no tiene `|| true`.** Aborta el arranque si solo una de
+  `DJANGO_MEDICO_USERNAME` / `DJANGO_MEDICO_PASSWORD` está definida, o si ese
+  usuario resulta ser superusuario.
+
+**`crear_medico` reescribe la cuenta del médico en CADA arranque.** No es solo
+"crear si no existe": sobre un usuario que ya existe ejecuta igual
+`set_password(...)`, `is_staff = True`, `groups.set([...])` y
+`user_permissions.clear()`. Si el médico cambia su contraseña en el Admin, **el
+siguiente despliegue o reinicio la revierte en silencio** al valor de la variable
+de entorno, y borra los permisos que se le hubieran concedido a mano. Tenerlo en
+cuenta antes de entregarle la cuenta a una persona que espera gobernar su propia
+contraseña — ver `docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`,
+punto 8.
+
+**Los comandos de datos de ejemplo están acotados, pero conviene saber cómo.**
+`seed_demo` **se niega a correr con `DEBUG=False`**, así que es inerte en
+producción. `seed_demo_produccion` exige `--confirmar`, y su `--limpiar` borra
+**solo** los pacientes cuyo teléfono está en la lista fija `TELEFONOS_DEMO` del
+propio archivo. El borde que queda: un paciente **real** registrado con uno de
+esos teléfonos demo sí sería alcanzado por `--limpiar`. Al dar de alta pacientes
+reales, no reutilizar esos números.
+
 ---
 
 ## Conexión con Twilio

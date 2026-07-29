@@ -42,6 +42,8 @@ fecha permite ordenarlos y podarlos por antigüedad.
 |---------|--------|--------|
 | `auditorias/2026-06_informe_sprint3_cierre.md` | Diagnóstico previo al Sprint 3-Hardening | Histórico. Sus hallazgos no son actuales |
 | `auditorias/2026-07-22_instruccion_loops_1_6.md` | Instrucción de la auditoría independiente pre-merge | **Ya ejecutada.** Sus 14 hallazgos están corregidos en los Loops A, B y C |
+| `auditorias/2026-07-27_informe_cierre_codex.md` | Informe de la auditoría de cierre (Codex) y el resultado de reproducir cada hallazgo | **Ya ejecutada.** Sus 4 hallazgos están corregidos en el Loop D |
+| `auditorias/2026-07-29_revision_pr_sprint5.md` | Revisión de ingeniería del PR #3: los 8 puntos de deuda técnica que quedan y **en qué punto del flujo se atiende cada uno** | **Vigente.** No bloquea el merge. Es la referencia para secuenciar el trabajo posterior al Sprint 5 |
 
 Las auditorías de este proyecto siguen un patrón que funcionó: **una instrucción
 escrita y versionada**, ejecutada por un agente distinto del que escribió el
