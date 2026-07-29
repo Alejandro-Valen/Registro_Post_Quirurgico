@@ -79,7 +79,7 @@ def medico_de_pruebas(username='medico_fixture'):
 @freeze_time(ANCLA_MEDIANOCHE)
 class AlertEngineTests(TestCase):
     def test_temperatura_alta_crea_alerta_sepsis(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Prueba",
             telefono_whatsapp="+573001112233",
             fecha_cirugia=timezone.localdate(),        )
@@ -104,7 +104,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(deteccion.severidad_detectada, 'ALTA')
 
     def test_drenaje_purulento_crea_alerta_fuga_anastomotica(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Drenaje",
             telefono_whatsapp="+573004445566",
             fecha_cirugia=timezone.localdate(),        )
@@ -125,7 +125,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas[0].severidad, "ALTA")
 
     def test_nauseas_mayor_a_tres_crea_alerta_ileo_media(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Nauseas",
             telefono_whatsapp="+573007778899",
             fecha_cirugia=timezone.localdate(),        )
@@ -145,7 +145,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas[0].severidad, "MEDIA")
 
     def test_tres_dias_consecutivos_sin_gases_crea_alerta_ileo_alta(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Sin Gases",
             telefono_whatsapp="+573006661122",
             fecha_cirugia=timezone.localdate(),        )
@@ -188,7 +188,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas[0].severidad, "ALTA")
 
     def test_registro_sin_red_flags_no_crea_alertas(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Estable",
             telefono_whatsapp="+573005551234",
             fecha_cirugia=timezone.localdate(),        )
@@ -208,7 +208,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(Alerta.objects.count(), 0)
 
     def test_registro_con_varias_red_flags_crea_varias_alertas(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Multiple",
             telefono_whatsapp="+573005550000",
             fecha_cirugia=timezone.localdate(),        )
@@ -233,7 +233,7 @@ class AlertEngineTests(TestCase):
         )
 
     def test_valores_limite_no_crean_alertas(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Limite",
             telefono_whatsapp="+573005559999",
             fecha_cirugia=timezone.localdate(),        )
@@ -256,7 +256,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(Alerta.objects.count(), 0)
 
     def test_drenaje_seroso_con_tiene_drenaje_crea_baja(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Seroso",
             telefono_whatsapp="+573001110001",
             fecha_cirugia=timezone.localdate(),        )
@@ -277,7 +277,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas[0].severidad, "BAJA")
 
     def test_drenaje_hematico_crea_media(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Hematico",
             telefono_whatsapp="+573001110002",
             fecha_cirugia=timezone.localdate(),        )
@@ -298,7 +298,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas[0].severidad, "MEDIA")
 
     def test_drenaje_turbio_crea_media(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Turbio",
             telefono_whatsapp="+573001110003",
             fecha_cirugia=timezone.localdate(),        )
@@ -319,7 +319,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas[0].severidad, "MEDIA")
 
     def test_sin_drenaje_no_genera_alerta_drenaje(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Sin Drenaje",
             telefono_whatsapp="+573001110004",
             fecha_cirugia=timezone.localdate(),        )
@@ -338,7 +338,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas, [])
 
     def test_tiene_drenaje_null_no_genera_alerta_drenaje(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Legacy",
             telefono_whatsapp="+573001110005",
             fecha_cirugia=timezone.localdate(),        )
@@ -357,7 +357,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas, [])
 
     def test_temperatura_379_crea_alerta_sepsis_alta(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Temp Alta",
             telefono_whatsapp="+573008880001",
             fecha_cirugia=timezone.localdate(),        )
@@ -375,7 +375,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas[0].severidad, "ALTA")
 
     def test_subfebricula_un_solo_dia_no_crea_alerta(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Subfebricula Un Dia",
             telefono_whatsapp="+573008880002",
             fecha_cirugia=timezone.localdate(),        )
@@ -391,7 +391,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas, [])
 
     def test_subfebricula_dos_dias_consecutivos_crea_alerta_media(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Subfebricula Persistente",
             telefono_whatsapp="+573008880003",
             fecha_cirugia=timezone.localdate(),        )
@@ -421,7 +421,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas[0].severidad, "MEDIA")
 
     def test_temperatura_normal_no_crea_alerta(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Temp Normal",
             telefono_whatsapp="+573008880004",
             fecha_cirugia=timezone.localdate(),        )
@@ -437,7 +437,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas, [])
 
     def test_un_dia_sin_gases_crea_alerta_baja(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Sin Gases Un Dia",
             telefono_whatsapp="+573008880010",
             fecha_cirugia=timezone.localdate(),        )
@@ -455,7 +455,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas_gases[0].severidad, "BAJA")
 
     def test_dos_dias_consecutivos_sin_gases_crea_alerta_media(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Sin Gases Dos Dias",
             telefono_whatsapp="+573008880011",
             fecha_cirugia=timezone.localdate(),        )
@@ -487,7 +487,7 @@ class AlertEngineTests(TestCase):
     def test_dos_registros_mismo_dia_sin_gases_cuenta_como_un_dia(self):
         # Caso clave del nuevo modelo de 2 check-ins/día: 2 registros del
         # MISMO día sin gases deben contar como 1 día, no como "2 días".
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Dos Checkins Mismo Dia",
             telefono_whatsapp="+573008880012",
             fecha_cirugia=timezone.localdate(),        )
@@ -516,7 +516,7 @@ class AlertEngineTests(TestCase):
         # Si hubo al menos un positivo en el día, ese día cuenta como
         # "con gases" — sin importar que otro check-in del mismo día
         # haya sido negativo.
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Gases Parcial",
             telefono_whatsapp="+573008880013",
             fecha_cirugia=timezone.localdate(),        )
@@ -541,7 +541,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(len(alertas_gases), 0)
 
     def test_un_episodio_nausea_crea_alerta_baja(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Nausea Baja",
             telefono_whatsapp="+573008880020",
             fecha_cirugia=timezone.localdate(),        )
@@ -559,7 +559,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas_nauseas[0].severidad, "BAJA")
 
     def test_cinco_episodios_nausea_crea_alerta_alta(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Nausea Alta",
             telefono_whatsapp="+573008880021",
             fecha_cirugia=timezone.localdate(),        )
@@ -580,7 +580,7 @@ class AlertEngineTests(TestCase):
         # Caso clave del modelo de 2 check-ins/día: 2 registros del mismo
         # día con 2 episodios cada uno deben SUMAR 4 → MEDIA, no contarse
         # por separado como 2+2 sin sumar.
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Nausea Suma Dia",
             telefono_whatsapp="+573008880022",
             fecha_cirugia=timezone.localdate(),        )
@@ -608,7 +608,7 @@ class AlertEngineTests(TestCase):
     def test_nauseas_persistencia_dos_dias_escala_a_media(self):
         # 1 episodio ayer + 1 episodio hoy (cada uno solo daría BAJA por
         # suma) → la persistencia de 2 días consecutivos escala a MEDIA.
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Nausea Persistente",
             telefono_whatsapp="+573008880023",
             fecha_cirugia=timezone.localdate(),        )
@@ -638,7 +638,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas_nauseas[0].severidad, "MEDIA")
 
     def test_sin_nauseas_no_crea_alerta(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Sin Nauseas",
             telefono_whatsapp="+573008880024",
             fecha_cirugia=timezone.localdate(),        )
@@ -655,7 +655,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(len(alertas_nauseas), 0)
 
     def test_nauseas_persistencia_cuatro_dias_escala_a_alta(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Nausea Persistente Larga",
             telefono_whatsapp="+573008880025",
             fecha_cirugia=timezone.localdate(),        )
@@ -684,7 +684,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas_nauseas[0].severidad, "ALTA")
 
     def test_dolor_pod1_eva6_crea_alerta_baja(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Dolor POD1",
             telefono_whatsapp="+573008880030",
             fecha_cirugia=timezone.localdate(),        )
@@ -702,7 +702,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas_dolor[0].severidad, "BAJA")
 
     def test_dolor_pod1_eva9_crea_alerta_alta(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Dolor POD1 Alto",
             telefono_whatsapp="+573008880031",
             fecha_cirugia=timezone.localdate(),        )
@@ -722,7 +722,7 @@ class AlertEngineTests(TestCase):
     def test_dolor_pod6_eva6_crea_alerta_media(self):
         # En POD6+, EVA 6 cae en rango MEDIA (5-6), distinto a POD1-2
         # donde EVA 6 sería BAJA. Verifica que la ventana correcta aplique.
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Dolor POD6",
             telefono_whatsapp="+573008880032",
             fecha_cirugia=timezone.localdate() - timedelta(days=6),        )
@@ -741,7 +741,7 @@ class AlertEngineTests(TestCase):
 
     def test_dolor_pod6_eva2_no_crea_alerta(self):
         # EVA 2 en POD6+ está por debajo del umbral BAJA (3) — sin alerta.
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Dolor POD6 Bajo",
             telefono_whatsapp="+573008880033",
             fecha_cirugia=timezone.localdate() - timedelta(days=6),        )
@@ -762,7 +762,7 @@ class AlertEngineTests(TestCase):
         # ayer (promedio 5) -> delta = 3, debe escalar un nivel sobre lo
         # que daría la tabla sola (POD3-5, EVA5 = BAJA por tabla -> sube
         # a MEDIA por tendencia).
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Dolor Tendencia",
             telefono_whatsapp="+573008880034",
             fecha_cirugia=timezone.localdate() - timedelta(days=5),        )
@@ -801,7 +801,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas_dolor[0].severidad, "MEDIA")
 
     def test_no_tolero_liquidos_un_dia_crea_alerta_media(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente No Tolera Liquidos",
             telefono_whatsapp="+573008880050",
             fecha_cirugia=timezone.localdate(),        )
@@ -820,7 +820,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas_oral[0].severidad, "MEDIA")
 
     def test_no_tolero_liquidos_dos_dias_crea_alerta_alta(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente No Tolera Dos Dias",
             telefono_whatsapp="+573008880051",
             fecha_cirugia=timezone.localdate(),        )
@@ -850,7 +850,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(alertas_oral[0].severidad, "ALTA")
 
     def test_tolero_liquidos_no_crea_alerta(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Tolera Liquidos",
             telefono_whatsapp="+573008880052",
             fecha_cirugia=timezone.localdate(),        )
@@ -868,7 +868,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(len(alertas_oral), 0)
 
     def test_tolero_liquidos_null_no_crea_alerta(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Liquidos Null",
             telefono_whatsapp="+573008880053",
             fecha_cirugia=timezone.localdate(),        )
@@ -905,7 +905,7 @@ class AlertEngineTests(TestCase):
         return reg
 
     def test_hinchazon_empeoramiento_puntual_crea_baja(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Hinchazon Puntual",
             telefono_whatsapp="+573008880060",
             fecha_cirugia=timezone.localdate(),        )
@@ -917,7 +917,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(ileo[0].severidad, "BAJA")
 
     def test_hinchazon_empeoramiento_sostenido_crea_media(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Hinchazon Sostenido",
             telefono_whatsapp="+573008880061",
             fecha_cirugia=timezone.localdate(),        )
@@ -930,7 +930,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(ileo[0].severidad, "MEDIA")
 
     def test_hinchazon_subida_progresiva_crea_media(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Hinchazon Progresiva",
             telefono_whatsapp="+573008880062",
             fecha_cirugia=timezone.localdate(),        )
@@ -944,7 +944,7 @@ class AlertEngineTests(TestCase):
 
     def test_hinchazon_fluctuacion_que_mejora_no_crea_media(self):
         # antier algo, ayer mucho, hoy algo → hoy bajó, no escala.
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Hinchazon Fluctua",
             telefono_whatsapp="+573008880063",
             fecha_cirugia=timezone.localdate(),        )
@@ -956,7 +956,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(len(ileo), 0)
 
     def test_hinchazon_estable_no_crea_alerta(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Hinchazon Estable",
             telefono_whatsapp="+573008880064",
             fecha_cirugia=timezone.localdate(),        )
@@ -968,7 +968,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(len(ileo), 0)
 
     def test_hinchazon_mucho_4_dias_crea_alta(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Hinchazon Mucho 4d",
             telefono_whatsapp="+573008880065",
             fecha_cirugia=timezone.localdate(),        )
@@ -982,7 +982,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(ileo[0].severidad, "ALTA")
 
     def test_hinchazon_null_no_crea_alerta(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Hinchazon Null",
             telefono_whatsapp="+573008880066",
             fecha_cirugia=timezone.localdate(),        )
@@ -1006,7 +1006,7 @@ class AlertEngineTests(TestCase):
 
     def test_fc_100_no_crea_alerta(self):
         # Borde inferior: 100 lpm está por debajo del umbral BAJA (101).
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente FC 100",
             telefono_whatsapp="+573008880070",
             fecha_cirugia=timezone.localdate(),        )
@@ -1015,7 +1015,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(len(taqui), 0)
 
     def test_fc_101_crea_baja(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente FC 101",
             telefono_whatsapp="+573008880071",
             fecha_cirugia=timezone.localdate(),        )
@@ -1026,7 +1026,7 @@ class AlertEngineTests(TestCase):
 
     def test_fc_109_crea_baja(self):
         # Borde superior de BAJA (109).
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente FC 109",
             telefono_whatsapp="+573008880072",
             fecha_cirugia=timezone.localdate(),        )
@@ -1037,7 +1037,7 @@ class AlertEngineTests(TestCase):
 
     def test_fc_110_crea_media(self):
         # Borde inferior de MEDIA (110) — umbral CREWS 2022.
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente FC 110",
             telefono_whatsapp="+573008880073",
             fecha_cirugia=timezone.localdate(),        )
@@ -1048,7 +1048,7 @@ class AlertEngineTests(TestCase):
 
     def test_fc_149_crea_media(self):
         # Borde superior de MEDIA (149).
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente FC 149",
             telefono_whatsapp="+573008880074",
             fecha_cirugia=timezone.localdate(),        )
@@ -1059,7 +1059,7 @@ class AlertEngineTests(TestCase):
 
     def test_fc_150_crea_alta(self):
         # Borde inferior de ALTA (150) — escalamiento inmediato.
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente FC 150",
             telefono_whatsapp="+573008880075",
             fecha_cirugia=timezone.localdate(),        )
@@ -1069,7 +1069,7 @@ class AlertEngineTests(TestCase):
         self.assertEqual(taqui[0].severidad, "ALTA")
 
     def test_fc_null_no_crea_alerta(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente FC Null",
             telefono_whatsapp="+573008880076",
             fecha_cirugia=timezone.localdate(),        )
@@ -1082,7 +1082,7 @@ class AlertEngineTests(TestCase):
         # resto del registro sea neutro, el alert_engine NO debe generar
         # ninguna alerta. (Outersterp 2025: 77% de falsas alertas venían
         # del sensor de FR — decisión de no evaluarla.)
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente FR Alta",
             telefono_whatsapp="+573008880080",
             fecha_cirugia=timezone.localdate(),        )
@@ -1121,7 +1121,7 @@ class RegistroDiarioModelTests(TestCase):
         # cirugía programada a futuro. (hoy - mañana).days = -1 violaría el
         # CHECK del PositiveSmallIntegerField y haría crashear el save().
         # El clamp a 0 lo evita y conserva el registro para el médico.
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Cirugia Futura",
             telefono_whatsapp="+573009990001",
             fecha_cirugia=timezone.localdate() + timedelta(days=1),        )
@@ -1131,7 +1131,7 @@ class RegistroDiarioModelTests(TestCase):
     def test_fecha_cirugia_hoy_da_dia_cero(self):
         # Borde exacto: cirugía hoy → POD 0 (el día de la cirugía).
         # Aquí el .days ya es 0 natural, sin intervención del clamp.
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Cirugia Hoy",
             telefono_whatsapp="+573009990002",
             fecha_cirugia=timezone.localdate(),        )
@@ -1142,7 +1142,7 @@ class RegistroDiarioModelTests(TestCase):
         # Camino normal: el clamp NO debe alterar el cálculo positivo.
         # Operado hace 5 días → POD 5. Guarda contra un max(0, ...) mal
         # escrito que aplastara también los valores válidos.
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente POD5",
             telefono_whatsapp="+573009990003",
             fecha_cirugia=timezone.localdate() - timedelta(days=5),        )
@@ -1150,7 +1150,7 @@ class RegistroDiarioModelTests(TestCase):
         self.assertEqual(registro.dia_postoperatorio, 5)
 
     def test_registro_historico_usa_su_fecha_y_congela_el_pod(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Histórico",
             telefono_whatsapp="+573009990004",
             fecha_cirugia=timezone.localdate() - timedelta(days=10),
@@ -1181,7 +1181,7 @@ class BotWhatsAppTests(TestCase):
     TELEFONO_TWILIO = "whatsapp:+573001112233"
 
     def _crear_paciente(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Bot",
             telefono_whatsapp=self.TELEFONO,
             fecha_cirugia=timezone.localdate() - timedelta(days=5),
@@ -1419,7 +1419,7 @@ class BotWhatsAppTests(TestCase):
 
     def test_sin_checkin_pendiente_muestra_mensaje(self):
         """Bloque 3: si no hay CheckInProgramado PENDIENTE hoy, el bot devuelve MSG_SIN_CHECKIN."""
-        Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Sin CheckIn",
             telefono_whatsapp=self.TELEFONO,
             fecha_cirugia=timezone.localdate() - timedelta(days=5),
@@ -1480,7 +1480,7 @@ class BotMensajeCierreAlertaTests(TestCase):
     TELEFONO_TWILIO = "whatsapp:+573001114455"
 
     def _crear_paciente(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Cierre",
             telefono_whatsapp=self.TELEFONO,
             fecha_cirugia=timezone.localdate() - timedelta(days=5),
@@ -1562,7 +1562,7 @@ class ConsentimientoInformadoTests(TestCase):
     TELEFONO_TWILIO = "whatsapp:+573006661111"
 
     def _crear_paciente(self, consentimiento_informado):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Consentimiento",
             telefono_whatsapp=self.TELEFONO,
             fecha_cirugia=timezone.localdate() - timedelta(days=5),
@@ -1589,7 +1589,7 @@ class ConsentimientoInformadoTests(TestCase):
         self.assertEqual(respuesta, bot.MSG_PREGUNTA_TEMPERATURA)
 
     def test_consentimiento_informado_false_por_default(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Default",
             telefono_whatsapp="+573006661112",
             fecha_cirugia=timezone.localdate(),
@@ -1663,7 +1663,7 @@ class ParseEnteroRangoDecimalTests(TestCase):
 
     def test_fc_decimal_pide_reintento(self):
         """Flujo real: paciente escribe "78.5" en la pregunta de FC → reintento."""
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Decimal FC",
             telefono_whatsapp="+573007778881",
             fecha_cirugia=timezone.localdate() - timedelta(days=3),
@@ -1695,7 +1695,7 @@ class BotAbandonoConversacionTests(TestCase):
     TELEFONO_TWILIO = "whatsapp:+573001119999"
 
     def _crear_paciente(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Abandono",
             telefono_whatsapp=self.TELEFONO,
             fecha_cirugia=timezone.localdate() - timedelta(days=5),
@@ -1767,7 +1767,7 @@ class WebhookWhatsAppTests(TestCase):
 
     @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
     def test_post_valido_devuelve_twiml(self):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Webhook",
             telefono_whatsapp="+573001112233",
             fecha_cirugia=timezone.localdate() - timedelta(days=3),
@@ -1889,7 +1889,7 @@ class WebhookWhatsAppTests(TestCase):
         # Twilio puede reintentar un webhook con el mismo MessageSid.
         # El segundo mensaje con el mismo SID debe devolver TwiML vacío sin
         # ejecutar la lógica del bot de nuevo.
-        Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Idempotencia",
             telefono_whatsapp="+573002223344",
             fecha_cirugia=timezone.localdate() - timedelta(days=2),
@@ -1952,7 +1952,7 @@ class WebhookWhatsAppTests(TestCase):
     def test_fallo_antes_de_confirmar_recibo_revierte_el_avance_del_bot(self):
         from unittest.mock import patch
 
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo='Paciente Atomicidad Webhook',
             telefono_whatsapp='+573002223388',
             fecha_cirugia=timezone.localdate() - timedelta(days=2),
@@ -2277,7 +2277,7 @@ class WebhookCargaTests(TransactionTestCase):
         ]
         for indice in range(self.PACIENTES):
             telefono = f'+5730077{indice:05d}'
-            paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+            paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
                 nombre_completo=f'Paciente Carga {indice:02d}',
                 telefono_whatsapp=telefono,
                 fecha_cirugia=timezone.localdate() - timedelta(days=2),
@@ -2342,7 +2342,7 @@ class WebhookCargaTests(TransactionTestCase):
 
 class EvaluacionAlertasPersistenteTests(TestCase):
     def setUp(self):
-        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo='Paciente Evaluacion Persistente',
             telefono_whatsapp='+573002224400',
             fecha_cirugia=timezone.localdate() - timedelta(days=2),
@@ -2437,7 +2437,7 @@ class EvaluacionAlertasPersistenteTests(TestCase):
 
 class ReintentarEvaluacionesAlertasCommandTests(TestCase):
     def _registro(self, telefono):
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo='Paciente Reintento Command',
             telefono_whatsapp=telefono,
             fecha_cirugia=timezone.localdate() - timedelta(days=2),
@@ -2919,7 +2919,7 @@ class AlertaAdminAccionesTests(TestCase):
         self.superuser = User.objects.create_superuser(
             username='super5a', password='pass',
         )
-        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente 5A",
             telefono_whatsapp="+573019990001",
             fecha_cirugia=timezone.localdate(),
@@ -3595,7 +3595,7 @@ class CheckInProgramadoModelTests(TestCase):
     """Bloque 1 — Modelo CheckInProgramado: constraints, defaults y relaciones."""
 
     def setUp(self):
-        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente CheckIn",
             telefono_whatsapp="+573009990001",
             fecha_cirugia=timezone.localdate() - timedelta(days=3),
@@ -3676,7 +3676,7 @@ class AlertFechaReferenciaTests(TestCase):
     """Bloque 2A — parámetro fecha_referencia en evaluar_registro (decisión 0-①)."""
 
     def _paciente(self, tel):
-        return Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        return Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente FechaRef",
             telefono_whatsapp=tel,
             fecha_cirugia=timezone.localdate() - timedelta(days=10),
@@ -3746,7 +3746,7 @@ class AlertDeduplicacionTests(TestCase):
     Reemplaza la deduplicación por día del Bloque 2B (Opción A+)."""
 
     def _paciente(self, tel):
-        return Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        return Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Dedup",
             telefono_whatsapp=tel,
             fecha_cirugia=timezone.localdate() - timedelta(days=5),
@@ -3974,7 +3974,7 @@ class AlertDeduplicacionTests(TestCase):
 
 class AlertDeduplicacionConcurrenteTests(TransactionTestCase):
     def setUp(self):
-        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo='Paciente Concurrencia Alertas',
             telefono_whatsapp='+573008881099',
             fecha_cirugia=timezone.localdate() - timedelta(days=2),
@@ -4051,7 +4051,7 @@ class AlertDeduplicacionConcurrenteTests(TransactionTestCase):
 
 class DeteccionAlertaConstraintTests(TestCase):
     def setUp(self):
-        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo='Paciente Evidencia',
             telefono_whatsapp='+573008881198',
             fecha_cirugia=timezone.localdate(),
@@ -4121,7 +4121,7 @@ class SchedulerTests(TestCase):
     """Bloque 4 — Management commands del scheduler y alerta SILENCIO."""
 
     def _paciente(self, tel="+573009990001"):
-        return Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        return Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Scheduler",
             telefono_whatsapp=tel,
             fecha_cirugia=timezone.localdate() - timedelta(days=5),
@@ -4483,7 +4483,7 @@ class CheckInConcurrenciaTests(TransactionTestCase):
 
         from django.core.management import call_command
 
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo='Paciente Carrera CheckIn',
             telefono_whatsapp='+573009991100',
             fecha_cirugia=timezone.localdate() - timedelta(days=2),
@@ -4547,7 +4547,7 @@ class PacienteCedulaTests(TestCase):
 
     def test_paciente_sin_cedula_no_rompe_creacion(self):
         """Registros legado (sin cedula) siguen pudiéndose crear — null permitido."""
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Legado",
             telefono_whatsapp="+573001112222",
             fecha_cirugia=timezone.localdate(),
@@ -4555,7 +4555,7 @@ class PacienteCedulaTests(TestCase):
         self.assertIsNone(paciente.cedula)
 
     def test_cedula_duplicada_viola_unicidad(self):
-        Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Uno",
             cedula="123456789",
             telefono_whatsapp="+573001112223",
@@ -4563,7 +4563,7 @@ class PacienteCedulaTests(TestCase):
         )
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+                Paciente.objects.create(medico_responsable=medico_de_pruebas(),
                     nombre_completo="Paciente Dos",
                     cedula="123456789",
                     telefono_whatsapp="+573001112224",
@@ -4572,12 +4572,12 @@ class PacienteCedulaTests(TestCase):
 
     def test_dos_pacientes_sin_cedula_no_violan_unicidad(self):
         """NULL no cuenta como duplicado en la restricción unique (Postgres)."""
-        Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Sin Cedula 1",
             telefono_whatsapp="+573001112225",
             fecha_cirugia=timezone.localdate(),
         )
-        Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Sin Cedula 2",
             telefono_whatsapp="+573001112226",
             fecha_cirugia=timezone.localdate(),
@@ -4589,7 +4589,7 @@ class PacienteCedulaTests(TestCase):
     # -----------------------------------------------------------------
 
     def test_full_clean_sin_cedula_en_paciente_nuevo_lanza_error(self):
-        paciente = Paciente(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Nuevo Sin Cedula",
             telefono_whatsapp="+573001112227",
             fecha_cirugia=timezone.localdate(),
@@ -4599,7 +4599,7 @@ class PacienteCedulaTests(TestCase):
         self.assertIn('cedula', ctx.exception.message_dict)
 
     def test_full_clean_con_cedula_en_paciente_nuevo_no_lanza_error(self):
-        paciente = Paciente(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Nuevo Con Cedula",
             cedula="999888777",
             telefono_whatsapp="+573001112228",
@@ -4609,7 +4609,7 @@ class PacienteCedulaTests(TestCase):
 
     def test_full_clean_paciente_existente_sin_cedula_no_lanza_error(self):
         """Pacientes migrados (ya tienen pk) no se les exige cédula retroactivamente."""
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Legado Existente",
             telefono_whatsapp="+573001112229",
             fecha_cirugia=timezone.localdate(),
@@ -4910,7 +4910,7 @@ class DesactivarPacientesVencidosTests(TestCase):
         """Por defecto simula que el paciente se registró el día de su cirugía
         (fecha_registro = fecha_cirugia), para no disparar el guard de
         ingreso tardío (A-1, DIAS_GRACIA_INGRESO) en tests que no lo prueban."""
-        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Vencimiento",
             telefono_whatsapp=tel,
             fecha_cirugia=timezone.localdate() - timedelta(days=dias_cirugia),
@@ -5525,7 +5525,7 @@ class HinchazonCondicionMediaTests(TestCase):
     def setUp(self):
         self.ahora = timezone.now()
         self.hoy = timezone.localdate(self.ahora)
-        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Hinchazon D10",
             telefono_whatsapp="+573008881010",
             fecha_cirugia=self.hoy,
@@ -5626,7 +5626,7 @@ class BotEstadoEvaluacionMotorTests(TestCase):
     TELEFONO_TWILIO = "whatsapp:+573001119977"
 
     def setUp(self):
-        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Estado Motor",
             telefono_whatsapp=self.TELEFONO,
             fecha_cirugia=timezone.localdate() - timedelta(days=3),
@@ -5807,7 +5807,7 @@ class SalidaOperativaSinIdentidadTests(TestCase):
     TELEFONO = '+573009998877'
 
     def setUp(self):
-        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(), 
+        self.paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo=self.NOMBRE,
             telefono_whatsapp=self.TELEFONO,
             cedula='PHI-0001',
