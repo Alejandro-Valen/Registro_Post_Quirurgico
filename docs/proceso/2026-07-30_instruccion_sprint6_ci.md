@@ -41,7 +41,7 @@ rama de trabajo → PR → Desarrollo → (cuando se decide) → merge a producc
 Copiar y pegar tal cual:
 
 ```text
-Retomamos en la rama sprint-6-ci. Soy León (Arquitecto).
+Retomamos en la rama sprint-6-ci. Soy __ (Arquitecto).
 
 Antes de proponer nada:
 1. Lee docs/proceso/2026-07-30_instruccion_sprint6_ci.md — es el guion de esta
