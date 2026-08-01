@@ -232,12 +232,13 @@ se verifica por qué está verde.*
 variables y los gotchas están en `docs/railway_deploy.md`.
 
 **Próximo paso exacto (al retomar):** verificar el estado real contra `git log` y
-la suite antes de proponer nada, y **abrir el Loop E desde `Desarrollo`** — D14,
-aislar las tareas del cron. Dos commits: E-1 test en rojo, E-2 corrección. **Solo
-eso: un loop, un tema.** La ficha D14 está en
-`docs/decisiones_correccion_auditoria.md` y el razonamiento en
-`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`. Su PR ya se
-verifica solo: la CI existe desde el 31/07.
+la suite antes de proponer nada, y seguir el guion de
+**`docs/proceso/2026-08-01_instruccion_loop_e.md`** — el objetivo de esa sesión
+es **uno solo: el Loop E** (D14, aislar las tareas del cron), desde una rama
+nueva abierta en `Desarrollo`. Dos commits: E-1 test en rojo, E-2 corrección.
+**Solo eso: un loop, un tema.** La decisión está en la ficha D14 de
+`docs/decisiones_correccion_auditoria.md` y no se reabre. Su PR ya se verifica
+solo: la CI existe desde el 31/07.
 
 Los dos cierres anteriores están **completos**: la rama del Sprint 5
 (`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`, 29/07) y la CI
