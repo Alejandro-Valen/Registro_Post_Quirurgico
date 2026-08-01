@@ -83,18 +83,25 @@ jobs:
       EMAIL_DELIVERY_PROVIDER: resend
       RESEND_API_KEY: ci-clave-de-relleno
       RESEND_FROM_EMAIL: ci@ejemplo.com
-      TRUST_RAILWAY_PROXY: 'True'
+      # False, igual que `.env.example`, y no es cosmético: la primera corrida
+      # de esta CI la puse en True y cayó
+      # `home.tests.ClientIpTests.test_por_defecto_ignora_headers_spoofeables`.
+      # Esa prueba comprueba que sin confianza declarada NO se cree la cabecera
+      # X-Real-IP, pero es la única de sus cuatro hermanas que no fija el valor
+      # con `override_settings`: lee el del entorno. Aquí se le da el default
+      # documentado; la fragilidad de la prueba está reportada aparte.
+      TRUST_RAILWAY_PROXY: 'False'
 
     steps:
       - name: Traer el repositorio
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # Historia completa: el paso de higiene compara contra la base del PR,
           # y con el checkout superficial por defecto ese commit no existe aquí.
           fetch-depth: 0
 
       - name: Instalar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           # 3.13, leído de .python-version — la misma fuente que usa el build.
           python-version-file: .python-version
