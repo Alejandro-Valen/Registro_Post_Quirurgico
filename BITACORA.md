@@ -4170,3 +4170,135 @@ app, pero **las dos bases siguen corriendo**. En Railway borrar un servicio no
 borra el proyecto. Pendiente suyo, no bloqueante: confirmar que están vacías y
 eliminarlas — consumen recursos de su cuenta y, si alguna vez tuvieron datos,
 siguen ahí.
+
+---
+
+## Sprint 6 — Integración continua: la primera compuerta automática del repo
+**Fecha:** 31/07/2026
+**Responsable:** León (Arquitecto) con Claude Code
+**Estado:** CI MONTADA, VERIFICADA EN ROJO Y MERGEADA ✅ (PR #5, merge commit `5b40c01`)
+
+### Qué se hizo
+
+Un solo objetivo, el punto 1 de los 8 de la revisión del PR del Sprint 5:
+**montar CI**. No se tocó lógica clínica, ni un umbral, ni una regla. Se siguió
+`docs/proceso/2026-07-30_instruccion_sprint6_ci.md`.
+
+**Verificación previa.** Antes de proponer nada verifiqué el estado real contra
+Git y contra la suite, y los documentos no mintieron: `sprint-6-ci` en `afe4b85`
+sincronizada con origin, **337 tests OK** en 321 s, `check` sin issues,
+`makemigrations --check` limpio, `git diff --check` limpio. Confirmado también lo
+que decía la revisión: no existía `.github/`, ni ningún otro CI.
+
+**El workflow.** `.github/workflows/ci.yml` corre cinco comprobaciones en cada PR
+hacia `Desarrollo` y hacia `produccion`, y en cada push a esas dos ramas: la suite
+completa, `check`, `makemigrations --check --dry-run`, `check --deploy` con
+`settings_production`, y la higiene del diff. PostgreSQL 18 como servicio del job,
+Python 3.13 leído de `.python-version`, y los pasos con `if: !cancelled()` para que
+una corrida en rojo muestre **todo** lo que está mal de una vez.
+
+**En Linux la suite tarda 1m45s.** En Windows, 5m21s. Tres veces más rápido.
+
+**`requirements-dev.txt`, nuevo.** `requirements-runtime.txt` más `freezegun`, que
+es lo único que la suite necesita de más. `requirements.txt` sigue siendo el
+`pip freeze` de la máquina Windows —TensorFlow, esptool, jupyter— y no instala en
+Linux; ahora hay un archivo que dice qué necesita la suite y no hay que deducirlo.
+
+**Se la vio en rojo, las cinco.** Dos commits temporales rompieron cada
+comprobación por separado, cada una con su mensaje propio: una línea con espacios
+al final, una columna inexistente en `list_display` (`admin.E108`), un `help_text`
+cambiado sin migración, `RESEND_API_KEY` retirada del entorno, y una prueba con
+una aserción que falla. Los dos commits **se borraron de la rama** con
+`reset --hard` y `push --force-with-lease`: la evidencia vive en
+`docs/proceso/verificaciones/2026-07-31_verificacion_ci.md` y en las corridas de
+Actions, no en la historia que llegó a `Desarrollo`.
+
+Quedó demostrado de paso que los pasos son **independientes**: en la rotura 1
+cayeron cuatro y `check` siguió en verde.
+
+**Merge.** PR #5 a `Desarrollo` con **merge commit** (`5b40c01`), no squash —
+misma razón que en el PR #3: la documentación cita SHAs individuales. El push a
+`Desarrollo` disparó la CI por el trigger de `push`, que hasta ese momento no se
+había ejercitado.
+
+### Decisiones tomadas y su justificación
+
+**La higiene del diff corre contra la base del PR, no como `git diff --check` a
+secas.** El guion pedía el comando sin argumentos, y así **nunca puede fallar en
+CI**: compara el árbol de trabajo contra el índice, y en un checkout limpio eso
+está siempre vacío. Habría dado verde siempre. Un check que no puede ponerse en
+rojo es peor que no tenerlo, porque da la sensación de cubrir algo que no cubre.
+Ahora compara `base.sha...HEAD`, y por eso el checkout necesita `fetch-depth: 0`.
+Se omite en los push, donde no hay base contra la cual comparar.
+
+**Se añadió el PR hacia `produccion` a los disparadores.** El guion listaba solo
+PR hacia `Desarrollo`. El merge `Desarrollo` → `produccion` es el último punto
+donde la CI puede frenar algo **antes** de que salga al aire: Railway publica en
+cuanto esa rama recibe un push, así que en el push la CI ya es alarma, no
+compuerta.
+
+**`freezegun` en un archivo propio y no dentro del YAML.** El dato "qué necesita
+la suite" tiene que poder leerse sin abrir la configuración de CI.
+
+**Las roturas se borraron en vez de revertirse.** Un `git revert` habría dejado
+tres commits de basura en `Desarrollo` para siempre. La evidencia de una
+verificación pertenece al documento de verificación.
+
+### Problemas encontrados y resueltos
+
+**1. La primera corrida cayó, y el culpable era el entorno que yo mismo escribí.**
+Cuatro comprobaciones en verde y la suite en rojo con una sola falla:
+`home.tests.ClientIpTests.test_por_defecto_ignora_headers_spoofeables`,
+`AssertionError: '198.51.100.20' != '10.0.0.4'`. Causa: había puesto
+`TRUST_RAILWAY_PROXY=True` en el workflow. Corregido a `False`, que es lo que
+documenta `.env.example`.
+
+**Pero el hallazgo de verdad es otro, y sobrevive a la corrección.** Esa prueba
+comprueba el default seguro de `home.views._get_client_ip`: que **sin confianza
+declarada no se le crea a la cabecera `X-Real-IP`**. Sus tres hermanas de la misma
+clase fijan el valor con `@override_settings(TRUST_RAILWAY_PROXY=True)`; **ella no
+fija nada: lee el del entorno de quien corra la suite.** Pasaba en verde en
+Windows solo porque el `.env` local trae `False`.
+
+Lo grave es el reverso: si alguna vez se rompiera ese default seguro, la prueba
+solo lo denunciaría si quien la corre tiene la variable en `False`. **La guarda de
+una decisión de seguridad depende de un archivo que no está en el repositorio.**
+Es el mismo patrón del hallazgo bloqueante del 22/07 —una prueba que parece medir
+un requisito y mide otra cosa—, en versión pequeña y sin consecuencia clínica.
+
+**No se arregló:** tocar la suite no era esta rama. Un
+`@override_settings(TRUST_RAILWAY_PROXY=False)` lo cierra, y queda pendiente para
+la próxima rama que toque `home`.
+
+**2. Elegir roturas que no se contaminaran entre sí costó pensarlo.** La primera
+idea —añadir un campo a `models.py`— rompe `makemigrations --check`, pero también
+deja la base de pruebas sin la columna y hunde la suite entera en cientos de
+errores: el rojo del paso de migraciones deja de ser atribuible. Se usó un
+`help_text` distinto, que el autodetector sí denuncia y **no toca el esquema**.
+Por lo mismo la rotura de `check` (un `admin.E108`) fue a un commit aparte:
+`manage.py test` corre los system checks antes de las pruebas, así que un error de
+admin aborta la suite antes de que llegue a fallar la prueba deliberada.
+
+**3. Los checks se ven pero no bloquean.** `Desarrollo` no tiene protección de
+rama: hoy alguien puede mergear en rojo. Configurarlo requiere permisos de
+administrador del repositorio, y la cuenta del Arquitecto tiene `push` pero no
+`admin` — el repo es de Alejandro. Queda como pendiente suyo.
+
+### Qué queda pendiente
+
+**Lo siguiente es el Loop E**, en su propia sesión: D14, aislar las tareas del
+cron conservando la dependencia clínica declarada de `cron_matutino`. Dos commits
+(E-1 test en rojo, E-2 corrección). **Solo eso: un loop, un tema.** Ahora su PR se
+verifica solo, que era la razón de montar CI primero.
+
+Después, en este orden: **partir `tests.py`** (6.122 líneas, 45 clases) en la
+ventana en que ninguna rama avance en paralelo, y la decisión sobre
+**`crear_medico`** antes de entregarle la cuenta al médico.
+
+Pendientes menores que dejó esta sesión, ninguno bloqueante:
+
+- El `override_settings` que le falta a `test_por_defecto_ignora_headers_spoofeables`.
+- Protección de rama en `Desarrollo` para que los checks bloqueen — pendiente de
+  Alejandro, que es quien tiene permisos de admin.
+- La versión de PostgreSQL de Railway no está documentada. La CI usa `postgres:18`
+  por ser la mayor de la base local; si producción corre otra, la CI no lo vería.
