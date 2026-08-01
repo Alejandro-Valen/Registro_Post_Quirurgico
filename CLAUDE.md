@@ -109,8 +109,13 @@ anotada para después.
 - **Rama de despliegue:** `produccion` — la miran los tres servicios de Railway.
   Nadie trabaja aquí; solo recibe merges desde `Desarrollo`. Ver
   `docs/railway_deploy.md` §4.1.
-- **Rama activa de trabajo:** ninguna. El Sprint 5 cerró y se mergeó el
-  29/07/2026; la siguiente se abre desde `Desarrollo`.
+- **Rama activa de trabajo:** ninguna. `sprint-6-ci` se mergeó el 31/07/2026
+  (PR #5); la siguiente —el Loop E— se abre desde `Desarrollo`.
+- **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre la suite,
+  `check`, `makemigrations --check`, `check --deploy` y la higiene del diff en
+  cada PR hacia `Desarrollo` y hacia `produccion`, y en cada push a esas dos
+  ramas. **Los checks se ven pero todavía no bloquean** — `Desarrollo` no tiene
+  protección de rama, y configurarla pide permisos de admin del repositorio.
 
 ---
 
@@ -182,6 +187,7 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ Completado — 24 hallazgos, mergeado a Desarrollo |
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo |
 | Sprint 5 | Producción, despliegue y cierre pre-merge (RAG diferido a Sprint 6) | ✅ **Completado y mergeado** (29/07/2026, PR #3, merge commit `3a5c573`). Loops A-D cerrados y verificados; rama `produccion` creada y Railway reapuntado |
+| Sprint 6 · CI | Integración continua en GitHub Actions | ✅ **Completado y mergeado** (31/07/2026, PR #5, merge commit `5b40c01`). Cinco comprobaciones, las cinco verificadas en rojo |
 
 **Qué pasó (22/07/2026).** Una auditoría independiente sobre `fbf62a8` confirmó
 las cuatro cifras que se reportaban (280 tests, `check --deploy`, `pip-audit`,
@@ -226,20 +232,23 @@ se verifica por qué está verde.*
 variables y los gotchas están en `docs/railway_deploy.md`.
 
 **Próximo paso exacto (al retomar):** verificar el estado real contra `git log` y
-la suite antes de proponer nada, y seguir el guion de
-**`docs/proceso/2026-07-30_instruccion_sprint6_ci.md`** — el objetivo de esa
-sesión es **uno solo: montar CI** en la rama `sprint-6-ci`, ya creada.
+la suite antes de proponer nada, y **abrir el Loop E desde `Desarrollo`** — D14,
+aislar las tareas del cron. Dos commits: E-1 test en rojo, E-2 corrección. **Solo
+eso: un loop, un tema.** La ficha D14 está en
+`docs/decisiones_correccion_auditoria.md` y el razonamiento en
+`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`. Su PR ya se
+verifica solo: la CI existe desde el 31/07.
 
-El cierre de la rama del Sprint 5 está **completo**: los cuatro pasos del guion
-anterior (`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`) se
-ejecutaron el 29/07/2026.
+Los dos cierres anteriores están **completos**: la rama del Sprint 5
+(`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`, 29/07) y la CI
+(`docs/proceso/2026-07-30_instruccion_sprint6_ci.md`, 31/07).
 
 Lo que sigue, en este orden (razonamiento y detalle en
 `docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`):
 
-1. **Montar CI** (GitHub Actions: suite + `check --deploy` +
-   `makemigrations --check`) en un PR aparte a `Desarrollo`. Va **antes** del
-   Loop E para que el PR del Loop E se verifique solo.
+1. ~~**Montar CI**~~ — ✅ hecho el 31/07/2026 (PR #5, `5b40c01`). Las cinco
+   comprobaciones se verificaron en rojo:
+   `docs/proceso/verificaciones/2026-07-31_verificacion_ci.md`.
 2. **Loop E** — D14, aislar las tareas del cron conservando la dependencia
    clínica declarada de `cron_matutino`. Dos commits (E-1 test en rojo, E-2
    corrección). **Solo eso: un loop, un tema.**
@@ -247,6 +256,19 @@ Lo que sigue, en este orden (razonamiento y detalle en
    ventana en que ninguna rama avance en paralelo.
 4. **`crear_medico`** — decidir qué hacer antes de entregarle la cuenta al
    médico (ver "Por resolver antes del piloto real", punto 2).
+
+**Pendientes menores que dejó el montaje de la CI**, ninguno bloqueante:
+
+- `home.tests.ClientIpTests.test_por_defecto_ignora_headers_spoofeables` es la
+  única de sus cuatro hermanas que **no** fija `TRUST_RAILWAY_PROXY` con
+  `override_settings`: lee el del entorno. Si se rompiera el default seguro de
+  `_get_client_ip`, la prueba solo lo denunciaría en una máquina cuyo `.env`
+  traiga `False`. Se cierra con un `@override_settings(TRUST_RAILWAY_PROXY=False)`
+  en la próxima rama que toque `home`.
+- **Protección de rama en `Desarrollo`** para que los checks bloqueen el merge.
+  Pendiente de Alejandro: pide permisos de admin del repositorio.
+- La versión de PostgreSQL de Railway no está documentada; la CI usa
+  `postgres:18` por ser la mayor de la base local.
 
 Las dos auditorías **ya se ejecutaron — no repetirlas.** Las decisiones D1-D14
 están tomadas; no se reabren salvo que el Arquitecto lo pida.
@@ -256,8 +278,9 @@ PR dejó **8 puntos** de deuda que no bloquean el merge, con la secuencia decidi
 de dónde se atiende cada uno:
 `docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`. Lo esencial: **el
 Loop E es solo el punto 2** (D14, aislar el cron) y no se le agrega nada más —
-un loop, un tema. **Montar CI va antes del Loop E**; **partir `tests.py` va
-después**, en la ventana en que ninguna rama esté avanzando en paralelo.
+un loop, un tema. El punto 1 (CI) **ya está hecho**; **partir `tests.py` va
+después del Loop E**, en la ventana en que ninguna rama esté avanzando en
+paralelo.
 
 **Railway despliega desde `produccion`** (desde el 29/07/2026, los tres
 servicios). Cada push a `produccion` sale a producción de inmediato; **mergear a

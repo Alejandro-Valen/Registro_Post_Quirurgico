@@ -1,6 +1,6 @@
 # Mapa y estado de la documentación
 
-> Última revisión integral: 24/07/2026. Rama `sprint-5-produccion`.
+> Última revisión integral: 24/07/2026. Estado actualizado el 31/07/2026.
 
 Este índice distingue la documentación vigente de los registros históricos. Si
 dos documentos parecen contradecirse, usa el **orden de autoridad** de abajo y
@@ -75,23 +75,27 @@ Existe localmente una copia raíz no rastreada con el mismo nombre. Al cierre de
 21/07/2026 ambas copias tenían el mismo SHA-256, pero la copia raíz no forma
 parte del repositorio y no debe agregarse automáticamente a commits o PR.
 
-## Estado al cierre de esta revisión
+## Estado (31/07/2026)
 
-- Rama: `sprint-5-produccion`. Punto funcional desplegado en Railway: `0d12d88`.
-- La auditoría independiente del 22/07/2026 dejó el PR **bloqueado** con 14
-  hallazgos. La corrección va por loops: **A y B cerrados y verificados**, C en
-  curso.
-- No existe PR a `Desarrollo` ni autorización de merge.
+- **Rama activa: ninguna.** El Sprint 5 se mergeó a `Desarrollo` el 29/07/2026
+  (PR #3, `3a5c573`) y `sprint-6-ci` el 31/07/2026 (PR #5, `5b40c01`).
+- Las dos auditorías (22/07 y 27/07) están **cerradas**: sus 18 hallazgos se
+  corrigieron en los Loops A-D, todos verificados. **No se repiten.**
+- **Cada PR se verifica solo** desde el 31/07: `.github/workflows/ci.yml` corre
+  la suite, `check`, `makemigrations --check`, `check --deploy` y la higiene del
+  diff. Los checks se ven pero **todavía no bloquean** el merge.
+- Despliegue: Railway mira `produccion`. Mergear a `Desarrollo` no despliega
+  nada — ver `docs/railway_deploy.md` §4.1.
 - Todavía no apto para pacientes reales: ver los requisitos del piloto en el
   ROADMAP y en `CLAUDE.md`, sección "Por resolver antes del piloto real".
 
 ## Siguiente sesión
 
-1. Abrir el repositorio en `sprint-5-produccion` y traer cambios de origin sin
-   mezclar otras ramas.
+1. Abrir el repositorio en `Desarrollo` y traer cambios de origin sin mezclar
+   otras ramas.
 2. Leer `CLAUDE.md` completo y el "Estado de avance" de
    `docs/decisiones_correccion_auditoria.md`.
 3. Verificar el estado real contra `git log` y la suite **antes** de proponer
    nada. Si el documento contradice a Git, manda Git.
-4. Continuar por donde diga ese estado de avance. La auditoría ya se ejecutó:
-   no repetirla.
+4. Abrir el **Loop E** (ficha D14) en su propia rama. Un loop, un tema. Las
+   auditorías ya se ejecutaron: no repetirlas.

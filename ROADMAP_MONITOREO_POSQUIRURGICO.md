@@ -5,7 +5,9 @@
 > El repositorio es: https://github.com/Alejandro-Valen/Registro_Post_Quirurgico
 > Rama de integración: `Desarrollo` | Rama de **despliegue**: `produccion` (la miran
 > los tres servicios de Railway; nadie trabaja ahí) | Rama activa de trabajo:
-> `sprint-6-ci` (Sprint 5 mergeado a `Desarrollo` el 29/07/2026, 337 tests OK)
+> ninguna — la siguiente es el **Loop E**, desde `Desarrollo`
+> (Sprint 5 mergeado el 29/07/2026 y `sprint-6-ci` el 31/07/2026, 337 tests OK)
+> **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026
 
 ---
 

@@ -51,7 +51,7 @@ revisión.
 
 | # | Punto | Cuándo | Por qué ahí |
 |---|---|---|---|
-| **1** | Montar CI | **Antes del Loop E**, PR aparte a `Desarrollo` | Si entra primero, el PR del Loop E se verifica solo. No toca la app ni tiene contenido clínico: no necesita loop |
+| **1** | ~~Montar CI~~ | ✅ **Hecho el 31/07/2026** — PR #5, `5b40c01` | Entró antes del Loop E, como estaba decidido: su PR ya se verifica solo. Verificación en rojo de las cinco comprobaciones en `docs/proceso/verificaciones/2026-07-31_verificacion_ci.md` |
 | **8** | `crear_medico` reescribe la cuenta | **Antes de entregar la cuenta al médico** | Hay una decisión abierta sobre `medico_piloto`. Tal como está, esa cuenta no puede tener contraseña propia |
 | **2** | Aislar las tareas del cron | **Loop E**, como está decidido (D14) | Ya decidido. Sin agregados |
 | **3** | Partir `tests.py` | **Después del Loop E, antes de que Sprint 6 acumule** | Ventana estrecha y es esa: el Loop E añade pruebas a `tests.py`, así que partirlo antes garantiza el conflicto que se busca evitar; y después de que Sprint 6 avance, el conflicto ya ocurrió |
@@ -64,7 +64,17 @@ revisión.
 
 ## Los puntos, en detalle
 
-### 1 · No hay CI
+### 1 · No hay CI — ✅ RESUELTO el 31/07/2026
+
+**Resuelto en el PR #5** (`5b40c01`): `.github/workflows/ci.yml` corre las cinco
+comprobaciones en cada PR hacia `Desarrollo` y hacia `produccion`, y en cada push
+a esas dos ramas. Las cinco se verificaron en rojo antes de mergear —
+`docs/proceso/verificaciones/2026-07-31_verificacion_ci.md`. Falta una sola cosa,
+que no depende de nosotros: **`Desarrollo` no tiene protección de rama**, así que
+los checks se ven pero no bloquean el merge. Configurarla pide permisos de admin
+del repositorio.
+
+Se conserva el diagnóstico original, que sigue explicando por qué era el punto 1:
 
 **Lo más importante de la lista.** 127 commits y 337 pruebas que solo han corrido
 en la máquina del Arquitecto, en Windows.
