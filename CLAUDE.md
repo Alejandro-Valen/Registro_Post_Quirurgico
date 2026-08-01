@@ -259,12 +259,11 @@ Lo que sigue, en este orden (razonamiento y detalle en
 
 **Pendientes menores que dejó el montaje de la CI**, ninguno bloqueante:
 
-- `home.tests.ClientIpTests.test_por_defecto_ignora_headers_spoofeables` es la
-  única de sus cuatro hermanas que **no** fija `TRUST_RAILWAY_PROXY` con
-  `override_settings`: lee el del entorno. Si se rompiera el default seguro de
-  `_get_client_ip`, la prueba solo lo denunciaría en una máquina cuyo `.env`
-  traiga `False`. Se cierra con un `@override_settings(TRUST_RAILWAY_PROXY=False)`
-  en la próxima rama que toque `home`.
+- ~~El `override_settings` que le faltaba a
+  `home.tests.ClientIpTests.test_por_defecto_ignora_headers_spoofeables`~~ — ✅
+  cerrado el 31/07/2026 (PR #7, `dc32530`), la misma sesión que lo encontró.
+  Verificado en las dos direcciones, incluida la que importa: anulando la guarda
+  de `_get_client_ip`, la prueba vuelve a caer.
 - **Protección de rama en `Desarrollo`** para que los checks bloqueen el merge.
   Pendiente de Alejandro: pide permisos de admin del repositorio.
 - La versión de PostgreSQL de Railway no está documentada; la CI usa
