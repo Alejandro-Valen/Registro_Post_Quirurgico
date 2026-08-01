@@ -1,0 +1,16 @@
+# Lo que necesita la SUITE, no el despliegue.
+#
+# Los tres archivos de requisitos de este repo, para no confundirlos:
+#   requirements-runtime.txt → producción. Es el que instala el Dockerfile.
+#   requirements-dev.txt     → este. Runtime + lo que solo usan las pruebas.
+#   requirements.txt         → un `pip freeze` de la máquina Windows del
+#                              Arquitecto (TensorFlow, esptool, jupyter...).
+#                              NO sirve en Linux y no lo usa nadie más.
+#
+# La CI de GitHub Actions instala este archivo (.github/workflows/ci.yml).
+-r requirements-runtime.txt
+
+# Ancla el reloj de las clases cuyos fixtures lo leen varias veces, para que una
+# corrida que cruce la medianoche de Bogotá no haga caer "ayer" y "hoy" el mismo
+# día (`ANCLA_MEDIANOCHE` en signos_sintomas/tests.py). Entró en el Loop C.
+freezegun==1.5.5

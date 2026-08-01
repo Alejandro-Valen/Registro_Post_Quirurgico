@@ -4013,3 +4013,160 @@ CLAUDE.md prohíbe usar nombres de instituciones y la marca "Sugarbaker" como
 nombre del sistema. Ahora dice "Sistema de Monitoreo Posquirúrgico Remoto". Las
 entradas históricas no se reescribieron: describen lo que se hizo en su momento.
 `sugarbaker_hipec` sigue siendo un valor legítimo de `tipo_cirugia`.
+
+---
+
+## Sprint 5 — Cierre de la rama: PR, merge y rama de despliegue propia
+**Fecha:** 29/07/2026
+**Responsable:** León (Arquitecto) con Claude Code
+**Estado:** SPRINT 5 CERRADO Y MERGEADO ✅ — producción desplegando desde `produccion`
+
+### Qué se hizo
+
+Los cuatro pasos del guion `docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`.
+No se escribió código nuevo: la sesión fue de revisión, documentación y cambio de
+topología de despliegue.
+
+**Paso 1 — la revisión del diff.** Verifiqué primero que los documentos no
+mintieran: `git status` limpio, local igual a remoto, y la suite en **337 tests
+OK** (dos corridas, 303 s y 292 s). El diff contra `origin/Desarrollo` eran 124
+commits al empezar, no los ~117 que decía el guion — se escribió el 27/07, antes
+de los últimos commits de documentación. Revisé las seis áreas de la tabla del
+guion y las seis salieron coherentes con las decisiones D1-D13.
+
+**Limpieza de espacios en blanco.** `git diff --check` **no estaba limpio**: 87
+líneas en `tests.py` y 3 en la verificación del Loop C, residuo del script
+mecánico que insertó el `medico_responsable` en las 88 llamadas afectadas por la
+migración 0028. Los cierres de los Loops A, B y C sí registraron
+"`git diff --check` limpio" como criterio; el del Loop D no lo listó y por eso se
+coló. Se limpió en dos commits, preservando los finales de línea originales y
+verificando con `git diff -w` vacío que **solo cambiaron espacios**.
+
+**Integridad documental, antes de limpiar.** `docs/modelos_datos.md` se declara
+"Fuente única" de `models.py` pero cubría **4 de los 8 modelos**. Faltaban
+`CheckInProgramado` (el modelo sobre el que D1 cuenta la racha de SILENCIO, con la
+restricción `unique_checkin_paciente_dia_orden` sin describir en ninguna parte),
+`RecepcionWebhookTwilio`, y el campo `ConversacionWhatsApp.checkin_actual`. Los
+tres quedaron documentados. Lo demás sí estaba coherente: comparé por script las
+18 constantes de `alert_engine.py` contra `reglas_clinicas.md`, los 12 estados del
+bot contra `bot_whatsapp.md`, y los comandos programados contra `cron_setup.md`.
+
+**Paso 2 — PR #3 y merge.** Se abrió con una evaluación de ingeniería, no un
+resumen. Mergeado con **merge commit** (`3a5c573`), nunca squash: la
+documentación cita **42 SHAs de commits individuales** y un squash los habría
+dejado huérfanos. Verificado después del merge: los 42 siguen alcanzables desde
+`Desarrollo`.
+
+**Paso 3 — la rama `produccion`.** Creada desde `Desarrollo` en `3a5c573` y los
+tres servicios de Railway reapuntados de `sprint-5-produccion` a `produccion`.
+Los tres deploys en SUCCESS y `/salud/` en 200. **Desplegar dejó de ser una
+consecuencia de integrar y pasó a ser un merge explícito de `Desarrollo` a
+`produccion`.**
+
+**Paso 4 — rama siguiente.** `sprint-6-ci` abierta desde `Desarrollo`. El primer
+trabajo es montar CI, que es el punto 1 de la deuda registrada.
+
+### Decisiones tomadas y su justificación
+
+**El Loop E no absorbe la deuda técnica.** La revisión del PR dejó 8 puntos.
+Solo el punto 2 (aislar el cron, D14) es el Loop E — y ya lo era. Meterle CI,
+partir `tests.py` y renombrar un comando rompe lo que hace verificable al método:
+si un loop toca cinco cosas, la verificación no puede afirmar nada concreto sobre
+ninguna. **Un loop, un tema, una sesión.**
+
+**Orden de la deuda: CI → Loop E → partir `tests.py` → `crear_medico`.** La CI va
+primero porque hace que el PR del Loop E se verifique solo. Partir `tests.py` va
+*después* del Loop E porque el Loop E añade pruebas a ese archivo: hacerlo antes
+garantiza el conflicto que se busca evitar.
+
+**Se conserva `sprint-5-produccion`.** Decisión mía: no se borra. En su lugar
+queda la etiqueta **`sprint-5-cierre`** sobre `a13038e`, el último commit de la
+rama antes del merge, para que ese punto de la historia tenga nombre legible.
+
+**Dos líneas de llegada, no una.** El MVP demostrable (landing con datos reales,
+demo que no caduque, correo mostrable) depende solo de nosotros y sin costo. El
+piloto con pacientes reales depende de terceros y de dinero (aprobación de Meta,
+plan de Railway, dominio en Resend, HABEAS DATA firmado, validación clínica de
+las cuatro frases del bot). Los trámites del segundo son **colas, no tareas**, y
+conviene arrancarlos en paralelo al primero.
+
+### Problemas encontrados y resueltos
+
+**1. Se sobredimensionó un hallazgo y hubo que retirarlo.** En la primera lectura
+del PR se afirmó que "el radio de daño de un `--limpiar` mal apuntado es alto" en
+los comandos de seed. **Es falso.** Pedí una segunda verificación exhaustiva y se
+comprobó que `seed_demo` **aborta si `DEBUG=False`** —no puede correr en
+producción— y que el `--limpiar` de `seed_demo_produccion` exige `--confirmar` y
+solo alcanza los teléfonos de la lista fija `TELEFONOS_DEMO`, en transacción y
+respetando el orden de las FK `PROTECT`. El punto quedó **tachado, no borrado**,
+para que se vea que se revisó y por qué se cayó.
+
+**2. La segunda pasada agravó dos puntos y encontró uno nuevo.** No fue cosmética:
+
+- **El acoplamiento del cron es peor de lo escrito.** `cron_operativo` corre cada
+  5 minutos, y `cron_matutino` también ejecuta `procesar_notificaciones_email`
+  pero en la posición 6, con `cerrar_checkins_vencidos` en la 3. Un fallo
+  persistente de esa tarea aborta **las dos rutas**: los correos de alerta ALTA no
+  salen por ninguna. Y en la posición 4 está `enviar_recordatorios`, que es un
+  **stub que no envía nada** — un no-op en la ruta crítica de la entrega de
+  alertas.
+- **Punto 8, nuevo:** `crear_medico` corre en cada arranque del servicio web
+  **sin `|| true`** (a diferencia de `crear_admin`) y, sobre un usuario que ya
+  existe, ejecuta igual `set_password`, `is_staff = True`, `groups.set([...])` y
+  `user_permissions.clear()`. **Si el médico cambia su contraseña en el Admin, el
+  siguiente despliegue la revierte en silencio.** Eso condiciona la decisión
+  abierta de entregarle `medico_piloto`: hoy esa cuenta no puede tener contraseña
+  propia que sobreviva a un deploy. Apareció al verificar otro punto, no por
+  buscarlo.
+
+Es el mismo patrón que dejó vivo el hallazgo bloqueante durante seis loops:
+**revisar una vez no es revisar.**
+
+**3. Se atribuyó a un campo un motivo que ningún documento respaldaba.** Al
+documentar `ConversacionWhatsApp.checkin_actual` se escribió que existía por un
+bug de cruce de medianoche. Se verificó contra BITÁCORA y ROADMAP antes de
+commitear: el motivo real es coordinar el bot con el cron para que un paciente que
+está contestando dentro de las 10 horas de gracia no reciba una alerta SILENCIO.
+Corregido antes de que entrara al repositorio.
+
+**4. El check rojo del PR no era nuestro.** El PR mostraba "1 falla, 3 exitosas".
+Las tres verdes eran los servicios de `zooming-trust`. La roja era
+**`aware-nourishment`, un segundo proyecto de Railway en la cuenta de Alejandro**,
+de cuando arrancaba el proyecto, nunca continuado y con configuración incompleta —
+fallando en todos los commits desde al menos el 10/07. No estaba documentado en
+ninguna parte. Se apagó solo al reapuntar Railway (seguía a `sprint-5-produccion`,
+no a `produccion`) y Alejandro lo borró después. Antes de recomendar borrarlo se
+planteó verificar si tenía Postgres conectado: si hubiera tenido credenciales
+válidas, habría existido una segunda copia de la app clínica en una URL no
+documentada ni monitoreada — relevante con HABEAS DATA de por medio.
+
+**5. GitHub dijo que la rama se podía borrar y era falso en ese momento.** Al
+mergear, GitHub ofreció borrar `sprint-5-produccion` con el mensaje "can be
+safely deleted". En ese instante los tres servicios de Railway todavía la
+miraban: borrarla los habría dejado sin fuente. El mensaje es genérico y no sabe
+nada de la topología de despliegue.
+
+### Qué queda pendiente
+
+**Instrucción de la próxima sesión:**
+`docs/proceso/2026-07-30_instruccion_sprint6_ci.md`.
+
+En una línea: **montar CI en `sprint-6-ci`**, que es el punto 1 de los 8 de
+`docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`. Después, el Loop E
+(D14) en su propia sesión.
+
+**Decisión al cierre: los trámites del piloto quedan diferidos.** Se planteó
+arrancar en paralelo las tres colas de la línea B (WhatsApp Business, dominio en
+Resend, los 10 minutos con el médico) porque no se aceleran trabajando más. El
+Arquitecto decidió lo contrario: **primero llevar el sistema al mejor punto
+posible en desarrollo**, y los trámites después. Queda registrada la consecuencia
+—diferirlos no atrasa el piloto por el tiempo diferido, sino por lo que tarden una
+vez iniciados— para que conste que se decidió con eso a la vista.
+
+**Cabo verificado al cierre:** el Postgres y el Redis en verde son los de
+`zooming-trust`, o sea producción, y deben seguir online. Los de Alejandro también
+aparecen en verde **aunque su proyecto figure offline**: borró el servicio de la
+app, pero **las dos bases siguen corriendo**. En Railway borrar un servicio no
+borra el proyecto. Pendiente suyo, no bloqueante: confirmar que están vacías y
+eliminarlas — consumen recursos de su cuenta y, si alguna vez tuvieron datos,
+siguen ahí.

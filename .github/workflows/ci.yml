@@ -1,0 +1,165 @@
+# Integración continua — las mismas cinco comprobaciones que hasta hoy solo
+# corrían en la máquina Windows del Arquitecto, ejecutadas en Linux por cada PR.
+#
+# Por qué existe: el repo recibe trabajo desde dos herramientas distintas
+# (Claude Code y Codex CLI) en sesiones que no comparten memoria. Sin esto, la
+# disciplina de correr la suite antes de mergear depende de que nadie se olvide,
+# y ni el Dockerfile ni nixpacks.toml ejecutan una sola prueba en el build.
+#
+# Dónde encaja en el flujo de ramas (docs/railway_deploy.md §4.1):
+#   rama de trabajo → PR → Desarrollo → PR → produccion → al aire
+# El PR a `produccion` es la ÚLTIMA compuerta antes del despliegue: Railway
+# publica en cuanto esa rama recibe un push. En el push, esta CI ya no frena
+# nada — es alarma, no compuerta.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [Desarrollo, produccion]
+  push:
+    branches: [Desarrollo, produccion]
+
+# Un push nuevo sobre la misma rama vuelve obsoleta la corrida anterior: se
+# cancela en vez de gastar cinco minutos en un commit ya superado.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# El token solo necesita leer el repositorio. Esta CI no publica nada.
+permissions:
+  contents: read
+
+jobs:
+  verificacion:
+    name: Suite, checks y migraciones
+    runs-on: ubuntu-latest
+    # La suite tarda ~5.5 min. El tope corta una corrida colgada antes de que
+    # se coma la cuota de minutos.
+    timeout-minutes: 20
+
+    services:
+      # PostgreSQL 18: la misma versión mayor de la base local donde las 337
+      # pruebas están verdes. (La versión del Postgres de Railway no está
+      # documentada; si algún día se fija, conviene alinear las tres.)
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: registro_postquirurgico_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    # Entorno compartido por todos los pasos.
+    #
+    # No hay `.env` en la CI: python-decouple lee os.environ primero, así que
+    # estas variables son las que ve `settings.py`. Todas son de relleno y
+    # ninguna sirve fuera de este runner efímero.
+    #
+    # OJO con los `<corchetes>`: `config_obligatoria` (settings.py) rechaza
+    # cualquier valor con la forma `<...>` porque pegar el placeholder literal
+    # en Railway fue la causa raíz del 403 de Twilio y de los login fallidos al
+    # Admin (BITACORA, 06/07/2026). Que ninguno de estos valores los lleve.
+    env:
+      SECRET_KEY: ci-clave-de-relleno-sin-valor-fuera-de-este-runner-efimero
+      DEBUG: 'False'
+      DB_NAME: registro_postquirurgico_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      ALLOWED_HOSTS: ci.example.com
+      CSRF_TRUSTED_ORIGINS: https://ci.example.com
+      REDIS_URL: redis://localhost:6379/1
+      # `settings_production` aborta si falta cualquiera de estas (hallazgo 11
+      # del Loop C). Con proveedor "resend" las obligatorias son las dos de
+      # abajo; con "django" serían EMAIL_HOST_USER/PASSWORD.
+      EMAIL_DELIVERY_PROVIDER: resend
+      RESEND_API_KEY: ci-clave-de-relleno
+      RESEND_FROM_EMAIL: ci@ejemplo.com
+      # False, igual que `.env.example`, y no es cosmético: la primera corrida
+      # de esta CI la puse en True y cayó
+      # `home.tests.ClientIpTests.test_por_defecto_ignora_headers_spoofeables`.
+      # Esa prueba comprueba que sin confianza declarada NO se cree la cabecera
+      # X-Real-IP, pero es la única de sus cuatro hermanas que no fija el valor
+      # con `override_settings`: lee el del entorno. Aquí se le da el default
+      # documentado; la fragilidad de la prueba está reportada aparte.
+      TRUST_RAILWAY_PROXY: 'False'
+
+    steps:
+      - name: Traer el repositorio
+        uses: actions/checkout@v5
+        with:
+          # Historia completa: el paso de higiene compara contra la base del PR,
+          # y con el checkout superficial por defecto ese commit no existe aquí.
+          fetch-depth: 0
+
+      - name: Instalar Python
+        uses: actions/setup-python@v6
+        with:
+          # 3.13, leído de .python-version — la misma fuente que usa el build.
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: |
+            requirements-runtime.txt
+            requirements-dev.txt
+
+      - name: Instalar dependencias
+        id: dependencias
+        # requirements-dev.txt = requirements-runtime.txt + freezegun.
+        # requirements.txt NO se usa: es un `pip freeze` de Windows con
+        # paquetes que ni siquiera instalan en Linux.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      # A partir de aquí, cada comprobación corre AUNQUE la anterior haya
+      # fallado (`!cancelled()`), para que una corrida en rojo muestre todo lo
+      # que está mal de una vez y no obligue a arreglar de a una. Si la
+      # instalación falló, se saltan todas: no habría nada que comprobar.
+      #
+      # Orden: primero lo barato, al final la suite de cinco minutos.
+
+      - name: Higiene del diff
+        # Solo en PR: `git diff --check` sin argumentos compara el árbol de
+        # trabajo contra el índice, y en un checkout limpio eso está siempre
+        # vacío — daría verde siempre. Contra la base del PR sí mide lo que la
+        # rama introduce: espacios al final de línea, líneas de solo espacios y
+        # marcadores de conflicto sin resolver. En un push a Desarrollo o
+        # produccion no hay base contra la cual comparar, y se omite.
+        if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' && github.event_name == 'pull_request' }}
+        run: git diff --check "${{ github.event.pull_request.base.sha }}...HEAD"
+
+      - name: Comprobaciones del sistema
+        if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' }}
+        working-directory: Registro_Post_Quirurgico
+        run: python manage.py check
+
+      - name: Migraciones al día
+        # Denuncia un models.py cambiado sin su migración: en este proyecto eso
+        # es un contenedor que no arranca, porque el CMD del Dockerfile encadena
+        # migrate con `&&` antes de gunicorn.
+        if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' }}
+        working-directory: Registro_Post_Quirurgico
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Configuración de producción
+        if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' }}
+        working-directory: Registro_Post_Quirurgico
+        env:
+          DJANGO_SETTINGS_MODULE: Registro_Post_Quirurgico.settings_production
+        run: python manage.py check --deploy
+
+      - name: Suite completa
+        # --noinput: sin él, una corrida anterior muerta deja la base de pruebas
+        # a medio crear y el comando se queda esperando un prompt que nadie va a
+        # contestar.
+        if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' }}
+        working-directory: Registro_Post_Quirurgico
+        run: python manage.py test --noinput
