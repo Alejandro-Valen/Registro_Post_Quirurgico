@@ -4266,9 +4266,15 @@ una decisión de seguridad depende de un archivo que no está en el repositorio.
 Es el mismo patrón del hallazgo bloqueante del 22/07 —una prueba que parece medir
 un requisito y mide otra cosa—, en versión pequeña y sin consecuencia clínica.
 
-**No se arregló:** tocar la suite no era esta rama. Un
-`@override_settings(TRUST_RAILWAY_PROXY=False)` lo cierra, y queda pendiente para
-la próxima rama que toque `home`.
+**No se arregló en la rama de la CI** —tocar la suite no era esa rama—, pero sí
+**en la misma sesión, en su propia rama**: PR #7, merge `dc32530`. Un
+`@override_settings(TRUST_RAILWAY_PROXY=False)` sobre esa prueba.
+
+Se verificó en tres direcciones, no en una, porque fijar un valor puede convertir
+una prueba en una que pasa siempre: con la variable en `True` la clase pasa (antes
+caía), con `False` también, y **anulando la guarda de `_get_client_ip` la prueba
+vuelve a caer** — que es lo que demuestra que sigue vigilando algo. `views.py`
+quedó intacto: solo cambió `home/tests.py`.
 
 **2. Elegir roturas que no se contaminaran entre sí costó pensarlo.** La primera
 idea —añadir un campo a `models.py`— rompe `makemigrations --check`, pero también
@@ -4297,7 +4303,8 @@ ventana en que ninguna rama avance en paralelo, y la decisión sobre
 
 Pendientes menores que dejó esta sesión, ninguno bloqueante:
 
-- El `override_settings` que le falta a `test_por_defecto_ignora_headers_spoofeables`.
+- ~~El `override_settings` que le falta a `test_por_defecto_ignora_headers_spoofeables`~~
+  — cerrado el mismo día (PR #7, `dc32530`).
 - Protección de rama en `Desarrollo` para que los checks bloqueen — pendiente de
   Alejandro, que es quien tiene permisos de admin.
 - La versión de PostgreSQL de Railway no está documentada. La CI usa `postgres:18`

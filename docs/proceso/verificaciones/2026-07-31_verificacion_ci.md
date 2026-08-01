@@ -156,9 +156,23 @@ Es el mismo patrón del hallazgo bloqueante del 22/07 —una prueba que parece m
 un requisito y en realidad mide otra cosa—, en versión pequeña y sin consecuencia
 clínica.
 
-**No se arregló aquí, a propósito:** arreglarlo es tocar la suite, y esta rama es
-solo CI. Un `@override_settings(TRUST_RAILWAY_PROXY=False)` en esa prueba lo
-cierra. Queda como pendiente para quien abra la próxima rama que toque `home`.
+**No se arregló en la rama de la CI, a propósito** —arreglarlo era tocar la
+suite—, pero **sí en la misma sesión, en su propia rama:** PR #7, merge
+`dc32530`.
+
+La corrección es un `@override_settings(TRUST_RAILWAY_PROXY=False)` sobre esa
+prueba, y se verificó en las tres direcciones, porque fijar un valor puede
+convertir una prueba en una que pasa siempre:
+
+| Comprobación | Antes | Después |
+|---|---|---|
+| La clase con `TRUST_RAILWAY_PROXY=True` en el entorno | `AssertionError: '198.51.100.20' != '10.0.0.4'` | OK (5 tests) |
+| La clase con `TRUST_RAILWAY_PROXY=False` en el entorno | OK | OK (5 tests) |
+| **Con la guarda de `_get_client_ip` anulada a propósito** | — | **FAILED** — la prueba sigue sirviendo |
+
+La tercera fila es la que cierra el asunto: la prueba dejó de depender del
+entorno **sin** dejar de denunciar la regresión que le toca vigilar. `views.py`
+quedó intacto; solo cambió `home/tests.py`.
 
 ---
 
