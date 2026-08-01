@@ -11,7 +11,23 @@ class ClientIpTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
 
+    @override_settings(TRUST_RAILWAY_PROXY=False)
     def test_por_defecto_ignora_headers_spoofeables(self):
+        """Sin confianza declarada, `X-Real-IP` no se cree aunque venga firmada
+        por el edge: la IP del cliente es la que ve el socket.
+
+        **Por qué el `override_settings` de arriba es obligatorio.** Sus cuatro
+        hermanas fijan el valor en `True`; esta comprueba el caso contrario y
+        hasta el 31/07/2026 no fijaba nada — **leía el del entorno de quien
+        corriera la suite**. Pasaba en verde solo porque el `.env` de desarrollo
+        trae `False`, y cayó en la primera corrida de la CI, que traía `True`.
+
+        Lo que eso significaba, y es la razón real del arreglo: si alguien
+        rompiera este default seguro, la prueba solo lo denunciaría en una
+        máquina cuyo `.env` tuviera la variable en `False`. **La guarda de una
+        decisión de seguridad no puede depender de un archivo que no está en el
+        repositorio.**
+        """
         request = self.factory.get(
             '/',
             REMOTE_ADDR='10.0.0.4',
@@ -19,7 +35,12 @@ class ClientIpTests(TestCase):
             HTTP_X_RAILWAY_EDGE='railway/us-east4-eqdc4a',
         )
 
-        self.assertEqual(_get_client_ip(request), '10.0.0.4')
+        self.assertEqual(
+            _get_client_ip(request),
+            '10.0.0.4',
+            'Sin TRUST_RAILWAY_PROXY, _get_client_ip debe devolver REMOTE_ADDR '
+            'y nunca una cabecera que cualquiera puede escribir.',
+        )
 
     @override_settings(TRUST_RAILWAY_PROXY=True)
     def test_usa_x_real_ip_solo_con_edge_railway(self):
