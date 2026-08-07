@@ -1,13 +1,20 @@
-"""Tareas frecuentes que comparten el servicio cron operativo de Railway."""
+"""Tareas frecuentes que comparten el servicio cron operativo de Railway.
 
-from django.core.management import call_command
+Ninguna de las tres depende clínicamente de otra: están juntas porque el plan
+de Railway no daba para más servicios. Por eso ninguna declara `depende_de` —
+un fallo de la primera no puede costar la entrega de las alertas ALTA del ciclo
+(D14, ver `signos_sintomas/cron_runner.py`).
+"""
+
 from django.core.management.base import BaseCommand
+
+from signos_sintomas.cron_runner import TareaCron, ejecutar_tareas
 
 
 TAREAS_OPERATIVAS = [
-    'cerrar_checkins_vencidos',
-    'reintentar_evaluaciones_alertas',
-    'procesar_notificaciones_email',
+    TareaCron('cerrar_checkins_vencidos'),
+    TareaCron('reintentar_evaluaciones_alertas'),
+    TareaCron('procesar_notificaciones_email'),
 ]
 
 
@@ -18,9 +25,4 @@ class Command(BaseCommand):
     )
 
     def handle(self, *args, **options):
-        for tarea in TAREAS_OPERATIVAS:
-            self.stdout.write(f'--- cron_operativo: {tarea} ---')
-            call_command(tarea)
-        self.stdout.write(
-            self.style.SUCCESS('cron_operativo: todas las tareas completadas.')
-        )
+        ejecutar_tareas(self, 'cron_operativo', TAREAS_OPERATIVAS)

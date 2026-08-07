@@ -4672,15 +4672,26 @@ class EspiaDeTareasCronMixin:
 class CronMatutinoCommandTests(EspiaDeTareasCronMixin, TestCase):
     """Comando cron_matutino — corre las tareas de la mañana en orden."""
 
-    def test_llama_las_cinco_tareas_en_orden(self):
-        from unittest.mock import patch
-        from django.core.management import call_command
-        with patch(
-            'signos_sintomas.management.commands.cron_matutino.call_command'
-        ) as mock_call:
-            call_command('cron_matutino', verbosity=0)
-        llamadas = [c.args[0] for c in mock_call.call_args_list]
-        self.assertEqual(llamadas, [
+    def test_corre_las_seis_tareas_en_orden(self):
+        """El orden es clínico, no cosmético — ver el docstring del comando.
+
+        Se observan las tareas que corrieron de verdad, no las llamadas que
+        recibió un mock: el requisito es el orden de ejecución y no debe
+        depender de dónde viva el bucle que las despacha.
+        """
+        ejecutadas = self.espiar_tareas([
+            'desactivar_pacientes_vencidos',
+            'crear_checkins_diarios',
+            'cerrar_checkins_vencidos',
+            'enviar_recordatorios',
+            'reintentar_evaluaciones_alertas',
+            'procesar_notificaciones_email',
+        ])
+
+        fallo = self.correr_cron('cron_matutino')
+
+        self.assertIsNone(fallo)
+        self.assertEqual(ejecutadas, [
             'desactivar_pacientes_vencidos',
             'crear_checkins_diarios',
             'cerrar_checkins_vencidos',
@@ -4771,23 +4782,22 @@ class CronMatutinoCommandTests(EspiaDeTareasCronMixin, TestCase):
 class CronOperativoCommandTests(EspiaDeTareasCronMixin, TestCase):
     """Cron frecuente: vencimientos, motor recuperable y bandeja de correo."""
 
-    def test_llama_las_tareas_en_orden(self):
-        from unittest.mock import patch
-        from django.core.management import call_command
+    def test_corre_las_tareas_en_orden(self):
+        """Igual que en cron_matutino: se observa lo que corrió, no un mock."""
+        ejecutadas = self.espiar_tareas([
+            'cerrar_checkins_vencidos',
+            'reintentar_evaluaciones_alertas',
+            'procesar_notificaciones_email',
+        ])
 
-        with patch(
-            'signos_sintomas.management.commands.cron_operativo.call_command'
-        ) as mock_call:
-            call_command('cron_operativo', verbosity=0)
+        fallo = self.correr_cron('cron_operativo')
 
-        self.assertEqual(
-            [llamada.args[0] for llamada in mock_call.call_args_list],
-            [
-                'cerrar_checkins_vencidos',
-                'reintentar_evaluaciones_alertas',
-                'procesar_notificaciones_email',
-            ],
-        )
+        self.assertIsNone(fallo)
+        self.assertEqual(ejecutadas, [
+            'cerrar_checkins_vencidos',
+            'reintentar_evaluaciones_alertas',
+            'procesar_notificaciones_email',
+        ])
 
     def test_corre_sin_error_con_bd_vacia(self):
         from django.core.management import call_command
