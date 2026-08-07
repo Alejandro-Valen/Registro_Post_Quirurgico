@@ -3,11 +3,13 @@
 > **Para agentes IA:** Lee este archivo completo antes de sugerir cualquier acción.
 > Contiene el contexto clínico, el estado actual del proyecto, y los pasos pendientes.
 > El repositorio es: https://github.com/Alejandro-Valen/Registro_Post_Quirurgico
-> Rama de integración: `Desarrollo` | Rama de **despliegue**: `produccion` (la miran
-> los tres servicios de Railway; nadie trabaja ahí) | Rama activa de trabajo:
-> ninguna — la siguiente es el **Loop E**, desde `Desarrollo`
-> (Sprint 5 mergeado el 29/07/2026 y `sprint-6-ci` el 31/07/2026, 337 tests OK)
+> Rama de integración: `Desarrollo` | Rama de **despliegue**: `produccion` |
+> Rama activa de trabajo: ninguna — la siguiente es **partir `tests.py`**, desde
+> `Desarrollo` (Sprint 5 mergeado el 29/07/2026, `sprint-6-ci` el 31/07/2026 y el
+> **Loop E el 07/08/2026**, 340 tests OK)
 > **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026
+> **⚠️ No hay producción viva desde el 07/08/2026** — venció la prueba de Railway.
+> Mergear a `produccion` no despliega nada. Ver `docs/railway_deploy.md`.
 
 ---
 
@@ -603,6 +605,8 @@ del alert_engine, jun 2026):**
 > `sprint-5-cierre` en el último commit de la rama (`a13038e`).
 > **Producción ya no despliega desde aquí:** los tres servicios de Railway
 > apuntan a `produccion` — ver `docs/railway_deploy.md` §4.1.
+> **Y desde el 07/08/2026 no hay producción en absoluto:** venció la prueba de
+> Railway y los servicios no están corriendo.
 
 **Decisiones de producto — confirmadas explícitamente por el Arquitecto en
 sesión el 01/07/2026 (no re-discutir, ejecutar):**

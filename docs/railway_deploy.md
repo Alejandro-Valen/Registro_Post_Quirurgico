@@ -5,9 +5,28 @@
 > fijas las decisiones, las variables de entorno exactas y el orden correcto,
 > para no depender de la memoria de nadie.
 >
-> Estado al 21/07/2026: **desplegado en Railway**. Web, PostgreSQL, Redis y
-> dos servicios cron operativos. Flujos NORMAL/MEDIA/ALTA y correo real
-> verificados; punto funcional `0d12d88`.
+> ## ⚠️ Estado al 07/08/2026: NO HAY PRODUCCIÓN VIVA
+>
+> **El periodo de prueba de Railway venció.** El endpoint de salud responde
+> **404**: la app ya no está sirviendo. Los dos servicios cron **no están
+> corriendo**, así que hoy nadie ejecuta `cron_matutino` ni `cron_operativo`.
+>
+> **Qué significa esto para quien retome:**
+>
+> - **Mergear a `produccion` no despliega nada.** El §4.1 sigue describiendo el
+>   flujo correcto, pero no hay servicio al otro lado que lo reciba.
+> - **No se puede verificar nada contra producción** — ni `/salud/`, ni un cron
+>   real, ni el end-to-end de WhatsApp. La verificación de un cambio hoy es la
+>   suite local más la CI de GitHub Actions, que **sí sigue corriendo** y es
+>   gratuita.
+> - **Todo lo de abajo sigue siendo válido como guion**, no como descripción del
+>   presente. Variables, topología, orden de arranque y trampas conocidas son el
+>   trabajo de reconstruir el despliegue cuando haya plan de pago. Por eso no se
+>   borró nada.
+>
+> **Lo que estuvo desplegado y verificado (21/07 → 06/08/2026), para no perder la
+> referencia:** web, PostgreSQL, Redis y dos servicios cron operativos; flujos
+> NORMAL/MEDIA/ALTA y correo real verificados; punto funcional `0d12d88`.
 
 ---
 
@@ -135,6 +154,11 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 ---
 
 ## 4.1 Rama de despliegue
+
+> **Suspendido desde el 07/08/2026** — venció la prueba de Railway y no hay
+> servicios corriendo. Lo de abajo describe el flujo al que se vuelve cuando se
+> reconstruya el despliegue, no lo que pasa hoy. **Hoy, mergear a `produccion` no
+> despliega nada.**
 
 **Los tres servicios de `zooming-trust` despliegan desde `produccion`
 (29/07/2026).** El web, `cron-manana` y `cron-tarde` fueron reapuntados ese día,

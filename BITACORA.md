@@ -4309,3 +4309,161 @@ Pendientes menores que dejó esta sesión, ninguno bloqueante:
   Alejandro, que es quien tiene permisos de admin.
 - La versión de PostgreSQL de Railway no está documentada. La CI usa `postgres:18`
   por ser la mayor de la base local; si producción corre otra, la CI no lo vería.
+
+---
+
+## Loop E — Aislar las tareas del cron, y el fin de la producción en Railway
+**Fecha:** 06-07/08/2026
+**Responsable:** León (Arquitecto) con Claude Code
+**Estado:** LOOP E CERRADO, VERIFICADO Y MERGEADO ✅ (PR #10, merge commit `4fc690d`) · **D1-D14 completas**
+
+### Qué se hizo
+
+Un solo objetivo, el punto 2 de los 8 de la revisión del PR del Sprint 5: **D14,
+aislar las tareas del cron**. No se tocó lógica clínica, ni un umbral, ni una
+regla. Se siguió `docs/proceso/2026-08-01_instruccion_loop_e.md`.
+
+**La sesión se cortó a la mitad.** Se me cerró la pestaña con E-1 ya commiteado
+(`e37e1a4`) y E-2 escrito entero en el árbol de trabajo, sin correr ni commitear.
+Al retomar, lo primero fue verificar el estado real contra `git log` y `git
+status` en vez de creerle a la memoria de la conversación anterior — que es
+exactamente para lo que el método dice que sirve dejar el estado en Git y en los
+documentos. El trabajo estaba intacto y no hubo que rehacer nada.
+
+**El problema.** `cron_matutino` y `cron_operativo` recorrían su lista de tareas
+con `call_command` dentro de un `for` **sin manejo de errores**. Si una fallaba,
+las siguientes no corrían. El caso que importa está en `cron_operativo`:
+`cerrar_checkins_vencidos` → `reintentar_evaluaciones_alertas` →
+`procesar_notificaciones_email`. Un fallo persistente de **la primera** impedía
+que salieran los correos de alerta ALTA de todo el ciclo. Y `cron_matutino` no
+era ruta de respaldo: lleva la misma tarea por delante, así que **un mismo fallo
+abortaba las dos rutas a la vez**. Estaban encadenadas por una razón que no es
+clínica: que el plan de Railway no daba para más servicios cron.
+
+**La corrección.** Un runner compartido, `signos_sintomas/cron_runner.py`. Corren
+todas las tareas; el fallo de una se registra en `stderr` y en el log y no
+detiene a las demás; la corrida termina en `CommandError` nombrando todo lo que
+falló y todo lo que se omitió.
+
+**La parte delicada, y la razón de que esto no fuera un `try/except` de tres
+líneas.** "Continuar ante el fallo" a secas es la corrección obvia y habría sido
+un error clínico. `cron_matutino` tiene un orden obligatorio:
+`desactivar_pacientes_vencidos` va **antes** de `crear_checkins_diarios`, porque
+si no, un paciente que vence ese día recibe un check-in que quedará `PENDIENTE`
+para siempre —ya no responde— y generará una **alerta SILENCIO espuria** al
+cerrarse. Así que el aislamiento es **selectivo y declarado**: `crear_checkins_diarios`
+declara `depende_de='desactivar_pacientes_vencidos'` con su motivo clínico al
+lado, y ese motivo **viaja al log** cuando la tarea se omite. Quien lea el log de
+Railway a las 6 AM tiene que entender qué dejó de pasar sin abrir el código.
+
+### Decisiones tomadas
+
+Ninguna nueva. **D14 ya estaba decidida** y la sesión solo implementó, que es
+como funciona el método: decidir → documentar → test en rojo → implementar →
+verificar. La ficha pasó de "Decidida, sin implementar" a implementada con sus
+SHAs.
+
+Una decisión menor de implementación, registrada por si alguien la revisa: el
+runner captura `Exception`, **no** `BaseException`. Si capturara `BaseException`,
+un Ctrl-C o un SIGTERM de Railway se tragaría y el cron seguiría corriendo tareas
+mientras lo apagan. Tiene su propio bloque en la verificación.
+
+### Problemas encontrados y resueltos
+
+**1. El refactor rompió dos pruebas preexistentes, y el motivo es interesante.**
+`test_llama_las_cinco_tareas_en_orden` y su gemela en `cron_operativo` afirmaban
+el orden de las tareas **parcheando `cron_matutino.call_command`** — es decir,
+medían *dónde vivía el bucle* en vez del requisito. Al mover el bucle al runner,
+el módulo dejó de tener ese atributo y las dos reventaron con `AttributeError`.
+
+El requisito que cuidan (el orden clínico de las 5:55-6:00 AM) sigue vigente, así
+que se reescribieron sobre el mismo espía de E-1, que observa **qué tareas
+corrieron de verdad**. Es el mismo patrón que dejó vivo el hallazgo bloqueante
+del 22/07 durante seis loops: una prueba escrita mirando el código en vez del
+requisito pasa en verde sin demostrar nada, y estorba en cuanto el código
+cambia de forma.
+
+**2. El rojo de E-1 se verificó de nuevo, y hubo que hacerlo.** El mensaje del
+commit afirmaba que las tres pruebas habían nacido en rojo, pero esa corrida se
+perdió con la pestaña. Se quitó E-2 y se volvieron a ver caer: las tres fallan
+**en la afirmación de qué tareas corrieron** —`3 != 6` y dos listas truncadas en
+la primera tarea que falló—, no en el tipo de la excepción ni en el andamiaje del
+mock. Creerle al mensaje de un commit habría sido justo lo que el método
+prohíbe.
+
+**3. Confusión con el rojo de la verificación (y el arreglo).** Al correr el
+script de verificación, el Arquitecto vio dos líneas rojas —`desactivar_pacientes_vencidos
+FALLÓ` y `crear_checkins_diarios OMITIDA`— y preguntó si eso era un problema. No
+lo era: **son la evidencia de que D14 funciona.** El script provoca fallos a
+propósito, y D14 exige que el runner los grite. Si esas líneas *no* salieran,
+ahí sí habría un problema — querría decir que el cron se traga los fallos en
+silencio. Se le agregó un aviso al encabezado del script (`d01dc1f`) explicando
+que el rojo es deliberado y que lo único que decide es la última línea: `OK` o
+`FAILED`. La duda del Arquitecto era la señal de que faltaba ese aviso.
+
+### Verificación
+
+**Script independiente:** `docs/proceso/verificaciones/2026-08-06_verificacion_loop_e.py`,
+cinco bloques, `Ran 5 tests ... OK`.
+
+No repite E-1. El **bloque 1** comprueba el desenlace clínico con datos reales en
+la base: la notificación pasa de `PENDIENTE` a `ENVIADA` y el correo aparece en
+la bandeja, **aunque falle la primera tarea del cron**. Ver una tarea "correr" no
+es ver una alerta entregada. Se comprobó además que ese bloque mide lo que dice:
+contra el `cron_operativo` anterior falla, con la notificación en `PENDIENTE` y
+cero correos.
+
+El **bloque 3** es el que hay que mirar con más cuidado: no prueba el código
+nuevo, prueba que la corrección obvia habría sido un error. Crea el check-in a
+ciegas y muestra salir la alerta `SILENCIO / BAJA` espuria.
+
+**Suite:** 337 → **340 tests OK**. `check`, `makemigrations --check`,
+`check --deploy` y `git diff --check` limpios en local, y **las cinco
+comprobaciones de la CI en verde** en el PR (340 tests en Linux, 96 s).
+
+### El otro hecho de la sesión: se acabó Railway
+
+**Venció el periodo de prueba.** Se comprobó el endpoint de salud: responde
+**404**. La app no está sirviendo y los dos servicios cron no están corriendo.
+
+Se corrigió la documentación en el momento, en vez de anotarlo para después,
+porque `CLAUDE.md` y `railway_deploy.md` afirmaban que había producción viva y
+son lo primero que lee cualquiera que retome. **No se borró la topología ni las
+variables:** `railway_deploy.md` pasó de describir el presente a ser el guion
+para reconstruir el despliegue cuando haya plan de pago.
+
+**Qué cambia de verdad, para no exagerarlo:** se pierde producción, `/salud/`,
+los cron reales y el end-to-end de WhatsApp. **Sigue igual** todo lo local —motor
+clínico, bot, Admin, suite— y **la CI de GitHub Actions, que es gratuita** y pasa
+a ser la única red de seguridad automática del proyecto. Los dos siguientes pasos
+del roadmap (partir `tests.py` y la decisión de `crear_medico`) son precisamente
+los dos que no necesitan Railway.
+
+Conviene tener presente que hay **dos líneas de meta distintas**: el software
+terminado, que depende solo del equipo, y el piloto desplegado con pacientes
+reales, que necesita plan de pago, WhatsApp Business, dominio en Resend y la
+validación clínica del médico. Que la segunda dependa de terceros no afecta a la
+primera.
+
+### Qué queda pendiente
+
+**Lo siguiente es partir `signos_sintomas/tests.py`** (6.122 líneas, 45 clases)
+en un paquete `tests/`, en su propia sesión. **Ahora es la ventana**: ninguna
+rama avanza en paralelo, y el Loop E —que era el que seguía añadiendo pruebas a
+ese archivo— ya cerró. Guion en
+`docs/proceso/2026-08-07_instruccion_partir_tests.md`. Es un refactor **sin
+cambio de comportamiento**: la prueba de que salió bien es que el conteo no se
+mueva de **340** y que ninguna clase desaparezca.
+
+Después, la decisión sobre **`crear_medico`**, que reescribe la cuenta del médico
+en cada arranque del servicio web.
+
+Pendientes menores, ninguno bloqueante:
+
+- **Protección de rama en `Desarrollo`** para que los checks bloqueen en vez de
+  solo avisar — pendiente de Alejandro, que es quien tiene permisos de admin.
+- La versión de PostgreSQL de Railway sigue sin documentar. Con producción caída
+  el punto queda en pausa: no hay contra qué comprobarlo.
+- **Los nombres de dos servicios de Railway tienen espacios pegados**
+  (`"cron-manana "`, `" cron-tarde"`). Se arregla cuando se reconstruya el
+  despliegue.

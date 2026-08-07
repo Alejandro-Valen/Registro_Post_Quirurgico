@@ -109,8 +109,9 @@ anotada para después.
 - **Rama de despliegue:** `produccion` — la miran los tres servicios de Railway.
   Nadie trabaja aquí; solo recibe merges desde `Desarrollo`. Ver
   `docs/railway_deploy.md` §4.1.
-- **Rama activa de trabajo:** ninguna. `sprint-6-ci` se mergeó el 31/07/2026
-  (PR #5); la siguiente —el Loop E— se abre desde `Desarrollo`.
+- **Rama activa de trabajo:** ninguna. `loop-e-aislar-cron` se mergeó el
+  07/08/2026 (PR #10); la siguiente —partir `tests.py`— se abre desde
+  `Desarrollo`.
 - **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre la suite,
   `check`, `makemigrations --check`, `check --deploy` y la higiene del diff en
   cada PR hacia `Desarrollo` y hacia `produccion`, y en cada push a esas dos
@@ -188,6 +189,7 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo |
 | Sprint 5 | Producción, despliegue y cierre pre-merge (RAG diferido a Sprint 6) | ✅ **Completado y mergeado** (29/07/2026, PR #3, merge commit `3a5c573`). Loops A-D cerrados y verificados; rama `produccion` creada y Railway reapuntado |
 | Sprint 6 · CI | Integración continua en GitHub Actions | ✅ **Completado y mergeado** (31/07/2026, PR #5, merge commit `5b40c01`). Cinco comprobaciones, las cinco verificadas en rojo |
+| Loop E · D14 | Aislar las tareas del cron sin perder la dependencia clínica | ✅ **Completado y mergeado** (07/08/2026, PR #10, merge commit `4fc690d`). **340 tests OK**; cierra D1-D14 |
 
 **Qué pasó (22/07/2026).** Una auditoría independiente sobre `fbf62a8` confirmó
 las cuatro cifras que se reportaban (280 tests, `check --deploy`, `pip-audit`,
@@ -218,31 +220,44 @@ una ocurrencia que el informe no vio. Informe completo en
 - **Loop D** (privacidad operativa, responsable clínico, firma del webhook):
   **cerrado y verificado (27/07).** Los nueve pasos, 15 commits, suite en **337
   tests OK**, migraciones **0027** (`PROTECT`) y **0028** (`CheckConstraint`
-  `activo ⇒ médico`). **Sin desplegar todavía** — falta el push.
-- **Loop E** (aislamiento de las tareas del cron): decisión **D14** escrita.
-  No bloquea el merge; va antes del piloto con pacientes reales.
+  `activo ⇒ médico`).
+- **Loop E** (aislamiento de las tareas del cron, D14): **cerrado, verificado y
+  mergeado (07/08/2026, PR #10, merge commit `4fc690d`).** Con él quedan
+  **implementadas las catorce decisiones D1-D14.**
 
 **Método de trabajo de los loops:** decidir → documentar → **test en rojo** →
 implementar → verificación del Arquitecto → un loop por sesión. Nació de la
 lección que dejó el hallazgo bloqueante: *un test en verde no prueba nada si no
 se verifica por qué está verde.*
 
-**Producción:** desplegado en Railway —
-`registropostquirurgico-production-1f96.up.railway.app`. La topología, las
-variables y los gotchas están en `docs/railway_deploy.md`.
+**Producción: NO HAY, desde el 07/08/2026.** Venció el periodo de prueba de
+Railway. El endpoint de salud responde **404** y los dos servicios cron **no
+están corriendo**. Consecuencias para cualquier plan que se proponga:
+
+- **Mergear a `produccion` no despliega nada** — no hay servicio al otro lado.
+- **Nada se puede verificar contra producción.** La verificación de un cambio hoy
+  es la suite local **más la CI de GitHub Actions**, que sigue corriendo y es
+  gratuita. Esa CI es ahora la única red de seguridad automática del proyecto.
+- **El trabajo local no está bloqueado.** El motor clínico, el bot, el Admin y
+  las pruebas se desarrollan y verifican igual que siempre.
+
+La topología, las variables y los gotchas siguen en `docs/railway_deploy.md`, que
+pasó de describir el presente a ser el **guion para reconstruir el despliegue**
+cuando haya plan de pago. No se borró nada de ahí a propósito.
 
 **Próximo paso exacto (al retomar):** verificar el estado real contra `git log` y
 la suite antes de proponer nada, y seguir el guion de
-**`docs/proceso/2026-08-01_instruccion_loop_e.md`** — el objetivo de esa sesión
-es **uno solo: el Loop E** (D14, aislar las tareas del cron), desde una rama
-nueva abierta en `Desarrollo`. Dos commits: E-1 test en rojo, E-2 corrección.
-**Solo eso: un loop, un tema.** La decisión está en la ficha D14 de
-`docs/decisiones_correccion_auditoria.md` y no se reabre. Su PR ya se verifica
-solo: la CI existe desde el 31/07.
+**`docs/proceso/2026-08-07_instruccion_partir_tests.md`** — el objetivo de esa
+sesión es **uno solo: partir `signos_sintomas/tests.py`** (6.288 líneas, 46
+clases) en un paquete `tests/`. Es un refactor **sin cambio de comportamiento**:
+la prueba de que salió bien es que el conteo de la suite no se mueva de **340** y
+que ninguna clase desaparezca. **Ahora es la ventana**, porque ninguna otra rama
+está avanzando en paralelo.
 
-Los dos cierres anteriores están **completos**: la rama del Sprint 5
-(`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`, 29/07) y la CI
-(`docs/proceso/2026-07-30_instruccion_sprint6_ci.md`, 31/07).
+Los tres cierres anteriores están **completos**: la rama del Sprint 5
+(`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`, 29/07), la CI
+(`docs/proceso/2026-07-30_instruccion_sprint6_ci.md`, 31/07) y el Loop E
+(`docs/proceso/2026-08-01_instruccion_loop_e.md`, 07/08).
 
 Lo que sigue, en este orden (razonamiento y detalle en
 `docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`):
@@ -250,13 +265,20 @@ Lo que sigue, en este orden (razonamiento y detalle en
 1. ~~**Montar CI**~~ — ✅ hecho el 31/07/2026 (PR #5, `5b40c01`). Las cinco
    comprobaciones se verificaron en rojo:
    `docs/proceso/verificaciones/2026-07-31_verificacion_ci.md`.
-2. **Loop E** — D14, aislar las tareas del cron conservando la dependencia
-   clínica declarada de `cron_matutino`. Dos commits (E-1 test en rojo, E-2
-   corrección). **Solo eso: un loop, un tema.**
-3. **Partir `tests.py`** (6.122 líneas, 45 clases) en un paquete `tests/`, en la
-   ventana en que ninguna rama avance en paralelo.
+2. ~~**Loop E**~~ — ✅ hecho el 07/08/2026 (PR #10, `4fc690d`). D14 implementada;
+   verificación independiente en
+   `docs/proceso/verificaciones/2026-08-06_verificacion_loop_e.py`.
+3. **Partir `tests.py`** (6.288 líneas, 46 clases) en un paquete `tests/`.
+   **Es el siguiente, y ahora es la ventana:** ninguna rama avanza en paralelo.
+   Guion en `docs/proceso/2026-08-07_instruccion_partir_tests.md`.
 4. **`crear_medico`** — decidir qué hacer antes de entregarle la cuenta al
    médico (ver "Por resolver antes del piloto real", punto 2).
+
+**Ojo con el orden de aquí en adelante.** Con Railway caído, los puntos 3 y 4
+son los únicos que dependen solo de nosotros; todo lo que toca despliegue,
+Twilio o el piloto quedó fuera de alcance hasta que haya plan de pago. Eso no
+cambia las prioridades — 3 y 4 ya eran los siguientes — pero sí conviene no
+proponer trabajo que hoy no se puede terminar.
 
 **Pendientes menores que dejó el montaje de la CI**, ninguno bloqueante:
 
