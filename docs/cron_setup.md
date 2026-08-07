@@ -53,6 +53,36 @@ no llegó es información clínica que no puede quedar enterrada. El comando
 `reintentar_evaluaciones_alertas` y `procesar_notificaciones_email` para
 plataformas con pocos servicios.
 
+## Qué pasa si una tarea del cron falla (D14)
+
+**Un fallo operativo no puede impedir que se entregue una alerta clínica ya
+generada.** Las tareas agrupadas en `cron_matutino` y `cron_operativo` están
+juntas porque el plan de Railway no da para más servicios, no por una razón
+clínica — así que un fallo de una **no detiene a las demás**. La lógica vive en
+`signos_sintomas/cron_runner.py` y es la misma para los dos comandos:
+
+1. Se ejecutan **todas** las tareas. El fallo de una se registra en `stderr` y
+   en el log, y la corrida sigue.
+2. **Salvo dependencia clínica declarada** (ver abajo).
+3. La corrida **termina en error**, nombrando todo lo que falló y todo lo que se
+   omitió. Railway marca la corrida como fallida y esa señal operativa es
+   legítima; lo que no lo era es que costara los correos del ciclo.
+
+**La única dependencia declarada hoy:** en `cron_matutino`,
+`crear_checkins_diarios` **se omite** si `desactivar_pacientes_vencidos` no
+completó — es el orden obligatorio de las 5:55-6:00 AM explicado arriba, y
+continuar a ciegas produciría exactamente la alerta SILENCIO espuria que ese
+orden evita. Por eso el aislamiento es **selectivo y declarado**, no automático:
+"continuar ante el fallo" a secas sería un error. La dependencia se escribe en
+`TAREAS_MATUTINAS`, con su motivo clínico al lado, y el motivo viaja al log
+cuando la tarea se omite — quien lea el log de Railway a las 6 AM tiene que
+entender qué dejó de pasar sin abrir el código.
+
+**Lo que esto no resuelve:** que la corrida falle sigue siendo visible solo en
+los logs de Railway. El `MAILTO` del crontab de abajo no aplica allí, y el
+monitoreo externo de ejecuciones omitidas sigue pendiente (ver "Limitaciones
+conocidas").
+
 ## Crontab (producción Linux — Railway/Render con worker o VPS)
 
 Bogotá es **UTC-5** todo el año (no tiene horario de verano). Las horas
