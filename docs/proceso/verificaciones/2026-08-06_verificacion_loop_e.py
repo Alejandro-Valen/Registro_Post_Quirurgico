@@ -12,6 +12,18 @@ que el correo de la alerta ALTA sale de verdad, con datos reales en la base,
 aunque la primera tarea del cron falle. Ver una tarea "correr" no es ver una
 alerta entregada.
 
+VAS A VER ROJO, Y ESTÁ BIEN. Este script **provoca fallos a propósito** para ver
+qué hace el cron cuando una tarea se cae. Lo que D14 exige es que el runner
+grite: que escriba el fallo en `stderr` y en el log, y que la corrida termine en
+error. Así que en una corrida correcta aparecen seis líneas `ERROR ... falló` /
+`OMITIDA`. Si esas líneas **no** salieran, ahí sí habría un problema — querría
+decir que el cron se traga los fallos en silencio, que es peor que fallar.
+
+Lo único que decide es **la última línea**:
+
+    Ran 5 tests ... OK            -> todo bien, el rojo de arriba es el simulacro
+    FAILED (failures=N|errors=N)  -> ahí sí hay algo roto
+
 CÓMO SE CORRE, desde `Registro_Post_Quirurgico/` (PowerShell):
 
     cd Registro_Post_Quirurgico
