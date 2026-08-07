@@ -4617,7 +4617,59 @@ class PacienteCedulaTests(TestCase):
         paciente.full_clean()  # no debe lanzar — ya tiene pk
 
 
-class CronMatutinoCommandTests(TestCase):
+class EspiaDeTareasCronMixin:
+    """Observa qué management commands corrieron de verdad dentro de un cron.
+
+    Reemplaza el `handle` de cada tarea por un espía que anota su nombre y, si
+    se le pide, lanza. Se espía **el comando de destino**, no el `call_command`
+    del runner: así la prueba afirma "la tarea corrió" en vez de "un mock
+    recibió una llamada", y no depende de dónde viva el bucle que las ejecuta.
+    """
+
+    def espiar_tareas(self, tareas, fallan=()):
+        from contextlib import ExitStack
+        from unittest.mock import patch
+
+        ejecutadas = []
+
+        def espia_de(nombre):
+            def espia(*args, **kwargs):
+                ejecutadas.append(nombre)
+                if nombre in fallan:
+                    raise RuntimeError(f'fallo simulado de {nombre}')
+                # Devolver None: BaseCommand.execute escribe lo que retorne
+                # handle, y un MagicMock rompería el OutputWrapper.
+                return None
+            return espia
+
+        pila = ExitStack()
+        self.addCleanup(pila.close)
+        for nombre in tareas:
+            pila.enter_context(patch(
+                f'signos_sintomas.management.commands.{nombre}.Command.handle',
+                side_effect=espia_de(nombre),
+            ))
+        return ejecutadas
+
+    def correr_cron(self, comando):
+        """Corre el cron y devuelve (ejecutadas ya observadas, excepción o None).
+
+        El fallo se captura en vez de dejarlo propagar para poder afirmar
+        primero lo clínico —qué tareas alcanzaron a correr— y solo después cómo
+        terminó la corrida. Si se dejara escapar, la prueba fallaría por el tipo
+        de la excepción y nunca llegaría a mirar lo que importa.
+        """
+        import io
+        from django.core.management import call_command
+
+        try:
+            call_command(comando, stdout=io.StringIO(), stderr=io.StringIO())
+        except Exception as exc:  # noqa: BLE001 — se inspecciona más abajo
+            return exc
+        return None
+
+
+class CronMatutinoCommandTests(EspiaDeTareasCronMixin, TestCase):
     """Comando cron_matutino — corre las tareas de la mañana en orden."""
 
     def test_llama_las_cinco_tareas_en_orden(self):
@@ -4642,8 +4694,81 @@ class CronMatutinoCommandTests(TestCase):
         # Con 0 pacientes las tareas deben correr sin lanzar excepción.
         call_command('cron_matutino', verbosity=0)
 
+    def test_fallo_de_desactivar_omite_crear_checkins_pero_no_el_resto(self):
+        """Dependencia clínica declarada — D14, la excepción a la regla.
 
-class CronOperativoCommandTests(TestCase):
+        `crear_checkins_diarios` NO debe correr si `desactivar_pacientes_vencidos`
+        falló: un paciente que vence hoy recibiría un check-in que quedaría
+        PENDIENTE para siempre y generaría una alerta SILENCIO espuria. Esa es
+        la mitad que ya se cumple hoy, por accidente, porque el cron se detiene
+        en la primera excepción.
+
+        La otra mitad es el requisito: ninguna de las cuatro tareas restantes
+        depende de esa desactivación, así que todas —incluida la entrega de los
+        correos de alerta ALTA— tienen que correr igual, y la corrida debe
+        terminar en error diciendo qué falló y qué se omitió.
+        """
+        from django.core.management.base import CommandError
+
+        ejecutadas = self.espiar_tareas(
+            [
+                'desactivar_pacientes_vencidos',
+                'crear_checkins_diarios',
+                'cerrar_checkins_vencidos',
+                'enviar_recordatorios',
+                'reintentar_evaluaciones_alertas',
+                'procesar_notificaciones_email',
+            ],
+            fallan=('desactivar_pacientes_vencidos',),
+        )
+
+        fallo = self.correr_cron('cron_matutino')
+
+        # La dependencia clínica se respeta: no se crean check-ins a ciegas.
+        self.assertNotIn('crear_checkins_diarios', ejecutadas)
+        # Y el aislamiento: lo que no depende de la que falló, corre.
+        self.assertEqual(ejecutadas, [
+            'desactivar_pacientes_vencidos',
+            'cerrar_checkins_vencidos',
+            'enviar_recordatorios',
+            'reintentar_evaluaciones_alertas',
+            'procesar_notificaciones_email',
+        ])
+        # La corrida no finge que todo salió bien.
+        self.assertIsInstance(fallo, CommandError)
+        self.assertIn('desactivar_pacientes_vencidos', str(fallo))
+        self.assertIn('crear_checkins_diarios', str(fallo))
+
+    def test_el_error_final_nombra_todas_las_tareas_que_fallaron(self):
+        """No se rinde en la primera ni informa solo de una — D14.
+
+        Dos fallos sin dependientes: las seis tareas corren igual y el resumen
+        final nombra a las dos, para que el log de Railway diga qué revisar.
+        """
+        from django.core.management.base import CommandError
+
+        ejecutadas = self.espiar_tareas(
+            [
+                'desactivar_pacientes_vencidos',
+                'crear_checkins_diarios',
+                'cerrar_checkins_vencidos',
+                'enviar_recordatorios',
+                'reintentar_evaluaciones_alertas',
+                'procesar_notificaciones_email',
+            ],
+            fallan=('cerrar_checkins_vencidos', 'reintentar_evaluaciones_alertas'),
+        )
+
+        fallo = self.correr_cron('cron_matutino')
+
+        self.assertEqual(len(ejecutadas), 6, f'corrieron {ejecutadas}')
+        self.assertIn('procesar_notificaciones_email', ejecutadas)
+        self.assertIsInstance(fallo, CommandError)
+        self.assertIn('cerrar_checkins_vencidos', str(fallo))
+        self.assertIn('reintentar_evaluaciones_alertas', str(fallo))
+
+
+class CronOperativoCommandTests(EspiaDeTareasCronMixin, TestCase):
     """Cron frecuente: vencimientos, motor recuperable y bandeja de correo."""
 
     def test_llama_las_tareas_en_orden(self):
@@ -4668,6 +4793,37 @@ class CronOperativoCommandTests(TestCase):
         from django.core.management import call_command
 
         call_command('cron_operativo', verbosity=0)
+
+    def test_fallo_de_la_primera_no_impide_entregar_las_alertas(self):
+        """Un fallo operativo no puede costar los correos de alerta ALTA — D14.
+
+        Las tres tareas de este cron están juntas porque el plan de Railway no
+        daba para más servicios, no por una razón clínica: ninguna depende de
+        otra. Si `cerrar_checkins_vencidos` falla de forma persistente, las
+        alertas ALTA ya generadas tienen que entregarse igual — hoy no salen en
+        todo el ciclo, y `cron_matutino` tampoco las rescata porque lleva la
+        misma tarea por delante.
+        """
+        from django.core.management.base import CommandError
+
+        ejecutadas = self.espiar_tareas(
+            [
+                'cerrar_checkins_vencidos',
+                'reintentar_evaluaciones_alertas',
+                'procesar_notificaciones_email',
+            ],
+            fallan=('cerrar_checkins_vencidos',),
+        )
+
+        fallo = self.correr_cron('cron_operativo')
+
+        self.assertEqual(ejecutadas, [
+            'cerrar_checkins_vencidos',
+            'reintentar_evaluaciones_alertas',
+            'procesar_notificaciones_email',
+        ])
+        self.assertIsInstance(fallo, CommandError)
+        self.assertIn('cerrar_checkins_vencidos', str(fallo))
 
 
 class CrearAdminCommandTests(TestCase):
