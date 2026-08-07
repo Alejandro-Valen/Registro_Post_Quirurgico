@@ -35,7 +35,7 @@ la entrada de `BITACORA.md` del 22/07/2026 (informe y hallazgos).
 | [D11](#d11) | Identidad del paciente en la salida operativa | cierre 1 | D | Aceptada |
 | [D12](#d12) | Todo paciente activo tiene un médico responsable | cierre 2 | D | Aceptada |
 | [D13](#d13) | La autenticidad del webhook no depende del entorno | cierre 3 | D | Aceptada |
-| [D14](#d14) | Aislamiento entre las tareas de un mismo cron | cierre (d) | E | Decidida, **sin implementar** |
+| [D14](#d14) | Aislamiento entre las tareas de un mismo cron | cierre (d) | E | **Implementada** (06/08/2026) |
 
 Los hallazgos 2, 6, 7, 8, 9, 11 y 14 son correcciones técnicas sin decisión de
 producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
@@ -59,27 +59,24 @@ código antes de aceptarlas.
 > **Se actualiza en CADA cierre de sesión, aunque quede a mitad de un loop.**
 > Es lo primero que debe leer quien retome el trabajo.
 
-**Última actualización:** 27/07/2026
-**Punto alcanzado:** **LOOP D CERRADO, VERIFICADO Y EN PRODUCCIÓN.** Los nueve
-pasos están hechos; la suite quedó en **337 tests OK** y la verificación
-independiente del Arquitecto pasó sus 8 bloques. El push salió el 27/07
-(`2fe6815 → 0f51ec0`) con las migraciones **0027** y **0028**: Railway en SUCCESS
-y `/salud/` en 200 sostenido. La compuerta D-0 se repitió con dato fresco justo
-antes (cero activos sin responsable).
+**Última actualización:** 06/08/2026
+**Punto alcanzado:** **LOOP E IMPLEMENTADO, PENDIENTE DE VERIFICACIÓN.** Los dos
+commits están hechos —`e37e1a4` (E-1, en rojo y entendido) y `d48ba41` (E-2)— y
+la suite quedó en **340 tests OK**, con `check`, `makemigrations --check`,
+`check --deploy` y `git diff --check` limpios. **D14 queda implementada**, y con
+ella las catorce decisiones. Los Loops A, B, C y D estaban cerrados y verificados
+desde el 27/07; el Sprint 5 se mergeó el 29/07 y la CI el 31/07.
 
-**Siguiente paso: cerrar la rama** — diff completo contra `origin/Desarrollo`,
-PR y merge, y después **crear `produccion` desde `Desarrollo` y reapuntar Railway
-allí**, que es lo que libera `sprint-5-produccion`. Guion completo en
-`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`. El **Loop E** (D14)
-va después del PR.
-Los Loops A, B, C y D están cerrados y verificados. La auditoría de cierre
-(Codex, 27/07) había vuelto a **BLOQUEAR el PR** con dos hallazgos ALTOS; los
-cuatro se reprodujeron contra el código antes de aceptarlos, y la verificación
-corrigió la mecánica de uno y encontró una ocurrencia que el informe no vio.
-Decisiones **D11, D12 y D13** escritas, revisadas por Codex y corregidas antes de
-programar. **D14** queda decidida para el Loop E, que va después del PR.
-**Rama:** `sprint-5-produccion` · **Restauración segura:** `2eb7801`
-**Línea base de la suite:** 319 tests OK antes del Loop D · **337 OK** al cerrarlo
+**Siguiente paso: la verificación del Arquitecto** — un script propio en
+`docs/proceso/verificaciones/`, y después el PR a `Desarrollo`. Ojo: los cinco
+checks de la CI **se ven pero no bloquean** (falta protección de rama), así que
+mirarlos antes de mergear sigue siendo manual.
+
+**Rama:** `loop-e-aislar-cron` · **Restauración segura:** `e103c8e`
+(`Desarrollo` antes del loop)
+**Línea base de la suite:** 337 tests OK antes del Loop E · **340 OK** al
+implementarlo
+**Guion de la sesión:** `docs/proceso/2026-08-01_instruccion_loop_e.md`
 **Informe de la auditoría de cierre:**
 `docs/proceso/auditorias/2026-07-27_informe_cierre_codex.md`
 
@@ -279,13 +276,29 @@ Por eso el push es único, con todo verde, y **mirando el log del deploy y
 
 ### Loop E — Operación del cron *(no bloquea el merge)*
 
-- [ ] **E-1** `test: reproducir que un fallo temprano del cron impide entregar alertas`
-- [ ] **E-2** `fix: aislar las tareas del cron conservando las dependencias clinicas` → D14
+- [x] **E-1** `test: reproducir que un fallo temprano del cron impide entregar alertas` — `e37e1a4`
+- [x] **E-2** `fix: aislar las tareas del cron conservando las dependencias clinicas` → D14 — `d48ba41`
+- [x] Cierre: **340 tests OK** · `check`, `makemigrations --check` y `check --deploy` sin issues · `git diff --check` limpio contra `origin/Desarrollo`
+- [ ] **Verificación del Arquitecto** — script propio en `docs/proceso/verificaciones/`
+- [ ] PR a `Desarrollo` (mirar los cinco checks de la CI: se ven pero no bloquean)
 
-Va **después** del PR, antes del piloto con pacientes reales. Motivo en D14: es
-una condición preexistente que esta rama no empeora, y `cron_operativo` corre
-cada 5 minutos, así que un fallo transitorio se cura solo. Lo que no se cura solo
-es uno persistente.
+Va **después** del PR del Sprint 5, antes del piloto con pacientes reales. Motivo
+en D14: es una condición preexistente que aquella rama no empeoraba, y
+`cron_operativo` corre cada 5 minutos, así que un fallo transitorio se cura solo.
+Lo que no se cura solo es uno persistente.
+
+**Resultado de E-1 (evidencia del hallazgo):** las tres pruebas fallaron contra
+el código anterior, y las tres **en la afirmación de qué tareas corrieron de
+verdad** — no en el tipo de la excepción ni en el andamiaje del mock:
+`3 != 6` en el resumen de fallos, y dos listas truncadas en la primera tarea que
+falló. Es la comprobación que exige el método: ver el rojo no basta, hay que
+confirmar que el rojo es el del requisito.
+
+**Nota de método:** el refactor rompió dos pruebas preexistentes que afirmaban el
+orden espiando `cron_matutino.call_command` — es decir, medían *dónde vivía el
+bucle* en vez del requisito. Se reescribieron sobre el espía de E-1, que observa
+qué tareas corrieron de verdad. El requisito que cuidan (el orden clínico de las
+5:55-6:00 AM) no cambió.
 
 ### Después de los cuatro loops
 
@@ -1207,7 +1220,9 @@ misma condición al revisar D2.
 ## D14 — Aislamiento entre las tareas de un mismo cron
 
 **Hallazgo:** auditoría de cierre, riesgo residual (d) · **Loop:** E ·
-**Estado:** Decidida, **sin implementar**
+**Estado:** **Implementada** (06/08/2026) — `e37e1a4` (E-1) y `d48ba41` (E-2).
+Runner en `signos_sintomas/cron_runner.py`; comportamiento documentado en
+`docs/cron_setup.md`, sección "Qué pasa si una tarea del cron falla".
 
 ### Problema
 
