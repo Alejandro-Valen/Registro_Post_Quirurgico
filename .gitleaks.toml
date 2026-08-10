@@ -1,0 +1,59 @@
+# Guardia de secretos — configuracion de gitleaks
+#
+# Por que existe. El repositorio recibe trabajo desde dos herramientas que no
+# comparten memoria (Claude Code y Codex CLI) y desde dos maquinas distintas.
+# El `.env` nunca se subio —eso se hizo bien desde el Sprint 0— pero esa
+# garantia hoy depende de que nadie se equivoque una sola vez. Esto la vuelve
+# automatica: un secreto que entre en un commit rompe la CI del PR.
+#
+# Se ejecuta sobre la historia completa, no solo sobre el diff. Son ~292
+# commits y tarda alrededor de un segundo: no hay razon para mirar menos.
+
+[extend]
+# Las ~170 reglas que trae gitleaks de fabrica (AWS, Twilio, SendGrid, Stripe,
+# tokens de GitHub, claves privadas...). La regla de abajo se suma a esas, no
+# las reemplaza.
+useDefault = true
+
+
+# --- Regla propia: SECRET_KEY de Django escrita en el codigo ---------------
+#
+# gitleaks de fabrica NO detecta esto, y es precisamente el error que este
+# proyecto ya cometio: la clave que `django-admin startproject` genera quedo
+# literal en `settings.py` durante el Sprint 0 y sigue en la historia (ver
+# `.gitleaksignore`, donde se explica por que hoy es inofensiva).
+#
+# Hoy `settings.py` la lee con `config_obligatoria('SECRET_KEY')` y no hay
+# ningun valor por defecto: si alguien vuelve a escribirla a mano, esto lo
+# detiene en el PR.
+[[rules]]
+id = "django-secret-key-literal"
+description = "SECRET_KEY de Django escrita literalmente en vez de leerse del entorno"
+regex = '''(?i)SECRET_KEY\s*[:=]\s*['"][^'"\n]{20,}['"]'''
+tags = ["django", "clave", "propia-del-proyecto"]
+
+[rules.allowlist]
+# Lo que NO es un hallazgo:
+regexes = [
+    # La forma correcta: leerla del entorno.
+    '''SECRET_KEY\s*=\s*config''',
+    '''SECRET_KEY\s*=\s*os\.environ''',
+    # Los valores de relleno de la CI y del .env.example, que son publicos a
+    # proposito y no abren nada.
+    '''ci-clave-de-relleno''',
+    '''<[^>]*>''',
+]
+
+
+# --- Rutas que no se escanean ---------------------------------------------
+[allowlist]
+description = "Rutas sin secretos por naturaleza"
+paths = [
+    # Documentacion del proyecto. Se revisa a mano en el Loop G (higiene de
+    # identidad); meterla aqui produciria falsos positivos con los ejemplos y
+    # los fragmentos de configuracion que citan los documentos.
+    '''docs/auditoria_literatura/.*''',
+    # Bytecode y estaticos generados.
+    '''.*\.pyc$''',
+    '''staticfiles/.*''',
+]
