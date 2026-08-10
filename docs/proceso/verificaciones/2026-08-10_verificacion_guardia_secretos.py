@@ -36,10 +36,20 @@ CÓMO SE CORRE
 
     python docs/proceso/verificaciones/2026-08-10_verificacion_guardia_secretos.py
 
-Necesita `gitleaks` en el PATH. Si no está:
+Necesita `gitleaks` en el PATH, y **la máquina de desarrollo no lo trae**. Es la
+misma herramienta que corre la CI, así que conviene instalarla de forma
+permanente y no en una carpeta temporal:
 
-    Windows:  descargar de https://github.com/gitleaks/gitleaks/releases
-    Linux:    misma página, o el paquete de la distribución
+    Windows:  winget install Gitleaks.Gitleaks
+    Linux:    el paquete de la distribución, o el binario de
+              https://github.com/gitleaks/gitleaks/releases
+
+Comprobado el 10/08/2026: `winget` sirve la **8.30.1**, la misma versión que
+`ci.yml` tiene fijada. Que coincidan importa — una versión distinta en local
+puede dar un resultado distinto al de la CI y mandar a buscar un problema que no
+existe.
+
+Verificá que quedó bien con `gitleaks version` antes de correr esto.
 
 El script trabaja sobre una rama desechable y la borra al terminar, pase lo que
 pase. No toca la rama en la que estabas ni deja archivos sueltos.
