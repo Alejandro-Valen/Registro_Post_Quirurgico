@@ -109,14 +109,21 @@ anotada para después.
 - **Rama de despliegue:** `produccion` — la miran los tres servicios de Railway.
   Nadie trabaja aquí; solo recibe merges desde `Desarrollo`. Ver
   `docs/railway_deploy.md` §4.1.
-- **Rama activa de trabajo:** ninguna. `loop-e-aislar-cron` se mergeó el
-  07/08/2026 (PR #10); la siguiente —partir `tests.py`— se abre desde
-  `Desarrollo`.
-- **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre la suite,
-  `check`, `makemigrations --check`, `check --deploy` y la higiene del diff en
-  cada PR hacia `Desarrollo` y hacia `produccion`, y en cada push a esas dos
-  ramas. **Los checks se ven pero todavía no bloquean** — `Desarrollo` no tiene
-  protección de rama, y configurarla pide permisos de admin del repositorio.
+- **Rama activa de trabajo:** ninguna. `guardia-secretos` se mergeó el
+  10/08/2026 (PR #13); la siguiente se abre desde `Desarrollo`.
+- **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **siete
+  comprobaciones** en cada PR hacia `Desarrollo` y hacia `produccion`, y en cada
+  push a esas dos ramas: la suite, `check`, `makemigrations --check`,
+  `check --deploy`, la higiene del diff, la **guardia de secretos** (`gitleaks`
+  sobre la historia completa) y que no haya ningún `.env` rastreado.
+- **Los checks se ven pero no bloquean.** `Desarrollo` no tiene protección de
+  rama. **Y no es cuestión de permisos**, como decía este archivo hasta el
+  10/08/2026: en un repositorio **privado** de una cuenta personal sin GitHub
+  Pro, GitHub no ofrece protección de rama **a nadie, ni al dueño** — la API de
+  rulesets responde *"Upgrade to GitHub Pro or make this repository public"*.
+  Las tres salidas son: GitHub Pro (~4 USD/mes, en la cuenta del dueño), hacer
+  el repositorio público, o seguir con la compuerta humana de mirar los siete
+  checks antes de mergear. Hoy rige la tercera: **mirar antes de mergear**.
 
 ---
 
@@ -130,9 +137,22 @@ Registro_Post_Quirurgico/Registro_Post_Quirurgico/
 ├── home/                      → portal web, páginas informativas, formulario de contacto
 └── signos_sintomas/           → núcleo clínico
     ├── models.py, admin.py, alert_engine.py, bot.py, signals.py, views.py
-    └── management/commands/   → crear_checkins_diarios, enviar_recordatorios,
-                                  cerrar_checkins_vencidos, seed_demo
+    ├── management/commands/   → crear_checkins_diarios, enviar_recordatorios,
+    │                             cerrar_checkins_vencidos, seed_demo
+    └── tests/                 → un archivo por tema (test_alert_engine.py,
+                                  test_bot.py, test_admin.py, test_commands.py,
+                                  test_webhook.py, test_models.py,
+                                  test_alertas_persistencia.py,
+                                  test_notificaciones.py, test_configuracion.py)
+                                  + soporte.py con lo compartido
 ```
+
+**Sobre `tests/`, dos cosas que no se pueden tocar sin romper el conteo de la
+suite:** `__init__.py` debe existir —Django no recorre un paquete de pruebas sin
+él, y el conteo baja **en silencio**, sin error ni aviso— y `soporte.py` se llama
+así, y no `test_soporte.py`, precisamente para que el descubridor **no** lo
+recorra: contiene el ancla de reloj, el helper `medico_de_pruebas` y el mixin
+`EspiaDeTareasCronMixin`, no pruebas.
 
 Árbol completo (archivo por archivo) en `ROADMAP_MONITOREO_POSQUIRURGICO.md`,
 sección "Estructura del Proyecto Django".
@@ -190,6 +210,8 @@ evidencia disponible, no decisiones ya tomadas.
 | Sprint 5 | Producción, despliegue y cierre pre-merge (RAG diferido a Sprint 6) | ✅ **Completado y mergeado** (29/07/2026, PR #3, merge commit `3a5c573`). Loops A-D cerrados y verificados; rama `produccion` creada y Railway reapuntado |
 | Sprint 6 · CI | Integración continua en GitHub Actions | ✅ **Completado y mergeado** (31/07/2026, PR #5, merge commit `5b40c01`). Cinco comprobaciones, las cinco verificadas en rojo |
 | Loop E · D14 | Aislar las tareas del cron sin perder la dependencia clínica | ✅ **Completado y mergeado** (07/08/2026, PR #10, merge commit `4fc690d`). **340 tests OK**; cierra D1-D14 |
+| Partir `tests.py` | Convertir el archivo de 6.288 líneas en un paquete `tests/` por tema | ✅ **Completado y mergeado** (10/08/2026, PR #12, merge commit `427153b`). Nueve archivos + `soporte.py`; **340 tests OK** y los 305 métodos comparados uno a uno |
+| Guardia de secretos | `gitleaks` y control de archivos de entorno en la CI | ✅ **Completado y mergeado** (10/08/2026, PR #13, merge commit `301c743`). La CI pasa de cinco a **siete comprobaciones** |
 
 **Qué pasó (22/07/2026).** Una auditoría independiente sobre `fbf62a8` confirmó
 las cuatro cifras que se reportaban (280 tests, `check --deploy`, `pip-audit`,
@@ -247,17 +269,16 @@ cuando haya plan de pago. No se borró nada de ahí a propósito.
 
 **Próximo paso exacto (al retomar):** verificar el estado real contra `git log` y
 la suite antes de proponer nada, y seguir el guion de
-**`docs/proceso/2026-08-07_instruccion_partir_tests.md`** — el objetivo de esa
-sesión es **uno solo: partir `signos_sintomas/tests.py`** (6.288 líneas, 46
-clases) en un paquete `tests/`. Es un refactor **sin cambio de comportamiento**:
-la prueba de que salió bien es que el conteo de la suite no se mueva de **340** y
-que ninguna clase desaparezca. **Ahora es la ventana**, porque ninguna otra rama
-está avanzando en paralelo.
+**`docs/proceso/2026-08-10_instruccion_crear_medico.md`** — el objetivo de esa
+sesión es **una decisión, no código**: qué hacer con `crear_medico`, que reescribe
+la cuenta del médico —contraseña, grupos y permisos— en **cada arranque** del
+servicio web. Se decide primero, se documenta, y solo después se programa.
 
-Los tres cierres anteriores están **completos**: la rama del Sprint 5
+Los cuatro cierres anteriores están **completos**: la rama del Sprint 5
 (`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`, 29/07), la CI
-(`docs/proceso/2026-07-30_instruccion_sprint6_ci.md`, 31/07) y el Loop E
-(`docs/proceso/2026-08-01_instruccion_loop_e.md`, 07/08).
+(`docs/proceso/2026-07-30_instruccion_sprint6_ci.md`, 31/07), el Loop E
+(`docs/proceso/2026-08-01_instruccion_loop_e.md`, 07/08) y el reparto de
+`tests.py` (`docs/proceso/2026-08-07_instruccion_partir_tests.md`, 10/08).
 
 Lo que sigue, en este orden (razonamiento y detalle en
 `docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`):
@@ -268,17 +289,23 @@ Lo que sigue, en este orden (razonamiento y detalle en
 2. ~~**Loop E**~~ — ✅ hecho el 07/08/2026 (PR #10, `4fc690d`). D14 implementada;
    verificación independiente en
    `docs/proceso/verificaciones/2026-08-06_verificacion_loop_e.py`.
-3. **Partir `tests.py`** (6.288 líneas, 46 clases) en un paquete `tests/`.
-   **Es el siguiente, y ahora es la ventana:** ninguna rama avanza en paralelo.
-   Guion en `docs/proceso/2026-08-07_instruccion_partir_tests.md`.
-4. **`crear_medico`** — decidir qué hacer antes de entregarle la cuenta al
-   médico (ver "Por resolver antes del piloto real", punto 2).
+3. ~~**Partir `tests.py`**~~ — ✅ hecho el 10/08/2026 (PR #12, `427153b`). Nueve
+   archivos por tema más `soporte.py`; 340 tests y los 305 métodos comparados
+   uno a uno contra el archivo original.
+4. **`crear_medico`** — **es el siguiente.** Decidir qué hacer antes de
+   entregarle la cuenta al médico (ver "Por resolver antes del piloto real",
+   punto 2). Guion en `docs/proceso/2026-08-10_instruccion_crear_medico.md`.
 
-**Ojo con el orden de aquí en adelante.** Con Railway caído, los puntos 3 y 4
-son los únicos que dependen solo de nosotros; todo lo que toca despliegue,
+**Ojo con el orden de aquí en adelante.** Con Railway caído, el punto 4
+es el único que depende solo de nosotros; todo lo que toca despliegue,
 Twilio o el piloto quedó fuera de alcance hasta que haya plan de pago. Eso no
 cambia las prioridades — 3 y 4 ya eran los siguientes — pero sí conviene no
 proponer trabajo que hoy no se puede terminar.
+
+**No hay guion escrito más allá de `crear_medico`.** Cuando ese punto se cierre,
+lo que siga se decide en sesión: no hay una cola de trabajo esperando. Lo único
+anotado como posible es auditar la calidad de las pruebas ahora que están
+repartidas por tema — al partirlas **no se revisó ninguna**, a propósito.
 
 **Pendientes menores que dejó el montaje de la CI**, ninguno bloqueante:
 
@@ -288,7 +315,9 @@ proponer trabajo que hoy no se puede terminar.
   Verificado en las dos direcciones, incluida la que importa: anulando la guarda
   de `_get_client_ip`, la prueba vuelve a caer.
 - **Protección de rama en `Desarrollo`** para que los checks bloqueen el merge.
-  Pendiente de Alejandro: pide permisos de admin del repositorio.
+  **No es un trámite de permisos** —eso decía este archivo y era incorrecto—
+  sino una decisión con coste: GitHub Pro, repositorio público, o seguir
+  mirando los checks a mano. Ver la sección "Repositorio", arriba.
 - La versión de PostgreSQL de Railway no está documentada; la CI usa
   `postgres:18` por ser la mayor de la base local.
 
@@ -467,7 +496,16 @@ python manage.py makemigrations        # después de cambiar models.py
 python manage.py migrate               # aplicar cambios a PostgreSQL
 python manage.py test --noinput        # suite completa
 python manage.py runserver             # http://127.0.0.1:8000/admin/
+
+# Desde que tests.py es un paquete, se puede correr un solo tema (segundos en
+# vez de los ~4,5 min de la suite completa en Windows):
+python manage.py test signos_sintomas.tests.test_alert_engine --noinput
+python manage.py test signos_sintomas.tests.test_bot.BotWhatsAppTests --noinput
 ```
 
 `--noinput` evita quedarse esperando el prompt de borrado si una corrida
 anterior murió y dejó la base de pruebas a medio crear.
+
+**Antes de abrir un PR, la suite completa igual** — correr solo un tema es para
+iterar rápido, no para dar algo por bueno. La CI corre la completa de todos
+modos.

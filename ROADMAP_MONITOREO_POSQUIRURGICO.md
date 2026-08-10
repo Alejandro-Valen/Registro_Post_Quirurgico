@@ -4,10 +4,13 @@
 > Contiene el contexto clínico, el estado actual del proyecto, y los pasos pendientes.
 > El repositorio es: https://github.com/Alejandro-Valen/Registro_Post_Quirurgico
 > Rama de integración: `Desarrollo` | Rama de **despliegue**: `produccion` |
-> Rama activa de trabajo: ninguna — la siguiente es **partir `tests.py`**, desde
-> `Desarrollo` (Sprint 5 mergeado el 29/07/2026, `sprint-6-ci` el 31/07/2026 y el
-> **Loop E el 07/08/2026**, 340 tests OK)
-> **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026
+> Rama activa de trabajo: ninguna — lo siguiente es la **decisión sobre
+> `crear_medico`**, desde `Desarrollo` (Sprint 5 mergeado el 29/07/2026,
+> `sprint-6-ci` el 31/07/2026, **Loop E el 07/08/2026** y el **reparto de
+> `tests.py` + la guardia de secretos el 10/08/2026**, 340 tests OK)
+> **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026 —
+> **siete comprobaciones** desde el 10/08/2026 (se sumaron la guardia de
+> secretos y el control de archivos de entorno)
 > **⚠️ No hay producción viva desde el 07/08/2026** — venció la prueba de Railway.
 > Mergear a `produccion` no despliega nada. Ver `docs/railway_deploy.md`.
 
@@ -95,7 +98,7 @@ Registro_Post_Quirurgico/                    ← raíz del repositorio
     │   ├── admin.py
     │   ├── urls.py
     │   ├── migrations/                    ← 0001 a 0002
-    │   ├── tests.py                       ← 18 tests
+    │   ├── tests.py                       ← 22 tests
     │   └── templates/home/
     │       ├── index.html
     │       └── contacto.html
@@ -122,8 +125,28 @@ Registro_Post_Quirurgico/                    ← raíz del repositorio
         │   ├── cron_operativo.py
         │   ├── seed_demo.py                 ← solo desarrollo
         │   └── seed_demo_produccion.py      ← demo reversible y confirmada
-        ├── migrations/                      ← 0001 a 0024
-        └── tests.py                         ← 262 tests (280 total con home)
+        ├── cron_runner.py                   ← runner compartido de los cron (Loop E, D14)
+        ├── templatetags/                     ← panel_admin (tablero de triage)
+        ├── migrations/                      ← 0001 a 0028
+        └── tests/                           ← paquete por tema desde el 10/08/2026
+            ├── __init__.py                  ← OBLIGATORIO: sin él Django no
+            │                                   recorre el paquete y el conteo
+            │                                   baja en silencio
+            ├── soporte.py                   ← ancla de reloj, medico_de_pruebas,
+            │                                   EspiaDeTareasCronMixin. NO se llama
+            │                                   test_*.py a propósito: el
+            │                                   descubridor no debe recorrerlo
+            ├── test_alert_engine.py         ← 1212 líneas
+            ├── test_admin.py                ← 1150
+            ├── test_commands.py             ← 1134
+            ├── test_bot.py                  ←  649
+            ├── test_webhook.py              ←  602
+            ├── test_models.py               ←  581
+            ├── test_alertas_persistencia.py ←  491
+            ├── test_notificaciones.py       ←  436
+            └── test_configuracion.py        ←   55
+                                                305 tests (340 total con home y
+                                                el módulo de configuración)
 ```
 
 ---
@@ -980,6 +1003,26 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   drenaje turbio y alerta ALTA por temperatura de 38,5 °C. Ambos mensajes de
   cierre `MSG_CIERRE_ALERTA_*` se recibieron sin exponer tipo ni valor clínico.
   Registro, check-in, motor y alertas quedaron coherentes y luego se limpiaron.
+
+**Mantenimiento y seguridad (10/08/2026):**
+- [x] **Partir `signos_sintomas/tests.py`** (6.288 líneas, 46 clases) en un
+  paquete `tests/` con un archivo por tema (PR #12, `427153b`). Sin cambio de
+  comportamiento: el corte se hizo por rangos de línea y se comprobó que
+  reproduce el original **byte a byte** antes de escribir nada. Los **305
+  métodos** se compararon uno a uno contra el AST del archivo original, además
+  del conteo de 340.
+- [x] **Guardia de secretos en la CI** (PR #13, `301c743`): `gitleaks` sobre la
+  historia completa más un control de que no haya ningún `.env` rastreado. La CI
+  pasa de cinco a **siete comprobaciones**. Incluye una regla propia,
+  `django-secret-key-literal`, porque gitleaks **no** detecta de fábrica una
+  `SECRET_KEY` de Django escrita a mano — el error que este proyecto ya cometió
+  en el Sprint 0.
+- [x] **Retirar el correo personal del equipo** de la documentación (aparecía
+  literal en siete lugares).
+- [ ] **Auditar la calidad de las pruebas** ahora que están repartidas por tema.
+  Al partirlas **no se revisó ninguna**, a propósito: mezclar movimiento y
+  corrección habría dejado la verificación sin poder afirmar nada. Es una sesión
+  propia, sin fecha.
 
 **Limpieza técnica menor (no bloqueante):**
 - [ ] Revisar/limpiar el dominio duplicado en Railway (si quedaron dos).

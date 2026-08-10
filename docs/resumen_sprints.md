@@ -157,6 +157,53 @@ Resumen de lo resuelto en `sprint-5-produccion` (Bloques 1-6):
 
 ---
 
+## Después del Sprint 5 — CI, Loop E y mantenimiento
+
+Esta sección se añadió el 10/08/2026 para cerrar el hueco que el archivo tenía
+entre el Sprint 5 y hoy.
+
+- **Sprint 6 · CI (31/07/2026, PR #5, `5b40c01`).** Las mismas cinco
+  comprobaciones que hasta entonces solo corrían en la máquina Windows del
+  Arquitecto pasan a ejecutarse en Linux en cada PR: suite, `check`,
+  `makemigrations --check`, `check --deploy` y la higiene del diff. **Las cinco
+  se verificaron en rojo** antes de darlas por buenas
+  (`docs/proceso/verificaciones/2026-07-31_verificacion_ci.md`). El montaje
+  destapó de paso una prueba frágil en `home`, corregida el mismo día (PR #7,
+  `dc32530`).
+
+- **Loop E · D14 (07/08/2026, PR #10, `4fc690d`).** Los dos cron recorrían sus
+  tareas sin manejo de errores: si una fallaba, las siguientes no corrían, y un
+  fallo de `cerrar_checkins_vencidos` impedía que salieran los correos de alerta
+  ALTA de todo el ciclo. Se introdujo un runner compartido
+  (`signos_sintomas/cron_runner.py`) con aislamiento **selectivo**:
+  `crear_checkins_diarios` sigue omitiéndose si falla
+  `desactivar_pacientes_vencidos`, porque continuar a ciegas generaría alertas
+  SILENCIO espurias. Suite: 337 → **340 tests**. Con él quedan implementadas las
+  **catorce decisiones D1-D14**.
+
+- **Fin de la producción en Railway (07/08/2026).** Venció el periodo de prueba.
+  El endpoint de salud responde 404 y los cron no corren. `railway_deploy.md`
+  pasó de describir el presente a ser el guion para reconstruir el despliegue.
+  La CI queda como **única red de seguridad automática** del proyecto.
+
+- **Reparto de `tests.py` (10/08/2026, PR #12, `427153b`).** El archivo de 6.288
+  líneas y 46 clases pasa a ser un paquete `tests/` de nueve archivos por tema
+  más `soporte.py`. Refactor **sin cambio de comportamiento**: el corte se hizo
+  por rangos de línea y se comprobó que reproduce el original **byte a byte**
+  antes de escribir nada. Se compararon los **305 métodos** uno a uno contra el
+  AST del archivo original, no solo el conteo de 340 — un conteo igual lo
+  cumpliría también un paquete con una prueba perdida y otra duplicada.
+
+- **Guardia de secretos (10/08/2026, PR #13, `301c743`).** La CI pasa de cinco a
+  **siete comprobaciones**: `gitleaks` sobre la historia completa y un control de
+  que git no rastree ningún `.env`. Incluye una regla propia,
+  `django-secret-key-literal`, porque gitleaks no detecta de fábrica una
+  `SECRET_KEY` de Django escrita a mano — el error que el proyecto ya cometió en
+  el Sprint 0. La clave de entonces se revisó punto por punto y está muerta;
+  queda declarada en `.gitleaksignore` con sus razones escritas.
+
+---
+
 ## Preguntas de arquitectura ya resueltas
 
 Ambas preguntas de arquitectura que quedaban abiertas ya se resolvieron:

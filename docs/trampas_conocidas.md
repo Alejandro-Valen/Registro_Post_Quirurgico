@@ -172,3 +172,52 @@ contrario vuelve a `REMOTE_ADDR`. `X-Forwarded-For` continúa descartado.
 **Canal de correo resuelto (21/07/2026):** Resend aceptó y entregó un aviso
 real sin PHI/PII. Llegó a spam por usar el dominio de prueba
 `onboarding@resend.dev`; antes del piloto se requiere dominio propio autenticado.
+
+---
+
+## Pruebas y comprobaciones locales
+
+**`check --deploy` falla en tu máquina y no es tu código (10/08/2026).**
+Ejecutado en local contra `settings_production`, aborta con
+`ImproperlyConfigured: La variable de entorno CSRF_TRUSTED_ORIGINS es
+obligatoria`. No hay nada roto: el `.env` de desarrollo no define las variables
+que esa configuración exige. La CI sí las define, y ahí pasa en verde. Si
+quieres reproducir la comprobación de la CI en local, define las mismas
+variables que `ci.yml` antes de correrlo. **No "arregles" el código por esto.**
+
+**`tests/__init__.py` no se puede borrar, y su ausencia no da error
+(10/08/2026).** Desde que `tests.py` es un paquete, Django descubre las pruebas
+solo si el paquete tiene `__init__.py`. Sin él, el directorio **no se recorre**:
+no hay excepción, no hay aviso, la suite simplemente reporta menos pruebas y
+sigue en verde. El conteo baja en silencio. Por la misma razón el archivo de
+piezas compartidas se llama `soporte.py` y **no** `test_soporte.py`: si casara
+con el patrón `test*.py`, el descubridor lo recorrería.
+
+**Un conteo de pruebas igual no prueba que no se perdió nada (10/08/2026).** Al
+partir `tests.py` se comprobó que seguían siendo 340, pero eso lo cumpliría
+también un paquete al que se le perdió una prueba y se le duplicó otra. La
+comprobación que sirve es comparar los nombres `Clase.metodo` uno a uno contra
+el archivo original. Vale para cualquier refactor futuro que mueva pruebas.
+
+## Secretos
+
+**`gitleaks` no detecta una `SECRET_KEY` de Django escrita a mano
+(10/08/2026).** Se comprobó: ninguna de sus ~170 reglas de fábrica cubre ese
+caso, que es justo el error que este proyecto cometió en el Sprint 0. Por eso
+`.gitleaks.toml` lleva una regla propia, `django-secret-key-literal`. **Si
+alguien simplifica esa configuración a `useDefault = true` y borra la regla, se
+pierde la única protección contra el error que ya ocurrió aquí.**
+
+**Un secreto de prueba escrito entero se convierte en un hallazgo real
+(10/08/2026).** El script de verificación de la guardia lleva cebos —claves
+falsas— y, escritos literalmente, `gitleaks` los encuentra **en el propio
+script** en cuanto entra en un commit: la guardia se dispara contra sí misma y
+todo escaneo da rojo. Se arman por concatenación (`"SK" + "0123..."`). La salida
+fácil sería meter esa ruta en la allowlist, y sería peor: dejaría un archivo del
+repositorio donde un secreto de verdad podría esconderse para siempre.
+
+**Cuidado con `git stash` antes de verificar (10/08/2026).** Si `.gitleaksignore`
+se va en el stash, reaparece el hallazgo histórico del Sprint 0 y **todo** da
+rojo, por un motivo que no tiene nada que ver con lo que estabas probando. Costó
+dos rondas de diagnóstico. El script de verificación ahora aborta si el árbol
+está sucio.
