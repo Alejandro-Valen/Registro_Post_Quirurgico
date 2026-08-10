@@ -25,7 +25,16 @@ email automático → resolución en ~30 min).
 | Twilio | Recepción de WhatsApp del bot | Sandbox activo y probado; faltan WhatsApp Business, número propio, facturación, plantillas y envío saliente | León/Alejandro → Médico |
 | Correo del sistema / Resend | Notificaciones genéricas de alerta ALTA | Resend por HTTPS entregó una prueba real; se usa temporalmente `onboarding@resend.dev` | León/Alejandro → Médico |
 | Dominio propio | Remitente de correo y URL pública propia | URL Railway activa; dominio propio y autenticación SPF/DKIM/DMARC pendientes | León/Alejandro → Médico |
-| Cuenta de correo del proyecto | Propiedad de Resend y contacto técnico | `seguimientolionalejo@gmail.com` usada para pruebas; definir titularidad definitiva antes de transferir | León/Alejandro → Médico |
+| Cuenta de correo del proyecto | Propiedad de Resend y contacto técnico | Una cuenta personal del equipo, usada para pruebas; definir titularidad definitiva antes de transferir | León/Alejandro → Médico |
+
+> **Por qué la cuenta de correo no aparece escrita aquí.** Hasta el 10/08/2026
+> esta tabla y otros seis lugares de la documentación llevaban la dirección
+> literal. Se sustituyó por `correo-del-proyecto@ejemplo.com` en los textos
+> narrativos y por esta descripción en la tabla: una dirección real en un
+> repositorio es material de spam y de phishing, y el dato no aporta nada que
+> el equipo no sepa de memoria. **Dónde está el valor real:** en el panel de
+> Resend y en las variables del servicio, no en git. Al transferir, se lee de
+> ahí.
 
 ## Protocolo de transferencia (al momento de la venta)
 

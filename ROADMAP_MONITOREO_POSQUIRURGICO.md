@@ -754,7 +754,7 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   a `.env.example` (sin secretos reales).
   **Prueba real end-to-end:** alerta ALTA real disparada con
   `DJANGO_SETTINGS_MODULE=...settings_production` → correo recibido en
-  `seguimientolionalejo@gmail.com`. Confirmado por el Arquitecto.
+  `correo-del-proyecto@ejemplo.com`. Confirmado por el Arquitecto.
   Datos de prueba (paciente, registro, alertas, usuario de prueba)
   eliminados después de confirmar. **159 tests OK** (sin tests nuevos —
   el envío real de SMTP no se puede probar con `manage.py test`, que
@@ -856,7 +856,7 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   del webhook. Correo genérico sin datos del paciente (migración 0024).
 - [x] **Canal real de correo en Railway:** Resend por API HTTPS activo con
   idempotencia. El aviso controlado de la alerta demo #90 fue aceptado y
-  recibido en `seguimientolionalejo@gmail.com` el 21/07/2026.
+  recibido en `correo-del-proyecto@ejemplo.com` el 21/07/2026.
 - [x] **Loop 4 — hardening web/dependencias:** Django 6.0.7, dependencias
   directas fijadas y auditadas, CSP activo y Chart.js 4.5.1 servido localmente.
 - [x] **Loop 5 — validación:** firma Twilio positiva, SID concurrente,
