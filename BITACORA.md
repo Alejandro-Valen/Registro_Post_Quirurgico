@@ -4595,6 +4595,38 @@ ambos —incluido uno institucional—, anonimizarlos exigiría reescribir la hi
 y perder los hashes que la documentación cita, y la decisión no es de una sola
 persona. Queda como decisión abierta, no como tarea pendiente.
 
+### La auditoría de cierre, y lo que encontró
+
+Antes de cerrar se auditó la propia sesión, con una regla: **un cierre tiene que
+dejar el proyecto mejor de como empezó, y eso hay que poder demostrarlo.** Todo
+se verificó con comandos, no repasando lo que decía la conversación.
+
+Lo que salió bien quedó comprobado: `Desarrollo` con los tres PR mergeados, árbol
+limpio, **340 tests OK** corridos otra vez después de los merges, y los seis
+archivos que la documentación promete existiendo de verdad en disco.
+
+**El hallazgo:** la verificación de la guardia de secretos quedó **escrita pero
+no ejecutable en esta máquina**. El script exige `gitleaks` en el `PATH`, y aquí
+no está: el binario que se usó durante la sesión vivía en una carpeta temporal
+que se borra sola. Es exactamente la distinción que esa misma sesión había
+predicado —**escrito no es probado, y probado no es usado**— aplicada contra su
+propio trabajo. Una verificación que su destinatario no puede correr es
+documentación, no verificación.
+
+Se corrigió el mismo día (PR #15, merge `7ed3fea`): el comando de instalación
+quedó en la cabecera del script y en `docs/proceso/README.md`. **`winget` sirve
+la 8.30.1, la misma versión que `ci.yml` tiene fijada**, y eso se comprobó antes
+de escribirlo. Que ambas coincidan no es cosmético: una versión distinta en local
+puede dar otro resultado y mandar a buscar un problema que no existe.
+
+De paso se borraron **16 ramas locales** que ya estaban mergeadas y solo
+ensuciaban `git branch`. Se conservaron `Desarrollo`, `produccion` y
+`sprint-5-produccion`.
+
+La auditoría también dejó anotado, sin resolver, que **las pruebas de esta sesión
+no se auditaron en calidad** (deliberado) y que la protección de rama pasó de ser
+un trámite pendiente a una decisión con coste.
+
 ### Qué queda pendiente
 
 **Lo siguiente es la decisión sobre `crear_medico`**, que reescribe la cuenta del
