@@ -1,5 +1,9 @@
-# Integración continua — las mismas cinco comprobaciones que hasta hoy solo
-# corrían en la máquina Windows del Arquitecto, ejecutadas en Linux por cada PR.
+# Integración continua — siete comprobaciones ejecutadas en Linux por cada PR.
+#
+# Cinco nacieron con esta CI (31/07/2026) y eran las que hasta entonces solo
+# corrían en la máquina Windows del Arquitecto. Las dos de seguridad —guardia
+# de secretos y archivos de entorno— se añadieron el 10/08/2026; esas nunca
+# corrieron en local, y esa es justamente la razón de que existan.
 #
 # Por qué existe: el repo recibe trabajo desde dos herramientas distintas
 # (Claude Code y Codex CLI) en sesiones que no comparten memoria. Sin esto, la
@@ -135,6 +139,48 @@ jobs:
         # produccion no hay base contra la cual comparar, y se omite.
         if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' && github.event_name == 'pull_request' }}
         run: git diff --check "${{ github.event.pull_request.base.sha }}...HEAD"
+
+      - name: Guardia de secretos
+        # Sexta comprobación, añadida el 10/08/2026.
+        #
+        # Qué mira: los ~292 commits de la historia completa, no solo el diff
+        # del PR. Tarda alrededor de un segundo, así que mirar menos no ahorra
+        # nada. El `fetch-depth: 0` del checkout es lo que lo hace posible.
+        #
+        # Por qué el binario y no la action oficial: `gitleaks-action` exige
+        # una licencia para organizaciones, y este repositorio podría pasar a
+        # una el día de mañana. El binario no depende de eso y además deja la
+        # versión fijada aquí, a la vista, en vez de moverse sola.
+        #
+        # Configuración y excepciones: `.gitleaks.toml` (incluye una regla
+        # propia para la SECRET_KEY de Django, que gitleaks no trae de fábrica)
+        # y `.gitleaksignore`, donde cada hallazgo histórico silenciado lleva
+        # escrito por qué es inofensivo.
+        if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' }}
+        env:
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          curl -sSfL -o /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks git --log-opts="--all" -c .gitleaks.toml --redact --exit-code 1 --verbose
+
+      - name: Ningún archivo de entorno rastreado
+        # El `.env` nunca se subió —desde el Sprint 0— pero hasta hoy esa
+        # garantía dependía de que nadie se equivocara una vez. `.gitignore` lo
+        # cubre solo mientras nadie use `git add -f`. Esto lo comprueba.
+        #
+        # `.env.example` sí debe estar: es la plantilla, y solo lleva
+        # marcadores de posición.
+        if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' }}
+        run: |
+          rastreados=$(git ls-files | grep -E '(^|/)\.env(\.|$)' | grep -v '\.env\.example$' || true)
+          if [ -n "$rastreados" ]; then
+            echo "::error::Hay archivos de entorno rastreados por git:"
+            echo "$rastreados"
+            exit 1
+          fi
+          echo "Ningún archivo de entorno rastreado. Solo .env.example, que es la plantilla."
 
       - name: Comprobaciones del sistema
         if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' }}

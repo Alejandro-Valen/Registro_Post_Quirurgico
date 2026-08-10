@@ -1,0 +1,40 @@
+# Hallazgos historicos revisados uno a uno y declarados inofensivos.
+#
+# Esto NO es una alfombra bajo la que barrer hallazgos. Cada linea de abajo
+# lleva su razon, y la regla es: solo entra aqui lo que se comprobo que no abre
+# nada. Un secreto que siga sirviendo se rota, no se silencia.
+#
+# Formato: commit:ruta:regla:linea
+#
+# ---------------------------------------------------------------------------
+# SECRET_KEY del Sprint 0 (`django-insecure-96...`)
+#
+# Que es. La clave que genera `django-admin startproject`, que quedo literal en
+# el `settings.py` del primer commit de configuracion.
+#
+# Por que es inofensiva, comprobado el 10/08/2026:
+#
+#   1. No la usa el codigo. `settings.py` la lee con
+#      `config_obligatoria('SECRET_KEY')` y no existe ningun valor por defecto:
+#      si la variable falta, el proyecto no arranca. Se verifico que no queda
+#      ni un `django-insecure` en todo el arbol actual.
+#   2. No la usa ningun entorno. No esta en el `.env` local, y `.env.example`
+#      solo trae el marcador `genera-una-clave-...`. El `.env` nunca se
+#      rastreo: el unico archivo de entorno que estuvo en git fue el `.example`.
+#   3. Nunca fue clave de produccion. Vivio entre `f7d25bd` y `19252d9`, en
+#      desarrollo local y meses antes de que existiera el despliegue en
+#      Railway, que siempre configuro su propia clave por variable de entorno.
+#   4. El archivo ya no existe. Estaba en `Resgistro_Post_Quirurgico/` —la
+#      carpeta con el typo que se elimino en el Sprint 1— y hoy no queda ni un
+#      archivo rastreado bajo esa ruta.
+#
+# Por que no se borra de la historia. Habria que reescribir los ~292 commits
+# con `git filter-repo`, y eso cambia todos los hashes: la BITACORA, el
+# ROADMAP y las auditorias citan hashes concretos (`4fc690d`, `5b40c01`,
+# `3a5c573`...) que quedarian apuntando al vacio. Se perderia la trazabilidad
+# de seis sprints para retirar una clave que ya no abre nada. No compensa.
+#
+# Que impide que vuelva a pasar. La regla propia `django-secret-key-literal`
+# de `.gitleaks.toml`, que gitleaks no trae de fabrica y que se escribio
+# justamente por este caso.
+f7d25bdb8bb1243a0bb5d9343547e671033f2667:Resgistro_Post_Quirurgico/Resgistro_Post_Quirurgico/settings.py:django-secret-key-literal:23

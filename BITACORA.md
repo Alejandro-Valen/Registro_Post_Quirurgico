@@ -1991,7 +1991,7 @@ cuenta a mano cada vez.
   la contraseña completa desde Google (16 caracteres, sin espacios), el
   envío fue exitoso.
 - **Prueba real end-to-end:** se creó un paciente y un médico de prueba
-  temporales (`dr_prueba_smtp`, email `seguimientolionalejo@gmail.com`),
+  temporales (`dr_prueba_smtp`, email `correo-del-proyecto@ejemplo.com`),
   se disparó una `Alerta` real de severidad ALTA corriendo con
   `DJANGO_SETTINGS_MODULE=...settings_production`, y el correo llegó
   correctamente a la bandeja — confirmado por el Arquitecto. Los datos de
@@ -3051,7 +3051,7 @@ la recepción de un correo real para declarar cerrado el Loop 4.
 
 - El Arquitecto ingresó con `medico_piloto`. En producción se verificó que la
   cuenta está activa, es staff no-superuser y solo tiene los dos demos
-  asignados. Se configuró `seguimientolionalejo@gmail.com` como destinatario.
+  asignados. Se configuró `correo-del-proyecto@ejemplo.com` como destinatario.
 - Railway documenta `X-Real-IP` como IP remota y agrega `X-Railway-Edge` a cada
   solicitud. El formulario de contacto usa esa IP solo con
   `TRUST_RAILWAY_PROXY=True`, edge de formato válido e IP parseable; conserva

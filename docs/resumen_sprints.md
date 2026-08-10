@@ -123,7 +123,7 @@ Resumen de lo resuelto en `sprint-5-produccion` (Bloques 1-6):
   mensaje clínico. Reintentos con timeout y espera creciente. Resend quedó
   integrado por API HTTPS con clave idempotente por alerta y validación de
   respuesta. Quedó activo y entregó el aviso controlado de la alerta demo #90
-  a `seguimientolionalejo@gmail.com`; el Arquitecto lo confirmó en spam.
+  a `correo-del-proyecto@ejemplo.com`; el Arquitecto lo confirmó en spam.
 - **IP tras Railway:** el rate limit del formulario usa `X-Real-IP` solo con
   `TRUST_RAILWAY_PROXY=True`, marca `X-Railway-Edge` válida e IP bien formada;
   en cualquier otro caso conserva `REMOTE_ADDR`. No confía en
@@ -152,7 +152,7 @@ Resumen de lo resuelto en `sprint-5-produccion` (Bloques 1-6):
   `cron_operativo` cada 5 minutos por el límite del plan; ejecutó en vivo
   cierre, reintento del motor y bandeja de correo. La cuenta `medico_piloto`
   fue probada por el Arquitecto, conserva `staff=True`, `superuser=False` y el
-  correo `seguimientolionalejo@gmail.com`; los pacientes ficticios del Loop 6
+  correo `correo-del-proyecto@ejemplo.com`; los pacientes ficticios del Loop 6
   ya fueron eliminados.
 
 ---
