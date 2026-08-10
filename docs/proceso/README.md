@@ -95,11 +95,17 @@ Remove-Item Env:PYTHONPATH
 **No todos se corren igual.** Los de arriba son pruebas de Django y se lanzan con
 `manage.py test`. El de la guardia de secretos **no**: es un script suelto,
 porque lo que verifica no es el comportamiento de la aplicación sino el de la
-CI. Se corre directo y necesita `gitleaks` en el `PATH`:
+CI. Se corre directo, y **necesita `gitleaks`, que la máquina de desarrollo no
+trae de fábrica**:
 
 ```powershell
+winget install Gitleaks.Gitleaks      # una sola vez; sirve la 8.30.1, la de ci.yml
+gitleaks version                       # comprobar que quedó en el PATH
 python docs/proceso/verificaciones/2026-08-10_verificacion_guardia_secretos.py
 ```
+
+Que la versión local coincida con la fijada en `ci.yml` no es cosmético: una
+distinta puede dar otro resultado y mandar a buscar un problema que no existe.
 
 Comprueba las **dos** direcciones: que tres secretos distintos detienen la CI, y
 que dos formas correctas de escribir una `SECRET_KEY` la dejan pasar. La segunda
