@@ -279,8 +279,13 @@ Por eso el push es único, con todo verde, y **mirando el log del deploy y
 - [x] **E-1** `test: reproducir que un fallo temprano del cron impide entregar alertas` — `e37e1a4`
 - [x] **E-2** `fix: aislar las tareas del cron conservando las dependencias clinicas` → D14 — `d48ba41`
 - [x] Cierre: **340 tests OK** · `check`, `makemigrations --check` y `check --deploy` sin issues · `git diff --check` limpio contra `origin/Desarrollo`
-- [ ] **Verificación del Arquitecto** — script propio en `docs/proceso/verificaciones/`
-- [ ] PR a `Desarrollo` (mirar los cinco checks de la CI: se ven pero no bloquean)
+- [x] **Verificación del Arquitecto** — `docs/proceso/verificaciones/2026-08-06_verificacion_loop_e.py`
+- [x] PR a `Desarrollo` — **PR #10, mergeado el 07/08/2026** (`4fc690d`). Con él quedan implementadas las catorce decisiones D1-D14
+
+> Desde el 10/08/2026 la CI corre **siete** comprobaciones, no cinco: se sumaron
+> la guardia de secretos (`gitleaks` sobre la historia completa) y el control de
+> que no haya ningún `.env` rastreado. **Se siguen viendo sin bloquear** — ver
+> `CLAUDE.md`, sección "Repositorio", para por qué no es un trámite de permisos.
 
 Va **después** del PR del Sprint 5, antes del piloto con pacientes reales. Motivo
 en D14: es una condición preexistente que aquella rama no empeoraba, y

@@ -27,7 +27,7 @@ que se desactiva — ese check-in quedaría PENDIENTE para siempre (el
 paciente ya no responde) y terminaría generando una alerta SILENCIO
 espuria cuando `cerrar_checkins_vencidos` lo cierre. Este orden está
 protegido por el test `test_scheduler_no_crea_checkins_tras_desactivacion`
-en `signos_sintomas/tests.py`.
+en `signos_sintomas/tests/test_commands.py`.
 
 `cerrar_checkins_vencidos` corre dos veces al día porque hay 2 check-ins
 (mañana y tarde) con sus propias ventanas de gracia de 10 horas — una

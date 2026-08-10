@@ -8,7 +8,7 @@ automático. Se ejecuta diario junto con crear_checkins_diarios, pero
 ANTES de este (no después) — así el paciente que justo vence ese día no
 recibe un check-in que después quedaría PENDIENTE para siempre y
 terminaría generando una alerta SILENCIO espuria (ver
-test_scheduler_no_crea_checkins_tras_desactivacion en tests.py).
+test_scheduler_no_crea_checkins_tras_desactivacion en tests/test_commands.py).
 
 Idempotente: solo actúa sobre pacientes con activo=True, así que correrlo
 dos veces el mismo día no tiene efecto la segunda vez.

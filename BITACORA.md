@@ -4467,3 +4467,150 @@ Pendientes menores, ninguno bloqueante:
 - **Los nombres de dos servicios de Railway tienen espacios pegados**
   (`"cron-manana "`, `" cron-tarde"`). Se arregla cuando se reconstruya el
   despliegue.
+
+---
+
+## Partir `tests.py`, y una guardia de secretos para la CI
+**Fecha:** 10/08/2026
+**Responsable:** León (Arquitecto) con Claude Code
+**Estado:** DOS RAMAS CERRADAS Y MERGEADAS ✅ — PR #12 (`427153b`) y PR #13 (`301c743`)
+
+### Qué se hizo
+
+Dos trabajos, cada uno en su rama, ninguno de lógica clínica.
+
+**1 · `signos_sintomas/tests.py` es ahora un paquete `tests/`.** El archivo tenía
+6.288 líneas y 46 clases. Quedó repartido en nueve archivos por tema más un
+`soporte.py`. Se siguió `docs/proceso/2026-08-07_instruccion_partir_tests.md`.
+
+| Archivo | Líneas | Qué agrupa |
+|---|---:|---|
+| `test_alert_engine.py` | 1212 | Reglas clínicas del motor |
+| `test_admin.py` | 1150 | Panel, triage, aislamiento por médico |
+| `test_commands.py` | 1134 | Management commands y los dos cron |
+| `test_bot.py` | 649 | Máquina de estados y respuestas |
+| `test_webhook.py` | 602 | Firma de Twilio, rate limit, concurrencia, carga |
+| `test_models.py` | 581 | Campos, constraints, validaciones |
+| `test_alertas_persistencia.py` | 491 | Cola de evaluación, deduplicación, evidencia |
+| `test_notificaciones.py` | 436 | Bandeja de correo y reintentos |
+| `test_configuracion.py` | 55 | Configuración de producción |
+
+Son **nueve y no los siete** que sugería el guion, por medida y no por gusto:
+fusionar la persistencia de alertas dentro del motor dejaba ese archivo en ~1.670
+líneas, por encima del límite de 1.500 que el propio guion fija; y
+`CacheProductionConfigTests` no encajaba con honestidad en ninguno de los otros
+ocho. El guion decía explícitamente que el reparto lo decide quien lo haga.
+
+**Cómo se garantizó que no se recreó ninguna prueba.** Es lo importante de este
+trabajo: mover 6.288 líneas a mano es reescribirlas. El corte lo hizo un script
+por **rangos de línea exactos**, y antes de escribir nada en disco comprobó que
+la concatenación de la cabecera más los 46 bloques **reproduce el archivo
+original byte a byte**. Si sobraba o faltaba una línea, abortaba. Los únicos
+cambios de texto sobre los cuerpos son los **10 imports relativos** que suben un
+nivel al bajar a subpaquete (`from .x` a `from ..x`).
+
+**Cómo se comprobó que no se perdió nada.** El conteo de 340 por sí solo no
+prueba gran cosa: lo cumpliría igual un paquete al que se le perdió una prueba y
+se le duplicó otra. Se comparó **nombre por nombre**:
+
+- **305 métodos** de prueba de `signos_sintomas`, comparados uno a uno como
+  `Clase.metodo` contra el AST del archivo original: conjunto idéntico.
+- **46 clases**, ninguna perdida ni aparecida.
+- Lo que construye el **descubridor de Django** coincide exactamente con eso.
+- Suite completa: **340 tests OK**, igual que antes.
+
+**El modo de fallo que advertía el guion** —un subpaquete sin `__init__.py` que
+Django deja de recorrer, bajando el conteo en silencio— se cubrió por los dos
+lados: `tests/__init__.py` existe con un comentario que explica por qué no puede
+borrarse, y el archivo compartido se llama `soporte.py` y **no**
+`test_soporte.py`, para que el descubridor no lo recorra y no pueda mover el
+conteo en ninguna dirección.
+
+**2 · La CI pasó de cinco comprobaciones a siete.** Guardia de secretos
+(`gitleaks` 8.30.1, versión fijada, sobre la historia completa: 294 commits en
+794 ms) y una comprobación de que git no rastrea ningún `.env` salvo la
+plantilla.
+
+`.gitleaks.toml` extiende las ~170 reglas de fábrica con **una propia**,
+`django-secret-key-literal`. Se escribió porque se comprobó que gitleaks **no
+detecta** una `SECRET_KEY` de Django escrita a mano, y ese es justamente el error
+que este proyecto ya cometió en el Sprint 0.
+
+También se retiró de la documentación el **correo personal** que el equipo usaba
+para las pruebas de Resend: aparecía literal en siete lugares.
+
+### Problemas encontrados y cómo se resolvieron
+
+**El `.env` nunca se subió, pero eso dependía de que nadie fallara una vez.** Es
+lo que motivó la guardia. Comprobado de paso, sin hallazgos: ningún `.env`
+rastreado salvo `.env.example`, ningún `.pyc` rastreado, y los 157 teléfonos del
+repositorio son todos ficticios.
+
+**La `SECRET_KEY` del Sprint 0 sigue en la historia.** Se revisó punto por punto
+y está muerta: no la usa el código (`config_obligatoria`, sin valor por defecto),
+no está en ningún `.env`, nunca fue clave de producción —vivió entre `f7d25bd` y
+`19252d9`, en local y meses antes de que existiera Railway— y el archivo que la
+contenía desapareció con la carpeta del typo en el Sprint 1. Queda declarada en
+`.gitleaksignore` **con esas cuatro comprobaciones escritas**. No se reescribió
+la historia para retirarla: cambiaría los ~292 hashes que esta BITÁCORA y las
+auditorías citan, y se perdería la trazabilidad de seis sprints por una clave que
+ya no abre nada.
+
+**Dos tropiezos en la verificación de la guardia, los dos del tipo que da por
+bueno un arnés roto.** Quedan escritos en la cabecera del script de verificación:
+
+1. Se hizo `git stash` antes de correr la verificación, y eso se llevó
+   `.gitleaksignore` fuera del árbol: reapareció el hallazgo histórico y **los
+   cinco casos dieron rojo**, incluidos los dos que debían pasar. Los tres que
+   "pasaban" lo hacían **por la razón equivocada**. Comprobar solo la mitad de
+   los casos —los que deben fallar— habría dado el arnés por bueno. Por eso la
+   verificación tiene las dos mitades: secretos que deben detener la CI, y código
+   correcto que no debe detenerla.
+2. Los cebos escritos enteros hacían que gitleaks los encontrara **en el propio
+   script de verificación**: la guardia se disparaba contra sí misma. La salida
+   fácil era meter esa ruta en la allowlist, y no se hizo: dejaría un archivo del
+   repositorio donde un secreto real podría esconderse para siempre. Se arman por
+   concatenación. Obligó a rehacer la rama antes de pushear para que el commit
+   con los cebos literales no quedara en la historia.
+
+**`check --deploy` falla en la máquina local**, y no es del refactor: falta
+`CSRF_TRUSTED_ORIGINS` en el `.env` de desarrollo. Repetido con las variables que
+define la CI, queda en verde. Conviene saberlo antes de asustarse.
+
+### El hallazgo sobre la protección de rama
+
+Los documentos venían diciendo que la protección de rama estaba **"pendiente de
+Alejandro, que es quien tiene permisos de admin"**. Se comprobó contra la API de
+GitHub y **eso está incompleto**: la API de rulesets responde *"Upgrade to GitHub
+Pro or make this repository public"*. Ese 403 no habla de permisos, habla del
+**plan de la cuenta**. En un repositorio **privado** de una cuenta personal sin
+GitHub Pro, la protección de rama **no está disponible para nadie, ni siquiera
+para el dueño**. Darle permisos de admin a alguien no desbloquea nada.
+
+Las salidas reales son tres: GitHub Pro (~4 USD/mes en la cuenta del dueño),
+hacer el repositorio público, o seguir con la compuerta humana de mirar los siete
+checks antes de mergear. Se evaluó hacer el repositorio público en esta misma
+sesión y **se descartó**: publicar expone los 308 commits con los correos de
+ambos —incluido uno institucional—, anonimizarlos exigiría reescribir la historia
+y perder los hashes que la documentación cita, y la decisión no es de una sola
+persona. Queda como decisión abierta, no como tarea pendiente.
+
+### Qué queda pendiente
+
+**Lo siguiente es la decisión sobre `crear_medico`**, que reescribe la cuenta del
+médico —contraseña, grupos y permisos— en **cada arranque** del servicio web. No
+es trabajo de código: es una decisión que hay que tomar antes de programar. Guion
+en `docs/proceso/2026-08-10_instruccion_crear_medico.md`.
+
+Pendientes menores, ninguno bloqueante:
+
+- **Protección de rama:** ya no es "pedirle permisos a Alejandro" sino decidir
+  entre GitHub Pro, repositorio público, o dejarlo como está.
+- La versión de PostgreSQL de Railway sigue sin documentar; en pausa mientras no
+  haya producción.
+- **Los nombres de dos servicios de Railway tienen espacios pegados**
+  (`"cron-manana "`, `" cron-tarde"`). Se arregla cuando se reconstruya el
+  despliegue.
+- Ninguna prueba floja se arregló al partir `tests.py`, a propósito. Tampoco se
+  auditó su calidad: no era el encargo, y no se leyeron a fondo las 6.288 líneas.
+  Si algún día se hace, es una sesión propia.
