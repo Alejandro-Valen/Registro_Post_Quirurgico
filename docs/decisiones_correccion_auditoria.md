@@ -36,9 +36,16 @@ la entrada de `BITACORA.md` del 22/07/2026 (informe y hallazgos).
 | [D12](#d12) | Todo paciente activo tiene un médico responsable | cierre 2 | D | Aceptada |
 | [D13](#d13) | La autenticidad del webhook no depende del entorno | cierre 3 | D | Aceptada |
 | [D14](#d14) | Aislamiento entre las tareas de un mismo cron | cierre (d) | E | **Implementada** (06/08/2026) |
+| [D15](#d15) | Qué reescribe `crear_medico` en cada arranque | revisión PR 8 | — | **Decidida** (12/08/2026) — pendiente de implementar |
 
 Los hallazgos 2, 6, 7, 8, 9, 11 y 14 son correcciones técnicas sin decisión de
 producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
+
+**D15 no viene de ninguna de las dos auditorías.** Salió del punto 8 de la
+revisión de cierre del PR del Sprint 5 (`docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`),
+que la primera lectura de ese mismo PR no había visto. No tiene loop asignado:
+se decidió en su propia sesión, siguiendo el guion
+`docs/proceso/2026-08-10_instruccion_crear_medico.md`.
 
 **D11, D12 y D13 vienen de una auditoría posterior**, la de cierre pre-merge del
 27/07/2026 — informe y verificación en
@@ -59,17 +66,19 @@ código antes de aceptarlas.
 > **Se actualiza en CADA cierre de sesión, aunque quede a mitad de un loop.**
 > Es lo primero que debe leer quien retome el trabajo.
 
-**Última actualización:** 06/08/2026
-**Punto alcanzado:** **LOOP E IMPLEMENTADO, PENDIENTE DE VERIFICACIÓN.** Los dos
-commits están hechos —`e37e1a4` (E-1, en rojo y entendido) y `d48ba41` (E-2)— y
-la suite quedó en **340 tests OK**, con `check`, `makemigrations --check`,
-`check --deploy` y `git diff --check` limpios. **D14 queda implementada**, y con
-ella las catorce decisiones. Los Loops A, B, C y D estaban cerrados y verificados
-desde el 27/07; el Sprint 5 se mergeó el 29/07 y la CI el 31/07.
+**Última actualización:** 12/08/2026
+**Punto alcanzado:** **LOS CINCO LOOPS CERRADOS; D1-D14 IMPLEMENTADAS Y
+MERGEADAS.** El Loop E se verificó con un script propio
+(`docs/proceso/verificaciones/2026-08-06_verificacion_loop_e.py`) y entró a
+`Desarrollo` el 07/08/2026 (PR #10, `4fc690d`). Los Loops A, B, C y D estaban
+cerrados y verificados desde el 27/07; el Sprint 5 se mergeó el 29/07 y la CI el
+31/07. Suite comprobada de nuevo el 12/08/2026 sobre `c1ec1ca`: **340 tests OK**
+en 264 s.
 
-**Siguiente paso: la verificación del Arquitecto** — un script propio en
-`docs/proceso/verificaciones/`, y después el PR a `Desarrollo`. Ojo: los cinco
-checks de la CI **se ven pero no bloquean** (falta protección de rama), así que
+**Siguiente paso: implementar D15** —lo único pendiente de esta lista—, en rama
+propia desde `Desarrollo` y empezando por el test en rojo. Ojo: los **siete**
+checks de la CI **se ven pero no bloquean** (no hay protección de rama, y no es
+un trámite de permisos — ver `CLAUDE.md`, sección "Repositorio"), así que
 mirarlos antes de mergear sigue siendo manual.
 
 **Rama:** `loop-e-aislar-cron` · **Restauración segura:** `e103c8e`
@@ -1292,6 +1301,138 @@ servicios cron (ver `CLAUDE.md`, "Por resolver antes del piloto real", punto 5).
 Al mejorar el plan, `cron-operativo` pasa a servicio propio y `cron-tarde`
 vuelve a su horario original — y buena parte de este acoplamiento desaparece por
 sí solo. D14 es lo que hace que el sistema sea correcto **mientras tanto**.
+
+---
+
+## D15 — Qué reescribe `crear_medico` en cada arranque
+
+**Hallazgo:** revisión de cierre del PR del Sprint 5, punto 8 · **Loop:** — ·
+**Estado:** **Decidida** (12/08/2026), **pendiente de implementar.**
+Guion de la sesión: `docs/proceso/2026-08-10_instruccion_crear_medico.md`.
+
+### Problema
+
+`crear_medico` corre en **cada arranque** del servicio web, encadenado con `&&`
+en los dos sitios que levantan la app: `Dockerfile:37` y `nixpacks.toml`,
+`[start]`. Sobre una cuenta que **ya existe** ejecuta igual, sin preguntar:
+
+```python
+user.email = email              # crear_medico.py:84
+user.is_staff = True
+user.is_superuser = False
+user.set_password(password)     # :87  reescribe la contraseña SIEMPRE
+user.save()
+user.groups.set([grupo])        # :89  reemplaza los grupos
+user.user_permissions.clear()   # :90  borra permisos individuales
+```
+
+Son **tres** efectos distintos, con consecuencias que no se parecen entre sí:
+
+1. **La contraseña vuelve al valor de la variable de entorno.** Si el médico
+   cambia su clave en el Admin, el siguiente despliegue o reinicio se la revierte
+   **en silencio**. No hay aviso ni error: la cuenta simplemente vuelve a la
+   contraseña del operador.
+2. **Los permisos concedidos a mano desaparecen.** `groups.set` + `clear()`
+   devuelven la cuenta al perfil del grupo `Médicos`.
+3. **El correo se borra si falta la variable.** `email` sale de
+   `os.environ.get('DJANGO_MEDICO_EMAIL', '')` y se asigna **siempre**, sin la
+   guarda `if email:` que su gemelo `crear_admin.py:47` sí tiene. Con
+   `DJANGO_MEDICO_USERNAME`/`PASSWORD` puestas y `EMAIL` ausente, cada arranque
+   deja el campo vacío. **Y ese campo es el destinatario de las alertas:**
+   `notificaciones.py:105-106` y `signals.py:32` leen `medico.email`; sin él,
+   `_enviar` levanta `DestinatarioNoConfigurado` (`notificaciones.py:109`) y la
+   alerta ALTA **no llega al médico**. Queda registrada como entrega fallida, no
+   se pierde sin rastro, pero no llega.
+
+**Nada de esto está fijado por una prueba.** `CrearMedicoCommandTests`
+(`tests/test_commands.py:776`) tiene tres casos —sin credenciales, creación
+nueva, y rechazo de superusuario— y **ninguno ejercita la cuenta que ya existe**,
+que es justo el caso del problema. Su gemelo `CrearAdminCommandTests:761` sí
+tiene `test_actualiza_password_de_usuario_existente`. La diferencia importa: en
+`crear_admin` la reescritura es un requisito decidido y probado —su propio
+docstring la declara y explica cómo desactivarla—; en `crear_medico` es un efecto
+heredado de copiar la forma, que **nadie decidió y nada protege.**
+
+### Decisión
+
+**`crear_medico` hace lo que su nombre dice: crear.** Reescribe solo cuando
+alguien lo pide a propósito — con una excepción deliberada, los permisos.
+
+1. **La contraseña no se toca si la cuenta ya existe.** `set_password` se ejecuta
+   únicamente cuando el usuario se crea.
+2. **Vía explícita para rotarla:** con `DJANGO_MEDICO_RESET=1` en el entorno, el
+   comando sí reescribe las credenciales. La guarda vive **dentro del comando**,
+   en Python, no en el shell del arranque.
+3. **Los grupos y los permisos individuales se siguen reescribiendo en cada
+   arranque.** No es un descuido: es la garantía de privilegio mínimo, y a partir
+   de esta ficha es comportamiento **declarado**, no efecto colateral.
+4. **El correo deja de borrarse.** Se le añade la misma guarda `if email:` que
+   tiene `crear_admin`.
+
+### Razonamiento
+
+**Por qué la contraseña sí y los permisos no.** Es la pregunta que decide la
+ficha, y las dos mitades tienen respuestas opuestas a propósito. Una persona
+espera **gobernar su propia contraseña**: que un despliegue se la revierta sin
+avisar es una promesa rota, y encima obliga a que el operador conozca la clave
+del médico para siempre. Nadie, en cambio, espera gobernar sus propios permisos.
+En una cuenta con acceso a datos clínicos, que el perfil sea reproducible y
+vuelva siempre al aprobado vale más que la comodidad de conceder un permiso
+suelto desde el Admin: un permiso extra que sobrevive callado a los despliegues
+es una cuenta que deriva sin que nadie lo note. Si el médico necesita más
+permisos, se cambian los del grupo `Médicos` en `PERMISOS_MEDICO` y quedan
+escritos en el repositorio, que es donde deben verse.
+
+**Por qué una variable de entorno y no un flag de línea de comandos.** El
+arranque es un comando fijo dentro del `Dockerfile` y de `nixpacks.toml`; añadir
+`--forzar-credenciales` ahí lo dejaría permanente, que es exactamente lo que se
+quiere evitar. Una variable se pone y se quita desde el panel del servicio sin
+tocar código. Además **el proyecto ya usa ese patrón**: `Dockerfile:35` hace
+`[ "$RESET_AXES" = "1" ] && ... axes_reset`. No se inventa un mecanismo nuevo.
+
+**Por qué la guarda va en Python y no en el shell, como sí está la de axes.**
+Porque los dos archivos de arranque **ya divergen**: el bloque de `RESET_AXES`
+está en el `Dockerfile` y **no** en `nixpacks.toml`. Una guarda escrita en el
+shell hay que acordarse de replicarla en los dos sitios, y el precedente dice que
+eso no ocurre. Dentro del comando protege igual, lo invoque quien lo invoque.
+
+**Por qué el correo entra en esta ficha y no en otra.** Es el mismo comando, el
+mismo arranque y el mismo tipo de fallo —reescribir en silencio algo que nadie
+pidió—, y son tres líneas del mismo archivo. Separarlo sería ceremonia sin
+beneficio, con el agravante de dejar conocido y sin arreglar un fallo que afecta
+la **entrega de alertas clínicas**.
+
+**Lo que esta decisión no resuelve.** `crear_medico` sigue **sin `|| true`** en
+el arranque, así que aborta el despliegue si solo una de
+`DJANGO_MEDICO_USERNAME`/`PASSWORD` está definida, o si el usuario resulta ser
+superusuario. Es deliberado —un error de configuración de una cuenta con acceso
+clínico debe ser ruidoso— y queda documentado en `docs/trampas_conocidas.md`. No
+se toca aquí.
+
+**Qué desbloquea.** La decisión abierta de `medico_piloto` (CLAUDE.md, "Por
+resolver antes del piloto real", punto 2): hoy esa cuenta **no puede tener una
+contraseña propia que sobreviva a un despliegue**, y por eso la pregunta de si se
+transfiere o se crea una nueva no era solo administrativa. Implementada D15, deja
+de serlo.
+
+### Implementación pendiente
+
+Rama propia desde `Desarrollo`, con el método del proyecto:
+
+1. **Test en rojo primero**, y es el que hoy falta: una prueba que cree la cuenta,
+   le cambie la contraseña como lo haría el médico desde el Admin, vuelva a
+   correr `crear_medico`, y compruebe que la contraseña **sobrevive**. Contra el
+   código actual tiene que fallar. Con ella, otras dos: que
+   `DJANGO_MEDICO_RESET=1` sí la reescribe, y que sin `DJANGO_MEDICO_EMAIL` el
+   correo no se borra.
+2. Después el código, y el docstring del comando diciendo qué reescribe y qué no.
+3. Documentos dueños en el mismo lote: `docs/trampas_conocidas.md` (hoy lleva la
+   advertencia operativa, que pasa a describir el comportamiento nuevo) y
+   `docs/railway_deploy.md` (la variable `DJANGO_MEDICO_RESET`).
+
+**Sin producción no se puede verificar el arranque real** (Railway venció el
+07/08/2026), y no hace falta: lo que cambia es el comportamiento del comando,
+que se comprueba con la suite y con la CI.
 
 ---
 
