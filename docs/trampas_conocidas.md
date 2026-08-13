@@ -132,15 +132,40 @@ consecuencias que hay que tener presentes:
   `DJANGO_MEDICO_USERNAME` / `DJANGO_MEDICO_PASSWORD` está definida, o si ese
   usuario resulta ser superusuario.
 
-**`crear_medico` reescribe la cuenta del médico en CADA arranque.** No es solo
-"crear si no existe": sobre un usuario que ya existe ejecuta igual
-`set_password(...)`, `is_staff = True`, `groups.set([...])` y
-`user_permissions.clear()`. Si el médico cambia su contraseña en el Admin, **el
-siguiente despliegue o reinicio la revierte en silencio** al valor de la variable
-de entorno, y borra los permisos que se le hubieran concedido a mano. Tenerlo en
-cuenta antes de entregarle la cuenta a una persona que espera gobernar su propia
-contraseña — ver `docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`,
-punto 8.
+**`crear_medico` corre en CADA arranque, y desde el 12/08/2026 sabe distinguir
+qué debe reescribir.** Hasta esa fecha reescribía todo: sobre un usuario que ya
+existía ejecutaba igual `set_password(...)`, `user.email = ...`,
+`groups.set([...])` y `user_permissions.clear()`, así que un médico que cambiaba
+su contraseña en el Admin **se la veía revertida en silencio** en el siguiente
+despliegue. La decisión **D15** lo separó en tres comportamientos distintos, y
+conviene conocerlos antes de tocar la cuenta:
+
+- **La contraseña ya no se toca** si la cuenta existe. La elige el médico y le
+  sobrevive a los despliegues.
+- **Para rotarla hay que pedirlo:** `DJANGO_MEDICO_RESET=1` en el servicio, un
+  reinicio, y **quitar la variable después** — si se queda puesta, vuelve el
+  comportamiento viejo en cada arranque. Mismo convenio que `RESET_AXES`: el
+  valor tiene que ser exactamente `1`.
+- **Los grupos y permisos individuales SÍ se reescriben**, a propósito: el
+  privilegio mínimo es declarativo. Un permiso concedido a mano desde el Admin
+  **desaparece en el siguiente arranque**. Para ampliar lo que puede hacer el
+  médico se edita `PERMISOS_MEDICO` en el propio comando, no la cuenta.
+
+**Cómo saber cuál de los tres casos ocurrió:** el comando lo dice en el log del
+despliegue — `creada con privilegio mínimo`, `permisos al día; contraseña sin
+tocar`, o `credenciales reescritas por DJANGO_MEDICO_RESET=1`. Es lo primero que
+hay que mirar cuando el médico reporte que no puede entrar.
+
+Razonamiento completo en `docs/decisiones_correccion_auditoria.md`, ficha D15;
+el hallazgo que lo originó, en
+`docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`, punto 8.
+
+**Trampa asociada, esta sigue viva:** `DJANGO_MEDICO_EMAIL` alimenta el campo que
+`notificaciones.py` usa como **destinatario de las alertas**. Hasta el
+12/08/2026, si esa variable faltaba, cada arranque vaciaba el correo del médico y
+las alertas ALTA morían en `DestinatarioNoConfigurado`. Ya no se vacía solo —
+pero si nunca se definió, el campo sigue vacío y el resultado es el mismo. **Al
+crear la cuenta, comprobar que el médico tiene correo.**
 
 **Los comandos de datos de ejemplo están acotados, pero conviene saber cómo.**
 `seed_demo` **se niega a correr con `DEBUG=False`**, así que es inerte en
