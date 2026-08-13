@@ -36,7 +36,7 @@ la entrada de `BITACORA.md` del 22/07/2026 (informe y hallazgos).
 | [D12](#d12) | Todo paciente activo tiene un médico responsable | cierre 2 | D | Aceptada |
 | [D13](#d13) | La autenticidad del webhook no depende del entorno | cierre 3 | D | Aceptada |
 | [D14](#d14) | Aislamiento entre las tareas de un mismo cron | cierre (d) | E | **Implementada** (06/08/2026) |
-| [D15](#d15) | Qué reescribe `crear_medico` en cada arranque | revisión PR 8 | — | **Decidida** (12/08/2026) — pendiente de implementar |
+| [D15](#d15) | Qué reescribe `crear_medico` en cada arranque | revisión PR 8 | — | **Implementada** (12/08/2026) |
 
 Los hallazgos 2, 6, 7, 8, 9, 11 y 14 son correcciones técnicas sin decisión de
 producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
@@ -75,8 +75,12 @@ cerrados y verificados desde el 27/07; el Sprint 5 se mergeó el 29/07 y la CI e
 31/07. Suite comprobada de nuevo el 12/08/2026 sobre `c1ec1ca`: **340 tests OK**
 en 264 s.
 
-**Siguiente paso: implementar D15** —lo único pendiente de esta lista—, en rama
-propia desde `Desarrollo` y empezando por el test en rojo. Ojo: los **siete**
+**D15 quedó implementada el mismo 12/08/2026** en la rama
+`crear-medico-no-reescribe` (`84b684c` test en rojo, `2e02384` corrección), con
+la suite en **344 tests OK** y los dos sabotajes de verificación documentados en
+la propia ficha. Con ella, **las quince decisiones están implementadas.**
+
+**Siguiente paso: el PR a `Desarrollo`.** Ojo: los **siete**
 checks de la CI **se ven pero no bloquean** (no hay protección de rama, y no es
 un trámite de permisos — ver `CLAUDE.md`, sección "Repositorio"), así que
 mirarlos antes de mergear sigue siendo manual.
@@ -1415,24 +1419,49 @@ contraseña propia que sobreviva a un despliegue**, y por eso la pregunta de si 
 transfiere o se crea una nueva no era solo administrativa. Implementada D15, deja
 de serlo.
 
-### Implementación pendiente
+### Implementación — hecha el 12/08/2026
 
-Rama propia desde `Desarrollo`, con el método del proyecto:
+Rama `crear-medico-no-reescribe`, con el método del proyecto.
 
-1. **Test en rojo primero**, y es el que hoy falta: una prueba que cree la cuenta,
-   le cambie la contraseña como lo haría el médico desde el Admin, vuelva a
-   correr `crear_medico`, y compruebe que la contraseña **sobrevive**. Contra el
-   código actual tiene que fallar. Con ella, otras dos: que
-   `DJANGO_MEDICO_RESET=1` sí la reescribe, y que sin `DJANGO_MEDICO_EMAIL` el
-   correo no se borra.
-2. Después el código, y el docstring del comando diciendo qué reescribe y qué no.
-3. Documentos dueños en el mismo lote: `docs/trampas_conocidas.md` (hoy lleva la
-   advertencia operativa, que pasa a describir el comportamiento nuevo) y
-   `docs/railway_deploy.md` (la variable `DJANGO_MEDICO_RESET`).
+| Commit | Contenido |
+|---|---|
+| `84b684c` | `test: reproducir que crear_medico reescribe la cuenta en cada arranque` — cuatro pruebas |
+| `2e02384` | `fix: crear_medico deja de reescribir contrasena y correo en cada arranque` |
 
-**Sin producción no se puede verificar el arranque real** (Railway venció el
-07/08/2026), y no hace falta: lo que cambia es el comportamiento del comando,
-que se comprueba con la suite y con la CI.
+**El rojo, con su mensaje exacto.** De las cuatro pruebas, dos nacieron en rojo y
+son el hallazgo reproducido: la contraseña elegida por la médica no sobrevivía
+(`False is not true`) y el correo se vaciaba (`'' != 'doctora@example.com'`). El
+borrado del email pasó así de deducción leyendo el código a hecho reproducido.
+
+**Las dos que nacieron en verde, y por qué no es lo mismo.** La de los permisos
+declarativos pasa por la **razón correcta**: fija como requisito algo que ya
+funcionaba así y que esta ficha decide conservar. La de `DJANGO_MEDICO_RESET=1`
+pasaba por la **razón equivocada** —el comando reescribía siempre, mirara o no la
+variable—, así que antes del `fix` no demostraba nada.
+
+**Verificación en las dos direcciones (dos sabotajes, restaurados con `git
+checkout --`):**
+
+| Sabotaje | Resultado |
+|---|---|
+| `if creado or forzar_credenciales` → `if creado` (ignorar la variable de reset) | Cae `test_reset_explicito_si_reescribe_la_password`, **y solo esa** |
+| Retirar `user.user_permissions.clear()` | Cae `test_los_permisos_si_vuelven_al_perfil_aprobado_en_cada_arranque`, **y solo esa** |
+
+El segundo sabotaje dejó un dato que conviene registrar: la prueba que **ya
+existía** (`test_crea_staff_no_superusuario_sin_permisos_extra`) **no cayó**.
+Comprueba `user_permissions.count() == 0` sobre una cuenta recién creada, que no
+tiene permisos individuales de todas formas — así que hasta hoy **nada protegía
+el `clear()`**. Es el mismo patrón del hallazgo bloqueante del 22/07: una prueba
+escrita mirando el código, verde por una razón distinta de la que dice medir.
+
+**Cierre:** **344 tests OK** (340 + 4) · `check`, `makemigrations --check` y
+`check --deploy` sin issues · `git diff --check` limpio.
+
+**Sin producción no se pudo verificar el arranque real** (Railway venció el
+07/08/2026), y no hacía falta: lo que cambia es el comportamiento del comando,
+no el encadenado del `CMD`. Queda un tramo que **ninguna prueba local cubre** y
+conviene no darlo por probado: que Railway entregue `DJANGO_MEDICO_RESET` al
+contenedor. Eso solo se ve desplegando, cuando haya plan de pago.
 
 ---
 

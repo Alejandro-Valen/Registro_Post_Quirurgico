@@ -844,6 +844,99 @@ class CrearMedicoCommandTests(TestCase):
         self.assertTrue(user.is_superuser)
         self.assertTrue(user.check_password('clave-original'))
 
+    # --- D15: qué reescribe el comando en cada arranque, y qué no ---
+
+    ENTORNO_MEDICO = {
+        'DJANGO_MEDICO_USERNAME': 'doctora',
+        'DJANGO_MEDICO_PASSWORD': 'clave-del-operador',
+        'DJANGO_MEDICO_EMAIL': 'doctora@example.com',
+    }
+
+    def _arrancar(self, **extra):
+        """Simula un arranque del servicio web: crear_medico con su entorno."""
+        import os
+        from unittest.mock import patch
+        from django.core.management import call_command
+
+        entorno = dict(self.ENTORNO_MEDICO, **extra)
+        with patch.dict(os.environ, entorno, clear=True):
+            call_command('crear_medico', verbosity=0)
+
+    def test_no_reescribe_la_password_de_una_cuenta_existente(self):
+        """La contraseña que el médico elige sobrevive al siguiente arranque."""
+        self._arrancar()
+
+        User = get_user_model()
+        medica = User.objects.get(username='doctora')
+        medica.set_password('la-que-eligio-ella')  # cambio desde el Admin
+        medica.save()
+
+        self._arrancar()  # despliegue o reinicio del servicio
+
+        medica.refresh_from_db()
+        self.assertTrue(medica.check_password('la-que-eligio-ella'))
+        self.assertFalse(medica.check_password('clave-del-operador'))
+
+    def test_reset_explicito_si_reescribe_la_password(self):
+        """DJANGO_MEDICO_RESET=1 es la vía para rotar una contraseña filtrada."""
+        self._arrancar()
+
+        User = get_user_model()
+        medica = User.objects.get(username='doctora')
+        medica.set_password('la-que-eligio-ella')
+        medica.save()
+
+        self._arrancar(DJANGO_MEDICO_RESET='1')
+
+        medica.refresh_from_db()
+        self.assertTrue(medica.check_password('clave-del-operador'))
+
+    def test_sin_variable_de_email_no_borra_el_correo(self):
+        """El correo es el destinatario de las alertas: no se vacía solo."""
+        self._arrancar()
+
+        User = get_user_model()
+        entorno_sin_email = {
+            'DJANGO_MEDICO_USERNAME': 'doctora',
+            'DJANGO_MEDICO_PASSWORD': 'clave-del-operador',
+        }
+        import os
+        from unittest.mock import patch
+        from django.core.management import call_command
+        with patch.dict(os.environ, entorno_sin_email, clear=True):
+            call_command('crear_medico', verbosity=0)
+
+        medica = User.objects.get(username='doctora')
+        self.assertEqual(medica.email, 'doctora@example.com')
+
+    def test_los_permisos_si_vuelven_al_perfil_aprobado_en_cada_arranque(self):
+        """Decisión deliberada de D15: el privilegio mínimo es declarativo.
+
+        A diferencia de la contraseña, un permiso concedido a mano NO sobrevive
+        al arranque. Esta prueba nace en verde a propósito — fija como requisito
+        un comportamiento que hoy ya existe, para que nadie lo cambie sin
+        decidirlo.
+        """
+        from django.contrib.auth.models import Permission
+
+        self._arrancar()
+
+        User = get_user_model()
+        medica = User.objects.get(username='doctora')
+        medica.user_permissions.add(
+            Permission.objects.get(codename='delete_alerta')
+        )
+        self.assertTrue(medica.has_perm('signos_sintomas.delete_alerta'))
+
+        self._arrancar()
+
+        medica = User.objects.get(username='doctora')  # sin caché de permisos
+        self.assertEqual(medica.user_permissions.count(), 0)
+        self.assertFalse(medica.has_perm('signos_sintomas.delete_alerta'))
+        self.assertEqual(
+            list(medica.groups.values_list('name', flat=True)), ['Médicos'],
+        )
+
 class SeedDemoTests(TestCase):
     """A-3 — guard de entorno y usuario demo sin superuser."""
 

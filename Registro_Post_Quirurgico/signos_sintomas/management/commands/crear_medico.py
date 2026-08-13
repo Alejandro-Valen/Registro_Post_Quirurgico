@@ -4,9 +4,25 @@ Variables opcionales para crear/actualizar la cuenta:
     DJANGO_MEDICO_USERNAME
     DJANGO_MEDICO_PASSWORD
     DJANGO_MEDICO_EMAIL
+    DJANGO_MEDICO_RESET     ('1' para reescribir credenciales — ver abajo)
 
 Sin credenciales, el comando solo garantiza que el grupo y sus permisos
 existan. Esto permite preparar el rol sin guardar contraseñas en el código.
+
+QUÉ REESCRIBE Y QUÉ NO (decisión D15, ver
+docs/decisiones_correccion_auditoria.md). Este comando corre en CADA arranque
+del servicio web (Dockerfile y nixpacks.toml), así que la diferencia importa:
+
+- La contraseña se fija **solo al crear** la cuenta. Si el médico la cambia
+  desde el Admin, le sobrevive a los despliegues. Para rotarla —por ejemplo si
+  se filtra— hay que pedirlo a propósito con DJANGO_MEDICO_RESET=1 en el
+  servicio, reiniciar, y volver a quitar la variable.
+- El correo solo se escribe si DJANGO_MEDICO_EMAIL trae valor. Nunca se vacía:
+  es el destinatario de las alertas (ver signos_sintomas/notificaciones.py).
+- Los grupos y los permisos individuales SÍ se reescriben en cada arranque, a
+  propósito: el privilegio mínimo es declarativo y la cuenta vuelve siempre al
+  perfil aprobado. Para darle más permisos al médico se cambia PERMISOS_MEDICO
+  aquí abajo, no la cuenta desde el Admin.
 """
 
 import os
@@ -58,6 +74,8 @@ class Command(BaseCommand):
         username = os.environ.get('DJANGO_MEDICO_USERNAME')
         password = os.environ.get('DJANGO_MEDICO_PASSWORD')
         email = os.environ.get('DJANGO_MEDICO_EMAIL', '')
+        # Mismo convenio que RESET_AXES en el Dockerfile: exactamente '1'.
+        forzar_credenciales = os.environ.get('DJANGO_MEDICO_RESET') == '1'
 
         if not username and not password:
             self.stdout.write(
@@ -81,15 +99,24 @@ class Command(BaseCommand):
                 f'crear_medico: "{username}" ya es superusuario; usa otro nombre.'
             )
 
-        user.email = email
+        if email:
+            user.email = email
         user.is_staff = True
         user.is_superuser = False
-        user.set_password(password)
+        if creado or forzar_credenciales:
+            user.set_password(password)
         user.save()
         user.groups.set([grupo])
         user.user_permissions.clear()
 
-        estado = 'creada' if creado else 'actualizada'
+        # El log del despliegue tiene que decir qué pasó con la contraseña: es
+        # lo primero que se mira cuando alguien no puede entrar.
+        if creado:
+            detalle = 'creada con privilegio mínimo'
+        elif forzar_credenciales:
+            detalle = 'credenciales reescritas por DJANGO_MEDICO_RESET=1'
+        else:
+            detalle = 'permisos al día; contraseña sin tocar'
         self.stdout.write(self.style.SUCCESS(
-            f'crear_medico: cuenta "{username}" {estado} con privilegio mínimo.'
+            f'crear_medico: cuenta "{username}" — {detalle}.'
         ))
