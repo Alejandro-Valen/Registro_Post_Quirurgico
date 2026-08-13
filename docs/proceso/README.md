@@ -45,7 +45,8 @@ lo hacen agentes que no comparten memoria.
 | `2026-07-30_instruccion_sprint6_ci.md` | Montar CI en `sprint-6-ci` — punto 1 de los 8 de la revisión del PR | **Ejecutada** el 31/07/2026. PR #5 (`5b40c01`), verificación en rojo de las 5 comprobaciones |
 | `2026-08-01_instruccion_loop_e.md` | Loop E — D14, aislar las tareas del cron conservando la dependencia clínica de `cron_matutino` | **Ejecutada** el 07/08/2026. PR #10 (`4fc690d`), 340 tests OK, cierra D1-D14 |
 | `2026-08-07_instruccion_partir_tests.md` | Partir `signos_sintomas/tests.py` (6.288 líneas, 46 clases) en un paquete `tests/` | **Ejecutada** el 10/08/2026. PR #12 (`427153b`), nueve archivos, 340 tests y los 305 métodos comparados uno a uno |
-| `2026-08-10_instruccion_crear_medico.md` | La decisión sobre `crear_medico`, que reescribe la cuenta del médico en cada arranque | **Vigente.** Es el guion de la próxima sesión |
+| `2026-08-10_instruccion_crear_medico.md` | La decisión sobre `crear_medico`, que reescribe la cuenta del médico en cada arranque | **Ejecutada** el 12/08/2026. Ficha **D15** decidida e implementada el mismo día: PR #17 (`1396744`), 344 tests OK, cierra D1-D15 |
+| `2026-08-12_instruccion_siguiente_sesion.md` | **Sin objetivo impuesto.** Cuatro candidatos con sus consecuencias, para que el Arquitecto elija en sesión | **Vigente.** Es el guion de la próxima sesión |
 
 **Convención de nombres:** los archivos van con fecha al inicio
 (`2026-07-22_...`), porque son documentos de un momento y no fuentes vivas. La

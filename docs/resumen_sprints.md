@@ -202,6 +202,18 @@ entre el Sprint 5 y hoy.
   el Sprint 0. La clave de entonces se revisó punto por punto y está muerta;
   queda declarada en `.gitleaksignore` con sus razones escritas.
 
+- **D15 · `crear_medico` (12/08/2026, PR #17, `1396744`).** El comando corría en
+  cada arranque del servicio web y reescribía la cuenta del médico entera. Ahora
+  la contraseña solo se fija al **crear** —para rotarla hay que pedirlo con
+  `DJANGO_MEDICO_RESET=1`— y el correo dejó de vaciarse, que no era cosmético:
+  ese campo es el destinatario de las alertas. Los grupos y permisos **sí**
+  siguen reescribiéndose, ahora como decisión declarada y no como efecto
+  colateral. Suite: 340 → **344 tests**. Con él quedan implementadas las
+  **quince** decisiones D1-D15. La verificación en las dos direcciones dejó un
+  hallazgo lateral: una prueba que ya existía seguía en verde con
+  `user_permissions.clear()` retirado, así que hasta esa fecha nada protegía esa
+  línea.
+
 ---
 
 ## Preguntas de arquitectura ya resueltas

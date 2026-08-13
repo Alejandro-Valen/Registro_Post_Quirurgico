@@ -4,10 +4,10 @@
 > Contiene el contexto clínico, el estado actual del proyecto, y los pasos pendientes.
 > El repositorio es: https://github.com/Alejandro-Valen/Registro_Post_Quirurgico
 > Rama de integración: `Desarrollo` | Rama de **despliegue**: `produccion` |
-> Rama activa de trabajo: ninguna — lo siguiente es la **decisión sobre
-> `crear_medico`**, desde `Desarrollo` (Sprint 5 mergeado el 29/07/2026,
-> `sprint-6-ci` el 31/07/2026, **Loop E el 07/08/2026** y el **reparto de
-> `tests.py` + la guardia de secretos el 10/08/2026**, 340 tests OK)
+> Rama activa de trabajo: ninguna — **lo siguiente se decide en sesión**, desde
+> `Desarrollo` (Sprint 5 mergeado el 29/07/2026, `sprint-6-ci` el 31/07/2026,
+> **Loop E el 07/08/2026**, el **reparto de `tests.py` + la guardia de secretos
+> el 10/08/2026** y **D15 · `crear_medico` el 12/08/2026**, 344 tests OK)
 > **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026 —
 > **siete comprobaciones** desde el 10/08/2026 (se sumaron la guardia de
 > secretos y el control de archivos de entorno)
@@ -896,6 +896,9 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   material histórico reconciliados. `docs/README.md` define fuentes vigentes y
   protocolo de reanudación. Sin cambios funcionales ni PR.
 - [x] Comando idempotente `crear_medico` + grupo "Médicos" de privilegio mínimo
+- [x] **D15 (12/08/2026):** `crear_medico` deja de reescribir contraseña y correo
+  en cada arranque; los grupos y permisos sí siguen reescribiéndose, y eso pasa a
+  ser comportamiento declarado. Rotación explícita con `DJANGO_MEDICO_RESET=1`
 - [x] **Hardening Loop 2 — confiabilidad del webhook y alertas:** recibo
   persistente por `MessageSid` en PostgreSQL (sin teléfono ni Body), reintento
   después de error, estado PENDIENTE/COMPLETADA/ERROR por `RegistroDiario`,

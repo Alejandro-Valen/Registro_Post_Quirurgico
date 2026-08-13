@@ -4646,3 +4646,158 @@ Pendientes menores, ninguno bloqueante:
 - Ninguna prueba floja se arregló al partir `tests.py`, a propósito. Tampoco se
   auditó su calidad: no era el encargo, y no se leyeron a fondo las 6.288 líneas.
   Si algún día se hace, es una sesión propia.
+
+---
+
+## D15 — `crear_medico` deja de reescribir la cuenta del médico en cada arranque
+**Fecha:** 12/08/2026
+**Responsable:** León (Arquitecto) con Claude Code
+**Estado:** DECIDIDO, IMPLEMENTADO Y MERGEADO ✅ — PR #17 (`1396744`)
+
+### Qué se hizo
+
+La sesión empezó como **una decisión, no como código** — así lo pedía el guion
+`docs/proceso/2026-08-10_instruccion_crear_medico.md`— y terminó con la decisión
+tomada, escrita e implementada, porque una vez decidida la corrección era
+pequeña y verificable sin producción.
+
+**El problema.** `crear_medico` corre en **cada arranque** del servicio web
+(`Dockerfile:37` y `nixpacks.toml`, `[start]`). Sobre una cuenta que ya existía
+reescribía contraseña, correo, grupos y permisos. El médico cambiaba su clave en
+el Admin y **el siguiente despliegue se la revertía en silencio**.
+
+**El tercer efecto, que el guion no traía.** Al leer el código apareció uno más:
+`user.email = email` se ejecutaba **siempre**, con `email` sacado de
+`os.environ.get('DJANGO_MEDICO_EMAIL', '')`. Si esa variable faltaba pero
+estaban usuario y contraseña, cada arranque **vaciaba el correo del médico**. Su
+gemelo `crear_admin.py:47` sí tiene la guarda `if email:`. Y ese campo no es
+decorativo: `notificaciones.py:105` y `signals.py:32` lo usan como
+**destinatario de las alertas**, así que sin él las ALTA morían en
+`DestinatarioNoConfigurado`. No se pierde sin rastro —queda como entrega
+fallida— pero no llega.
+
+**La decisión (ficha D15)**, que separa tres cosas que no se parecen:
+
+| | Antes | Ahora |
+|---|---|---|
+| Contraseña | reescrita en cada arranque | solo al **crear**; para rotarla, `DJANGO_MEDICO_RESET=1` |
+| Correo | se vaciaba si faltaba la variable | solo se escribe si trae valor |
+| Grupos y permisos | reescritos en cada arranque | **igual, y ahora declarado** como intencional |
+
+### Decisiones tomadas y su justificación
+
+**Por qué la contraseña sí se protege y los permisos no.** Es el eje de la
+ficha. Una persona espera gobernar su propia contraseña: que un despliegue se la
+revierta sin avisar es una promesa rota, y obliga a que el operador la conozca
+para siempre. Nadie espera gobernar sus propios permisos. En una cuenta con
+acceso a datos clínicos, que el perfil sea reproducible y vuelva siempre al
+aprobado vale más que la comodidad de conceder un permiso suelto desde el Admin
+— un permiso extra que sobrevive callado a los despliegues es una cuenta que
+deriva sin que nadie lo note. Para ampliar lo que puede hacer el médico se edita
+`PERMISOS_MEDICO` en el propio comando, que es donde debe verse.
+
+**Por qué una variable de entorno y no un flag.** El arranque es un comando fijo
+dentro del `Dockerfile` y de `nixpacks.toml`: un `--forzar-credenciales` ahí
+quedaría permanente, que es justo lo que se quería evitar. Además **el proyecto
+ya usa ese patrón** (`RESET_AXES` en `Dockerfile:35`), así que no se inventó un
+mecanismo nuevo.
+
+**Por qué la guarda va en Python y no en el shell del arranque.** Porque los dos
+archivos de arranque **ya divergen**: el bloque de `RESET_AXES` está en el
+`Dockerfile` y **no** en `nixpacks.toml`. Una guarda escrita en el shell habría
+que acordarse de replicarla en dos sitios, y el precedente dice que eso no
+ocurre.
+
+**Por qué el correo entró en la misma ficha.** Mismo comando, mismo arranque,
+mismo tipo de fallo, y tres líneas del mismo archivo. Separarlo habría sido
+ceremonia con el agravante de dejar conocido y sin arreglar un fallo que afecta
+la entrega de alertas.
+
+### Problemas encontrados y cómo se resolvieron
+
+**El estado real no coincidía con el guion, y mandó Git.** El guion daba
+`301c743` (PR #13) como último merge; el `HEAD` real era `c1ec1ca`, con tres
+merges más (#14, #15, #16). Se comprobó el diff `301c743..HEAD` antes de seguir:
+once archivos, y el **único `.py` tocado eran dos líneas de un docstring** que
+actualizaban una referencia de `tests.py` a `tests/test_commands.py`. Nada
+funcional. El guion no estaba equivocado: se escribió antes de esos merges.
+
+**El entorno virtual que el `.bat` promete no existe.** `inicio_entornoR.bat`
+llama a `entorno_registro\Scripts\activate.bat` y esa carpeta **no está en
+disco**. La suite corrió con el Python global (3.13.0, Django 6.0.7) y pasó, así
+que no bloqueó nada, pero queda anotado: el script de arranque del entorno miente
+sobre lo que hay.
+
+**`check --deploy` falló en local por una razón que no era el cambio.**
+`ImproperlyConfigured: la variable CSRF_TRUSTED_ORIGINS es obligatoria` — el
+`.env` de desarrollo no tiene las variables que `settings_production` exige. Se
+resolvió reproduciendo el paso **con el mismo entorno de relleno que usa
+`ci.yml`** (líneas 73-90 del workflow) en vez de darlo por bueno o por malo: con
+él, `System check identified no issues`.
+
+**Una de las cuatro pruebas nuevas nació en verde por la razón equivocada.** La
+de `DJANGO_MEDICO_RESET=1` pasaba **antes** de la corrección, porque el comando
+reescribía siempre, mirara o no la variable. Es exactamente el modo de fallo que
+dejó vivo el hallazgo bloqueante del 22/07. Se dejó escrito en el commit del test
+y se comprobó después, con un sabotaje, que ya sí demuestra lo que dice.
+
+### Verificación
+
+Las cuatro pruebas nuevas viven en `CrearMedicoCommandTests`
+(`tests/test_commands.py`). **Dos nacieron en rojo y son el hallazgo
+reproducido:** `False is not true` en la contraseña, y
+`'' != 'doctora@example.com'` en el correo — con eso el borrado del email pasó de
+deducción leyendo el código a hecho reproducido.
+
+**Se verificó en las dos direcciones**, con dos sabotajes controlados sobre el
+código ya corregido, restaurados con `git checkout --`:
+
+| Sabotaje | Resultado |
+|---|---|
+| `if creado or forzar_credenciales` → `if creado` | Cae `test_reset_explicito_si_reescribe_la_password`, **y solo esa** |
+| Retirar `user.user_permissions.clear()` | Cae `test_los_permisos_si_vuelven_al_perfil_aprobado_en_cada_arranque`, **y solo esa** |
+
+**El segundo sabotaje destapó algo que no se buscaba:** la prueba que **ya
+existía**, `test_crea_staff_no_superusuario_sin_permisos_extra`, **no cayó**.
+Comprueba `user_permissions.count() == 0` sobre una cuenta recién creada, que no
+tiene permisos individuales de todas formas. Es decir, hasta el 12/08/2026
+**nada protegía esa línea**: una prueba verde por una razón distinta de la que
+dice medir. Mismo patrón del hallazgo bloqueante de julio, encontrado esta vez
+por el arnés y no por una auditoría.
+
+**Cifras, todas vistas en pantalla:** suite en **344 tests OK** en 280 s (340 +
+4). `check` y `makemigrations --check` sin issues, `git diff --check` limpio, y
+`check --deploy` sin issues con el entorno de la CI. En GitHub, las **siete
+comprobaciones** del PR #17 en verde, revisadas una por una con `gh run view` —
+no solo por el resumen.
+
+**Lo que NO se pudo verificar, y no se da por bueno:** que Railway entregue
+`DJANGO_MEDICO_RESET` al contenedor. Ese tramo solo se ve desplegando y no hay
+producción desde el 07/08/2026. Queda escrito en la ficha D15 y en el PR.
+
+**Detalle de la CI que conviene saber:** la UI del PR muestra **un solo check**,
+no siete. Las siete son *steps* dentro del job `Suite, checks y migraciones`. El
+conteo de `CLAUDE.md` es correcto; lo que sería un error es esperar siete líneas
+en la pantalla del PR.
+
+### Qué queda pendiente
+
+**Con D15 quedan implementadas las quince decisiones D1-D15.** No hay guion
+escrito más allá de este punto, y es a propósito: lo que siga se decide en
+sesión.
+
+Lo anotado como posible, sin orden impuesto:
+
+- **Auditar la calidad de las pruebas.** Ganó peso hoy: el sabotaje B demostró
+  con un caso concreto que hay pruebas verdes que no protegen lo que parece. Al
+  partir `tests.py` no se revisó ninguna, a propósito.
+- **Protección de rama:** decidir entre GitHub Pro (~4 USD/mes), repositorio
+  público, o seguir mirando los checks a mano.
+- **`medico_piloto`:** D15 desbloquea la pregunta —esa cuenta ya puede tener
+  contraseña propia que sobreviva a un despliegue—, así que ahora es una decisión
+  puramente administrativa: transferirla o crear la definitiva y reasignar
+  pacientes.
+- **El entorno virtual `entorno_registro` no existe**; decidir si se recrea o si
+  el `.bat` se retira.
+- La versión de PostgreSQL de Railway sigue sin documentar, en pausa mientras no
+  haya producción.

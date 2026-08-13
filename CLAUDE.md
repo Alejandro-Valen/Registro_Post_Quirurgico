@@ -109,8 +109,8 @@ anotada para después.
 - **Rama de despliegue:** `produccion` — la miran los tres servicios de Railway.
   Nadie trabaja aquí; solo recibe merges desde `Desarrollo`. Ver
   `docs/railway_deploy.md` §4.1.
-- **Rama activa de trabajo:** ninguna. `guardia-secretos` se mergeó el
-  10/08/2026 (PR #13); la siguiente se abre desde `Desarrollo`.
+- **Rama activa de trabajo:** ninguna. `crear-medico-no-reescribe` se mergeó el
+  12/08/2026 (PR #17); la siguiente se abre desde `Desarrollo`.
 - **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **siete
   comprobaciones** en cada PR hacia `Desarrollo` y hacia `produccion`, y en cada
   push a esas dos ramas: la suite, `check`, `makemigrations --check`,
@@ -212,6 +212,7 @@ evidencia disponible, no decisiones ya tomadas.
 | Loop E · D14 | Aislar las tareas del cron sin perder la dependencia clínica | ✅ **Completado y mergeado** (07/08/2026, PR #10, merge commit `4fc690d`). **340 tests OK**; cierra D1-D14 |
 | Partir `tests.py` | Convertir el archivo de 6.288 líneas en un paquete `tests/` por tema | ✅ **Completado y mergeado** (10/08/2026, PR #12, merge commit `427153b`). Nueve archivos + `soporte.py`; **340 tests OK** y los 305 métodos comparados uno a uno |
 | Guardia de secretos | `gitleaks` y control de archivos de entorno en la CI | ✅ **Completado y mergeado** (10/08/2026, PR #13, merge commit `301c743`). La CI pasa de cinco a **siete comprobaciones** |
+| D15 · `crear_medico` | Que el arranque deje de reescribir la cuenta del médico | ✅ **Completado y mergeado** (12/08/2026, PR #17, merge commit `1396744`). **344 tests OK**; cierra D1-D15 |
 
 **Qué pasó (22/07/2026).** Una auditoría independiente sobre `fbf62a8` confirmó
 las cuatro cifras que se reportaban (280 tests, `check --deploy`, `pip-audit`,
@@ -268,17 +269,19 @@ pasó de describir el presente a ser el **guion para reconstruir el despliegue**
 cuando haya plan de pago. No se borró nada de ahí a propósito.
 
 **Próximo paso exacto (al retomar):** verificar el estado real contra `git log` y
-la suite antes de proponer nada, y seguir el guion de
-**`docs/proceso/2026-08-10_instruccion_crear_medico.md`** — el objetivo de esa
-sesión es **una decisión, no código**: qué hacer con `crear_medico`, que reescribe
-la cuenta del médico —contraseña, grupos y permisos— en **cada arranque** del
-servicio web. Se decide primero, se documenta, y solo después se programa.
+la suite antes de proponer nada, y **decidir en sesión qué se hace** — no hay
+guion escrito esperando, a propósito. El candidato con más peso es **auditar la
+calidad de las pruebas**: el 12/08/2026 un sabotaje de verificación demostró con
+un caso concreto que hay pruebas verdes que no protegen lo que parecen
+(`test_crea_staff_no_superusuario_sin_permisos_extra` seguía en verde con
+`user_permissions.clear()` retirado). Ver la entrada del 12/08 en `BITACORA.md`.
 
-Los cuatro cierres anteriores están **completos**: la rama del Sprint 5
+Los cinco cierres anteriores están **completos**: la rama del Sprint 5
 (`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`, 29/07), la CI
 (`docs/proceso/2026-07-30_instruccion_sprint6_ci.md`, 31/07), el Loop E
 (`docs/proceso/2026-08-01_instruccion_loop_e.md`, 07/08) y el reparto de
-`tests.py` (`docs/proceso/2026-08-07_instruccion_partir_tests.md`, 10/08).
+`tests.py` (`docs/proceso/2026-08-07_instruccion_partir_tests.md`, 10/08) y
+`crear_medico` (`docs/proceso/2026-08-10_instruccion_crear_medico.md`, 12/08).
 
 Lo que sigue, en este orden (razonamiento y detalle en
 `docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`):
@@ -292,20 +295,18 @@ Lo que sigue, en este orden (razonamiento y detalle en
 3. ~~**Partir `tests.py`**~~ — ✅ hecho el 10/08/2026 (PR #12, `427153b`). Nueve
    archivos por tema más `soporte.py`; 340 tests y los 305 métodos comparados
    uno a uno contra el archivo original.
-4. **`crear_medico`** — **es el siguiente.** Decidir qué hacer antes de
-   entregarle la cuenta al médico (ver "Por resolver antes del piloto real",
-   punto 2). Guion en `docs/proceso/2026-08-10_instruccion_crear_medico.md`.
+4. ~~**`crear_medico`**~~ — ✅ hecho el 12/08/2026 (PR #17, `1396744`). Decisión
+   **D15** y su implementación; verificado en las dos direcciones con dos
+   sabotajes documentados en la ficha.
 
-**Ojo con el orden de aquí en adelante.** Con Railway caído, el punto 4
-es el único que depende solo de nosotros; todo lo que toca despliegue,
-Twilio o el piloto quedó fuera de alcance hasta que haya plan de pago. Eso no
-cambia las prioridades — 3 y 4 ya eran los siguientes — pero sí conviene no
-proponer trabajo que hoy no se puede terminar.
+**Esta lista está terminada.** Con Railway caído, todo lo que toca despliegue,
+Twilio o el piloto sigue fuera de alcance hasta que haya plan de pago — conviene
+no proponer trabajo que hoy no se puede terminar.
 
-**No hay guion escrito más allá de `crear_medico`.** Cuando ese punto se cierre,
-lo que siga se decide en sesión: no hay una cola de trabajo esperando. Lo único
-anotado como posible es auditar la calidad de las pruebas ahora que están
-repartidas por tema — al partirlas **no se revisó ninguna**, a propósito.
+**No hay guion escrito para lo que sigue, y es deliberado:** se decide en sesión,
+no se hereda de una lista vieja. Lo anotado como posible es **auditar la calidad
+de las pruebas** —al partir `tests.py` no se revisó ninguna, a propósito— y la
+decisión de **protección de rama**.
 
 **Pendientes menores que dejó el montaje de la CI**, ninguno bloqueante:
 
@@ -347,12 +348,13 @@ servicios). Cada push a `produccion` sale a producción de inmediato; **mergear 
    limitada correctamente. Antes de pacientes reales hay que decidir si esa
    cuenta se transfiere al médico o se crea la definitiva con el mismo comando
    y se reasignan los pacientes.
-   **Restricción que condiciona esa decisión:** `crear_medico` corre en **cada
-   arranque** del servicio web y reescribe la cuenta —contraseña, grupos y
-   permisos—, así que hoy esa cuenta **no puede tener una contraseña propia que
-   sobreviva a un despliegue**. Detalle en
-   `docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`, punto 8, y la
-   advertencia operativa en `docs/trampas_conocidas.md`.
+   **La restricción que condicionaba esta decisión ya no existe** (D15,
+   12/08/2026): `crear_medico` deja de reescribir la contraseña, así que la
+   cuenta **sí puede tener una contraseña propia que sobreviva a un despliegue**.
+   Lo que queda es administrativo: transferirla o crear la definitiva. Ojo con lo
+   que **sigue** reescribiéndose a propósito —grupos y permisos— y con
+   `DJANGO_MEDICO_RESET`: ver `docs/trampas_conocidas.md` y la ficha D15 en
+   `docs/decisiones_correccion_auditoria.md`.
 3. **Requisitos del piloto real** (ver ROADMAP, "Requisitos para un PILOTO REAL
    con pacientes"): plan de pago de Railway, salir del Sandbox de Twilio a
    **WhatsApp Business API**, dominio autenticado de Resend, monitoreo externo
