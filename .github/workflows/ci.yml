@@ -104,7 +104,7 @@ jobs:
 
     steps:
       - name: Traer el repositorio
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           # Historia completa: el paso de higiene compara contra la base del PR,
           # y con el checkout superficial por defecto ese commit no existe aquí.
