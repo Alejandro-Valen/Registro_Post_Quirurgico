@@ -31,7 +31,7 @@ dependencies = [
     "twilio==9.10.9",           # webhook de WhatsApp
     "django-axes==7.0.1",       # bloqueo por intentos de acceso fallidos
     "redis==8.0.1",             # cache y rate limit
-    "requests==2.33.0",         # entrega de correo por HTTPS (Resend)
+    "requests==2.34.2",         # entrega de correo por HTTPS (Resend)
     "gunicorn==26.0.0",         # servidor WSGI de producción
     "whitenoise==6.12.0",       # estáticos en producción (Railway no tiene Nginx)
 ]
