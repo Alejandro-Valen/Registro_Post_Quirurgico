@@ -62,7 +62,7 @@ docs/
 ├── bot_whatsapp.md          FUENTE ÚNICA de la máquina de estados y sus reglas.
 ├── trampas_conocidas.md     Errores que ya costaron horas y volverán a morder.
 ├── resumen_sprints.md       Mapa compacto de la BITÁCORA (qué entregó cada etapa).
-├── decisiones_correccion_auditoria.md   Fichas D1-D10 con su razonamiento.
+├── decisiones_correccion_auditoria.md   Fichas D1-D17 con su razonamiento.
 ├── railway_deploy.md        Topología, variables y despliegue.
 ├── cron_setup.md            Programación y límites de los cron.
 ├── transferencia_cuentas.md Propiedad de servicios y credenciales.

@@ -1465,6 +1465,170 @@ contenedor. Eso solo se ve desplegando, cuando haya plan de pago.
 
 ---
 
+## D16 — Toda guardia automática debe poder ponerse en rojo
+
+**Hallazgo:** auditoría de seis frentes del 07/09/2026, SEC-01 · **Loop:** Arné
+· **Estado:** **Decidida** (07/09/2026).
+Guion de la sesión: `docs/proceso/2026-09-07_instruccion_loop_arnes.md`.
+
+### Problema
+
+La auditoría encontró el mismo defecto en seis sitios distintos: **las guardias
+automáticas del proyecto están escritas de forma que no pueden fallar.** No es
+una lista de descuidos sueltos; es un patrón, y explica por qué los otros 100
+hallazgos sobrevivieron.
+
+El caso que lo demuestra sin discusión, **reproducido ejecutándolo**:
+
+```
+$ python manage.py check --deploy      # sobre una configuración con 5 fallos
+?: (security.W004) ... SECURE_HSTS_SECONDS ...
+?: (security.W008) ... SECURE_SSL_REDIRECT ...
+?: (security.W012) ... SESSION_COOKIE_SECURE ...
+?: (security.W016) ... CSRF_COOKIE_SECURE ...
+?: (security.W018) You should not have DEBUG set to True in deployment.
+System check identified 5 issues (0 silenced).
+>>> EXIT CODE: 0            # ← la CI queda VERDE
+
+$ python manage.py check --deploy --fail-level WARNING
+>>> EXIT CODE: 1
+```
+
+Los checks de despliegue de Django son todos de nivel **WARNING**, y
+`--fail-level` vale **ERROR** por defecto. Es decir: desde que existe la CI
+(31/07/2026), la comprobación «Configuración de producción» **nunca pudo
+fallar**. Hoy se pueden borrar HSTS, el redirect a HTTPS y las cookies seguras y
+las siete comprobaciones siguen en verde.
+
+Los otros cinco casos del mismo patrón:
+
+| Guardia | Por qué no protege |
+|---|---|
+| `gitleaks` | El `allowlist` excluye `docs/auditoria_literatura/.*` — la única carpeta con datos personales. Fue un aplazamiento declarado al «Loop G», que nunca se ejecutó |
+| Las 344 pruebas | `fecaloide` no aparece en ninguna. **Sabotaje ejecutado el 07/09:** al quitarlo de `DRENAJES_ALTA`, las 344 siguen OK |
+| 25 restricciones de BD | 19 nunca se han visto fallar. Un `RemoveConstraint` futuro las borra y la suite sigue verde |
+| `pip-audit` | Se cita como garantía en seis documentos. **No está en la CI ni en ningún `requirements`** |
+| Validadores de rango | Cero en todo el repositorio. El único control sobre un dato clínico es un regex del bot |
+
+### Decisión
+
+**Ninguna guardia entra ni permanece en este proyecto sin haberse visto fallar
+al menos una vez.** En concreto, para esta sesión:
+
+1. **`check --deploy` lleva `--fail-level WARNING`.** Verificado rompiendo una
+   directiva a propósito y viendo la CI caer.
+2. **`pip-audit` entra en la CI**, sobre `requirements-runtime.txt`, y bloquea.
+3. **`ruff` entra en la CI y bloquea**, con el conjunto amplio. Dos familias se
+   ignoran **con el porqué escrito en la configuración**, no en silencio:
+   - `RUF012` (117 hallazgos): exige anotar `list_display` y `dependencies` como
+     `ClassVar`. Es un falso positivo de Django; 60 de ellos están en
+     migraciones generadas.
+   - `N999`: se queja del nombre `Registro_Post_Quirurgico`. Renombrarlo rompe
+     `DJANGO_SETTINGS_MODULE`, el `--chdir` del `Dockerfile`, el
+     `working-directory` de la CI y 28 migraciones. **Decidido no renombrar.**
+   - Las **migraciones se excluyen enteras**: son código generado.
+4. **Django sube a 6.0.8**, que cierra CVE-2026-15830 (`contrib.gis`, no
+   explotable aquí porque la app no lo instala — pero `pip-audit` lo reportaría
+   en cada corrida).
+
+**Lo que NO se hace en esta decisión, y por qué.** De los 83 hallazgos reales de
+`ruff` se aplican los **49 automáticos**; los **34 de criterio se difieren al
+loop de umbrales**, no por pereza sino por secuencia: casi todos están en
+`tests/`, y ese loop va a reescribir esos mismos archivos para añadir las pruebas
+de frontera. Refactorizarlos hoy y reescribirlos en dos sesiones es trabajo
+tirado. Además —y pesa más— **la auditoría acaba de demostrar que la suite no
+protege siete de las ocho familias de reglas clínicas**: un refactor automático
+masivo verificado por una red agujereada es la forma clásica de meter una
+regresión silenciosa.
+
+Los seis `BLE001` (captura de excepción a ciegas) **no se ignoran en la
+configuración**: llevan `# noqa: BLE001` individual con su razón al lado, porque
+los tres que se revisaron son *fail-open* deliberados y ya documentados (rate
+limit degradado, health check que devuelve 503, captura del motor de
+evaluación). Silenciarlos desde la configuración los volvería invisibles; el
+`noqa` con razón los deja a la vista.
+
+### Por qué esta decisión y no otra
+
+**Por qué bloquear y no informar.** Un linter que reporta sin detener es
+exactamente la guardia-que-no-puede-fallar que esta ficha viene a eliminar.
+Añadirlo en modo informativo habría sido repetir el defecto mientras se lo
+corrige.
+
+**Por qué el conjunto amplio y no el estricto.** Decisión del Arquitecto
+(07/09/2026): aprovechar que se va a tocar el tema para dejarlo lo mejor posible.
+El conjunto estricto (`F`+`E9`) daba solo 4 hallazgos reales y habría dejado
+fuera el orden de imports, las f-strings y las capturas a ciegas.
+
+**Por qué se escribe el porqué de cada regla ignorada.** Una lista de excepciones
+sin razones es una lista que crece hasta que no protege nada. El precedente está
+en `.gitleaksignore`, cuya única entrada lleva cuatro razones comprobables.
+
+---
+
+## D17 — Qué hacer con los datos personales que ya están en la historia
+
+**Hallazgo:** auditoría del 07/09/2026, REPO-01 · **Loop:** Arnés ·
+**Estado:** **Decidida** (07/09/2026).
+
+### Problema
+
+`docs/auditoria_literatura/` contenía el nombre completo del médico proponente,
+**su número de cédula** y sus afiliaciones institucionales. Llegó al repositorio
+en `74f3e04` al cargar un documento que el propio médico proporcionó para
+alimentar el contexto del proyecto.
+
+Tres cosas lo agravan:
+
+1. **`.gitleaks.toml` excluye esa carpeta del escaneo.** La guardia de secretos
+   montada en agosto justo para esto nunca la iba a mirar. La exclusión fue
+   deliberada —el comentario la aplaza al «Loop G» de higiene de identidad— pero
+   ese loop nunca se ejecutó, y mientras tanto la carpeta quedó sin vigilancia.
+2. **Viola una regla escrita de este mismo repositorio**: `CLAUDE.md` prohíbe
+   usar nombres de instituciones.
+3. **El Arquitecto redactó el archivo el 07/09/2026, pero el dato sigue en la
+   historia.** Comprobado commit por commit: aparece en `74f3e04` (línea 17) y
+   en `fbf62a8` (línea 21). `git show fbf62a8:<ruta>` lo sigue devolviendo
+   entero, y `fbf62a8` es el commit que `CLAUDE.md` cita como base de la
+   auditoría del 22/07.
+
+En un proyecto cuyo documento legal canónico es la Ley 1581/2012, es exactamente
+el tipo de dato que el sistema promete proteger.
+
+### Decisión
+
+1. **El árbol de trabajo queda limpio.** La cédula la redactó el Arquitecto; las
+   **7 menciones de instituciones** restantes se sustituyen por descripciones
+   genéricas («una universidad de Medellín»). El valor clínico no depende de
+   ellas: ningún umbral cambia porque el estudio nombre o no la institución.
+2. **Se retira la exclusión de `docs/auditoria_literatura/`** del
+   `.gitleaks.toml`. La carpeta pasa a escanearse como el resto.
+3. **Se añade una regla propia `cedula-colombiana`**, anclada a la palabra
+   «cédula» para no producir falsos positivos con cualquier número.
+4. **Las dos ocurrencias históricas se registran en `.gitleaksignore` con su
+   razón escrita**, para que la CI siga verde y quede constancia de que la
+   historia está sucia. Es el mismo patrón que ya se usó con la `SECRET_KEY` del
+   Sprint 0.
+5. **La reescritura de la historia queda como decisión aparte**, atada a si el
+   repositorio va a ser público.
+
+### Por qué no se reescribe la historia ahora
+
+Borrar el dato del pasado exige `git filter-repo`, que **reescribe todos los
+SHA**. Eso rompe las referencias de los cinco informes de auditoría, las URLs de
+los veinte PR mergeados y las citas de `CLAUDE.md` — incluido `fbf62a8`. El
+repositorio es **privado**, así que el dato solo es alcanzable por quien ya tiene
+acceso: los dos miembros del equipo.
+
+**Esto no cierra el asunto, lo acota.** Si el repositorio pasa a público, la
+reescritura deja de ser opcional. Y aunque siga privado, el titular del dato es
+un tercero identificable que no consintió su publicación en un repositorio de
+código: **conviene decírselo y preguntarle qué prefiere.** Esa conversación es
+del Arquitecto, no del equipo técnico, y queda anotada aquí para que no se
+pierda.
+
+---
+
 ## Método de trabajo acordado
 
 Aplica a los tres loops de corrección.
