@@ -34,7 +34,7 @@ ENTORNO_PRODUCCION_VALIDO = {
 def _cargar_settings(archivo, entorno, alias):
     """Ejecuta una copia del módulo de settings con `entorno` parcheado."""
     spec = importlib.util.spec_from_file_location(
-        'Registro_Post_Quirurgico.{}'.format(alias),
+        f'Registro_Post_Quirurgico.{alias}',
         _RUTA_PAQUETE / archivo,
     )
     modulo = importlib.util.module_from_spec(spec)

@@ -34,6 +34,7 @@ class CacheProductionConfigTests(TestCase):
         que verifica (CSP y timeout de correo) no cambió.
         """
         from django.utils.csp import CSP
+
         from Registro_Post_Quirurgico.tests_configuracion import (
             ENTORNO_PRODUCCION_VALIDO,
             cargar_settings_produccion,

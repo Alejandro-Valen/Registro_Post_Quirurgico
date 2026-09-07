@@ -16,7 +16,7 @@ Including another URLconf
 """
 from django.conf import settings
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import include, path
 
 # B5: URL del admin configurable por variable de entorno para que no sea trivial.
 # Valor por defecto intencional solo para desarrollo — en producción usar

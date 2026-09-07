@@ -95,15 +95,15 @@ class AlertaEmailNotificacionTests(TestCase):
 
     def test_fallo_externo_programa_reintento_sin_perder_la_fila(self):
         from unittest.mock import patch
+
         from django.core.management import CommandError, call_command
 
         alerta = self._crear_alerta_alta()
         with patch(
             'signos_sintomas.notificaciones.send_mail',
             side_effect=TimeoutError('detalle que no debe persistirse'),
-        ):
-            with self.assertRaises(CommandError):
-                call_command('procesar_notificaciones_email', verbosity=0)
+        ), self.assertRaises(CommandError):
+            call_command('procesar_notificaciones_email', verbosity=0)
 
         notificacion = NotificacionAlerta.objects.get(alerta=alerta)
         self.assertEqual(notificacion.estado, NotificacionAlerta.ESTADO_PENDIENTE)
@@ -223,12 +223,15 @@ class AlertaEmailNotificacionTests(TestCase):
 
     def test_backend_sin_entrega_confirmada_programa_reintento(self):
         from unittest.mock import patch
+
         from django.core.management import CommandError, call_command
 
         alerta = self._crear_alerta_alta()
-        with patch('signos_sintomas.notificaciones.send_mail', return_value=0):
-            with self.assertRaises(CommandError):
-                call_command('procesar_notificaciones_email', verbosity=0)
+        with (
+            patch('signos_sintomas.notificaciones.send_mail', return_value=0),
+            self.assertRaises(CommandError),
+        ):
+            call_command('procesar_notificaciones_email', verbosity=0)
 
         notificacion = NotificacionAlerta.objects.get(alerta=alerta)
         self.assertEqual(notificacion.estado, NotificacionAlerta.ESTADO_PENDIENTE)
@@ -243,6 +246,7 @@ class AlertaEmailNotificacionTests(TestCase):
     )
     def test_resend_entrega_por_https_con_idempotencia_y_sin_datos_clinicos(self):
         from unittest.mock import Mock, patch
+
         from django.core.management import call_command
 
         respuesta = Mock()
@@ -361,13 +365,12 @@ class NotificacionConcurrenciaTests(TransactionTestCase):
         with patch(
             'signos_sintomas.notificaciones._enviar',
             side_effect=enviar_lento,
-        ) as enviar:
-            with ThreadPoolExecutor(max_workers=2) as executor:
-                primero_futuro = executor.submit(procesar)
-                self.assertTrue(iniciado.wait(timeout=10))
-                segundo = executor.submit(procesar).result(timeout=10)
-                liberar.set()
-                primero = primero_futuro.result(timeout=10)
+        ) as enviar, ThreadPoolExecutor(max_workers=2) as executor:
+            primero_futuro = executor.submit(procesar)
+            self.assertTrue(iniciado.wait(timeout=10))
+            segundo = executor.submit(procesar).result(timeout=10)
+            liberar.set()
+            primero = primero_futuro.result(timeout=10)
 
         self.notificacion.refresh_from_db()
         self.assertEqual(enviar.call_count, 1)
@@ -412,23 +415,22 @@ class NotificacionConcurrenciaTests(TransactionTestCase):
         with patch(
             'signos_sintomas.notificaciones._enviar',
             side_effect=enviar_lento,
-        ):
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                futuro = executor.submit(procesar)
-                self.assertTrue(iniciado.wait(timeout=10))
-                # Envío en curso → la notificación está bloqueada. Otra
-                # transacción intenta bloquear la fila del paciente sin esperar.
-                try:
-                    with transaction.atomic():
-                        Paciente.objects.select_for_update(nowait=True).get(
-                            pk=paciente_pk,
-                        )
-                    paciente_bloqueado['valor'] = False
-                except OperationalError:
-                    paciente_bloqueado['valor'] = True
-                finally:
-                    liberar.set()
-                    futuro.result(timeout=10)
+        ), ThreadPoolExecutor(max_workers=1) as executor:
+            futuro = executor.submit(procesar)
+            self.assertTrue(iniciado.wait(timeout=10))
+            # Envío en curso → la notificación está bloqueada. Otra
+            # transacción intenta bloquear la fila del paciente sin esperar.
+            try:
+                with transaction.atomic():
+                    Paciente.objects.select_for_update(nowait=True).get(
+                        pk=paciente_pk,
+                    )
+                paciente_bloqueado['valor'] = False
+            except OperationalError:
+                paciente_bloqueado['valor'] = True
+            finally:
+                liberar.set()
+                futuro.result(timeout=10)
 
         self.assertFalse(
             paciente_bloqueado['valor'],

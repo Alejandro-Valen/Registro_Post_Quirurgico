@@ -177,13 +177,13 @@ class CheckInProgramadoModelTests(TestCase):
         self.hora_programada = timezone.now().replace(hour=8, minute=0, second=0, microsecond=0)
 
     def _crear_checkin(self, orden=1, etiqueta=CheckInProgramado.ETIQUETA_MANANA, **kwargs):
-        defaults = dict(
-            paciente=self.paciente,
-            fecha_dia=self.hoy,
-            orden=orden,
-            etiqueta=etiqueta,
-            hora_programada=self.hora_programada,
-        )
+        defaults = {
+            "paciente": self.paciente,
+            "fecha_dia": self.hoy,
+            "orden": orden,
+            "etiqueta": etiqueta,
+            "hora_programada": self.hora_programada,
+        }
         defaults.update(kwargs)
         return CheckInProgramado.objects.create(**defaults)
 
@@ -201,9 +201,8 @@ class CheckInProgramadoModelTests(TestCase):
 
     def test_unique_constraint_mismo_paciente_dia_orden(self):
         self._crear_checkin(orden=1)
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                self._crear_checkin(orden=1)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self._crear_checkin(orden=1)
 
     def test_dos_checkins_mismo_dia_distinto_orden_permitidos(self):
         manana = self._crear_checkin(orden=1, etiqueta=CheckInProgramado.ETIQUETA_MANANA)
@@ -262,14 +261,13 @@ class PacienteCedulaTests(TestCase):
             telefono_whatsapp="+573001112223",
             fecha_cirugia=timezone.localdate(),
         )
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                Paciente.objects.create(medico_responsable=medico_de_pruebas(),
-                    nombre_completo="Paciente Dos",
-                    cedula="123456789",
-                    telefono_whatsapp="+573001112224",
-                    fecha_cirugia=timezone.localdate(),
-                )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Paciente.objects.create(medico_responsable=medico_de_pruebas(),
+                nombre_completo="Paciente Dos",
+                cedula="123456789",
+                telefono_whatsapp="+573001112224",
+                fecha_cirugia=timezone.localdate(),
+            )
 
     def test_dos_pacientes_sin_cedula_no_violan_unicidad(self):
         """NULL no cuenta como duplicado en la restricción unique (Postgres)."""
@@ -424,16 +422,15 @@ class PacienteActivoExigeMedicoTests(TestCase):
         Un script, el shell o una carga de datos no ven el formulario. La
         restricción vive en la base y no se puede esquivar.
         """
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                Paciente.objects.create(
-                    nombre_completo='Paciente De Script',
-                    telefono_whatsapp='+573007770003',
-                    cedula='D12-0003',
-                    fecha_cirugia=timezone.localdate(),
-                    medico_responsable=None,
-                    activo=True,
-                )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Paciente.objects.create(
+                nombre_completo='Paciente De Script',
+                telefono_whatsapp='+573007770003',
+                cedula='D12-0003',
+                fecha_cirugia=timezone.localdate(),
+                medico_responsable=None,
+                activo=True,
+            )
 
     def test_un_paciente_inactivo_sin_medico_sigue_siendo_valido(self):
         """NACE EN VERDE A PROPÓSITO: congela el alcance de la restricción.
@@ -456,9 +453,9 @@ class PacienteActivoExigeMedicoTests(TestCase):
 
     def _paciente_de(self, medico, sufijo):
         return Paciente.objects.create(
-            nombre_completo='Paciente Sin Atención {}'.format(sufijo),
-            telefono_whatsapp='+5730077711{}'.format(sufijo),
-            cedula='D12-ATN-{}'.format(sufijo),
+            nombre_completo=f'Paciente Sin Atención {sufijo}',
+            telefono_whatsapp=f'+5730077711{sufijo}',
+            cedula=f'D12-ATN-{sufijo}',
             fecha_cirugia=timezone.localdate(),
             medico_responsable=medico,
             activo=True,

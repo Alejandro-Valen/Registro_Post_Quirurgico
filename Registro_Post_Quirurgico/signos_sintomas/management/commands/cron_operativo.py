@@ -10,7 +10,6 @@ from django.core.management.base import BaseCommand
 
 from signos_sintomas.cron_runner import TareaCron, ejecutar_tareas
 
-
 TAREAS_OPERATIVAS = [
     TareaCron('cerrar_checkins_vencidos'),
     TareaCron('reintentar_evaluaciones_alertas'),

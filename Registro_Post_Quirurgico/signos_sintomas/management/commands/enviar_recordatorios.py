@@ -38,7 +38,7 @@ class Command(BaseCommand):
 
         enviados = 0
         for checkin in pendientes:
-            telefono = checkin.paciente.telefono_whatsapp
+            telefono = checkin.paciente.telefono_whatsapp  # noqa: F841  (lo usa la llamada a Twilio de la FASE 4, comentada abajo)
             # FASE 4: sustituir este bloque por llamada a Twilio.
             # twilio_client.messages.create(
             #     from_='whatsapp:+14155238886',

@@ -102,7 +102,7 @@ def panel_triage(context):
         'respondidos': respondidos,
         'total':       total_checkins,
         'activos':     activos.count(),
-        'pct':         int(round(100 * respondidos / total_checkins)) if total_checkins else 0,
+        'pct':         round(100 * respondidos / total_checkins) if total_checkins else 0,
     }
 
     # Triage acumulado: toda alerta sin resolver (menos SILENCIO), aunque se

@@ -6,7 +6,6 @@ from django.utils import timezone
 
 from .models import Alerta, DeteccionAlerta, RegistroDiario
 
-
 TEMPERATURA_ALTA = Decimal('37.9')           # Outersterp 2025
 TEMPERATURA_SUBFEBRICULA_MIN = Decimal('37.5')
 DIAS_SUBFEBRICULA_PERSISTENTE = 2
@@ -93,8 +92,11 @@ def _obtener_o_crear_alerta_abierta(
                 Alerta.objects.select_for_update()
                 .get(paciente=paciente, tipo=tipo, resuelta=False)
             )
-        except Alerta.DoesNotExist:
-            raise error
+        except Alerta.DoesNotExist as exc:
+            # Se encadenan las dos: el IntegrityError es la causa real, y que
+            # además no aparezca la alerta que lo provocó es información que
+            # conviene conservar para diagnosticar la carrera.
+            raise error from exc
         return alerta, False
 
 
@@ -283,12 +285,11 @@ def _severidad_dolor_por_ventana(dia_postoperatorio, dolor_eva):
         if dia_max is None or dia_postoperatorio <= dia_max:
             if dolor_eva >= eva_alta:
                 return 'ALTA'
-            elif dolor_eva >= eva_media:
+            if dolor_eva >= eva_media:
                 return 'MEDIA'
-            elif dolor_eva >= eva_baja:
+            if dolor_eva >= eva_baja:
                 return 'BAJA'
-            else:
-                return None
+            return None
     return None
 
 
@@ -614,7 +615,11 @@ def _evaluar_hinchazon(registro, fecha_referencia):
     severidad_hinchazon = None
 
     # Condición BAJA: empeoramiento puntual (hoy > ayer)
-    if nivel_ayer is not None and nivel_hoy is not None:
+    # Los dos `if` NO se funden en uno a propósito: el primero pregunta si hay
+    # dato y el segundo si empeoró, que en clínica son preguntas distintas —
+    # "no sé" no es "no empeoró". Ver D8 y las pruebas de caracterización de
+    # `HinchazonCondicionMediaTests`.
+    if nivel_ayer is not None and nivel_hoy is not None:  # noqa: SIM102
         if nivel_hoy > nivel_ayer:
             severidad_hinchazon = 'BAJA'
 

@@ -67,22 +67,16 @@ class Command(BaseCommand):
                         registro,
                         fecha_referencia=fecha_referencia,
                     )
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001  (un registro malo no puede detener el lote)
                     errores += 1
                     self.stderr.write(
-                        'Evaluación registro pk={} falló con {}.'.format(
-                            registro.pk,
-                            type(exc).__name__,
-                        )
+                        f'Evaluación registro pk={registro.pk} falló con {type(exc).__name__}.'
                     )
                 else:
                     completados += 1
 
         self.stdout.write(
             self.style.SUCCESS(
-                'Evaluaciones procesadas: {} completadas, {} con error.'.format(
-                    completados,
-                    errores,
-                )
+                f'Evaluaciones procesadas: {completados} completadas, {errores} con error.'
             )
         )

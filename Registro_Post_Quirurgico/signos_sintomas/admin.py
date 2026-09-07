@@ -8,6 +8,7 @@ from django.template.response import TemplateResponse
 from django.utils import timezone
 from django.utils.html import format_html, mark_safe
 
+from .management.commands.desactivar_pacientes_vencidos import DIAS_SEGUIMIENTO
 from .models import (
     Alerta,
     CheckInProgramado,
@@ -17,7 +18,6 @@ from .models import (
     RecepcionWebhookTwilio,
     RegistroDiario,
 )
-from .management.commands.desactivar_pacientes_vencidos import DIAS_SEGUIMIENTO
 
 
 class MotivoResolucionForm(django_forms.Form):
@@ -720,6 +720,10 @@ class AlertaAdmin(admin.ModelAdmin):
             request,
             f'{actualizadas} alerta(s) marcadas como resueltas.',
         )
+        # Devolver None es lo que le dice al Admin que vuelva al listado. Se
+        # escribe explícito porque las otras ramas de esta acción sí devuelven
+        # una respuesta (el formulario intermedio del motivo).
+        return None
 
     def get_queryset(self, request):
         """B6: solo alertas de pacientes propios del médico. Superuser ve todos."""

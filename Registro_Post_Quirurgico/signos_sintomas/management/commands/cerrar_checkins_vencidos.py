@@ -44,7 +44,6 @@ from signos_sintomas.alert_engine import registrar_alerta_silencio
 from signos_sintomas.models import (
     CheckInProgramado,
     ConversacionWhatsApp,
-    Paciente,
 )
 
 logger = logging.getLogger(__name__)

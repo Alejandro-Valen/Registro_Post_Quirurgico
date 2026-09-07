@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from decouple import config, Csv, UndefinedValueError
+from decouple import Csv, UndefinedValueError, config
 from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -34,16 +34,14 @@ def config_obligatoria(nombre, cast=None):
     texto = '' if valor is None else str(valor).strip()
     if not texto:
         raise ImproperlyConfigured(
-            'La variable de entorno {} es obligatoria y está vacía o sin '
+            f'La variable de entorno {nombre} es obligatoria y está vacía o sin '
             'definir. Escribe su valor en el .env (o en las variables del '
             'servicio en Railway), crudo: sin comillas y sin <corchetes>.'
-            .format(nombre)
         )
     if _PLACEHOLDER_RE.match(texto):
         raise ImproperlyConfigured(
-            'La variable de entorno {} conserva un placeholder de ejemplo '
+            f'La variable de entorno {nombre} conserva un placeholder de ejemplo '
             'entre < >. Reemplázalo por el valor real, sin los signos.'
-            .format(nombre)
         )
     return cast(texto) if cast else texto
 
