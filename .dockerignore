@@ -12,4 +12,3 @@ inicio_entornoR.bat
 docs/
 *.md
 !Registro_Post_Quirurgico/signos_sintomas/static/admin/js/vendor/Chart.js-LICENSE.md
-requirements.txt

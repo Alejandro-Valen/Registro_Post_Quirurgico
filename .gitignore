@@ -21,6 +21,10 @@ db.sqlite3
 # --- Generado, no versionado ----------------------------------------------
 # collectstatic lo reconstruye en cada build.
 staticfiles/
+# Lo deja `pip install -e .` al instalar desde pyproject.toml.
+*.egg-info/
+build/
+dist/
 
 # --- Herramientas ---------------------------------------------------------
 .ruff_cache/
