@@ -1,5 +1,5 @@
 # Análisis de los 4 Archivos Restantes — Documentos Institucionales y Académicos
-## MVP Sugarbaker / Clínica Somer — Fuentes primarias del proponente (parte 2)
+## Monitoreo posquirúrgico remoto — Fuentes primarias del proponente (parte 2)
 
 > **Documento histórico (junio de 2026).** Las frases sobre pasos o decisiones
 > pendientes reflejan la sesión original. Para el estado vigente consulta
@@ -7,7 +7,7 @@
 
 > Estos 4 documentos son distintos en naturaleza a todo lo analizado antes: no
 > son literatura científica ni presentaciones informales, son **los documentos
-> formales que el Dr. Juan Camilo Correa Cote presentó a la Universidad CES**
+> formales que el médico proponente presentó a la universidad**
 > para registrar su proyecto de maestría (Maestría en TICs) ante la Dirección
 > de Investigación e Innovación y el comité de ética. Dos de los cuatro
 > archivos (`.doc`) se convirtieron a `.docx` para extraer el texto, y el
@@ -18,23 +18,23 @@
 
 ## 1. FR-IN-018 — Ficha Técnica General
 
-**Resumen:** Formulario institucional de la Universidad CES (Dirección de Investigación e Innovación) que registra los datos generales del proyecto. Título oficial registrado: **"Programa de cirugías colorrectales con seguimiento ambulatorio remoto."** Investigador: Juan Camilo Correa Cote, cédula 71364356, estudiante de posgrado en la Maestría en TICs, rol "Investigador". Cubrimiento: institucional. Lugar de ejecución: Clínica Medellín. El proyecto involucra seres humanos (marcado con X), lo que obliga a diligenciar el formato FR-IN-024 (el siguiente documento de este análisis).
+**Resumen:** Formulario institucional de la universidad (Dirección de Investigación e Innovación) que registra los datos generales del proyecto. Título oficial registrado: **"Programa de cirugías colorrectales con seguimiento ambulatorio remoto."** Investigador: el médico proponente, cédula ********, estudiante de posgrado en la Maestría en TICs, rol "Investigador". Cubrimiento: institucional. Lugar de ejecución: la clínica donde ejerce. El proyecto involucra seres humanos (marcado con X), lo que obliga a diligenciar el formato FR-IN-024 (el siguiente documento de este análisis).
 
 **Datos accionables:**
 - Título oficial del proyecto ante la universidad: **colorrectal en general**, sin ninguna mención a Sugarbaker, HIPEC o citorreducción.
 - Programa académico: Maestría en TICs — confirma que este es, formalmente, un proyecto de tecnología aplicada a la salud, no un proyecto clínico-quirúrgico puro.
-- Institución de ejecución registrada: **Clínica Medellín** (no Clínica Somer).
+- Institución de ejecución registrada: **la clínica donde ejerce** (no la clínica del proyecto).
 - Cubrimiento declarado: institucional (no multicéntrico), lo cual contrasta con la lista de "instituciones candidatas" (Centro Oncológico de Antioquia, Clínica Las Vegas, etc.) que el médico menciona en sus presentaciones informales como expansión futura.
 
-**Conexión con el proyecto:** Es la primera pieza de evidencia *formal* (no solo conversacional) de que el alcance académico registrado es "cirugía colorrectal" en sentido amplio. También introduce una pregunta nueva que no había aparecido antes: **el proyecto académico está registrado bajo Clínica Medellín, mientras que el MVP que se está construyendo (CLAUDE.md, ROADMAP) está enmarcado bajo Clínica Somer.** Puede ser que el médico trabaje en ambas instituciones (es coherente con que en sus presentaciones mencione varias clínicas de Medellín), pero vale la pena que el Arquitecto confirme si son la misma iniciativa con dos nombres, o si hay dos proyectos paralelos del médico que conviene no mezclar.
+**Conexión con el proyecto:** Es la primera pieza de evidencia *formal* (no solo conversacional) de que el alcance académico registrado es "cirugía colorrectal" en sentido amplio. También introduce una pregunta nueva que no había aparecido antes: **el proyecto académico está registrado bajo la clínica donde ejerce, mientras que el MVP que se está construyendo (CLAUDE.md, ROADMAP) está enmarcado bajo la clínica del proyecto.** Puede ser que el médico trabaje en ambas instituciones (es coherente con que en sus presentaciones mencione varias clínicas de Medellín), pero vale la pena que el Arquitecto confirme si son la misma iniciativa con dos nombres, o si hay dos proyectos paralelos del médico que conviene no mezclar.
 
-**Pros/contras de incorporar:** Pro — resuelve la pregunta de alcance con el peso de un documento institucional firmado, no solo de una opinión verbal; es la evidencia más fuerte para llevarle al médico si hace falta justificar un cambio de nombre/alcance del proyecto. Contra — abre una pregunta administrativa (Clínica Medellín vs. Clínica Somer) que no se puede resolver solo leyendo PDFs; requiere preguntarle directamente al médico.
+**Pros/contras de incorporar:** Pro — resuelve la pregunta de alcance con el peso de un documento institucional firmado, no solo de una opinión verbal; es la evidencia más fuerte para llevarle al médico si hace falta justificar un cambio de nombre/alcance del proyecto. Contra — abre una pregunta administrativa (la clínica donde ejerce vs. la clínica del proyecto) que no se puede resolver solo leyendo PDFs; requiere preguntarle directamente al médico.
 
 ---
 
 ## 2. FR-IN-024 — Ficha Técnica Comité de Ética en Humanos
 
-**Resumen:** Formulario más extenso (6 páginas) para el comité de ética en investigación con humanos, también de Universidad CES, mismo título de proyecto. Define el objetivo general ("Desarrollar un programa de manejo ambulatorio o de corta estancia de procedimientos quirúrgicos de cirugía colorrectal"), tres objetivos específicos, tipo de estudio (cohorte prospectiva, datos primarios, sin aleatorización), clasificación de riesgo (mínimo, según Resolución 8430 de 1993), y de forma crítica, **los criterios de inclusión y exclusión formales**.
+**Resumen:** Formulario más extenso (6 páginas) para el comité de ética en investigación con humanos, también de la universidad, mismo título de proyecto. Define el objetivo general ("Desarrollar un programa de manejo ambulatorio o de corta estancia de procedimientos quirúrgicos de cirugía colorrectal"), tres objetivos específicos, tipo de estudio (cohorte prospectiva, datos primarios, sin aleatorización), clasificación de riesgo (mínimo, según Resolución 8430 de 1993), y de forma crítica, **los criterios de inclusión y exclusión formales**.
 
 **Datos accionables:**
 - **Criterios de inclusión:** "Paciente con Dx de Cáncer colorrectal programados para cirugía. ECOG 0 o 1, sin comorbilidades significativas."
@@ -50,7 +50,7 @@
 
 ---
 
-## 3. Preproyecto_Julio_5_2023 — Documento formal de preproyecto (Universidad CES)
+## 3. Preproyecto_Julio_5_2023 — Documento formal de preproyecto (la universidad)
 
 **Resumen:** El documento más extenso y estructurado de toda la auditoría (21 páginas, formato de propuesta de investigación completa: planteamiento del problema, justificación, marco teórico, árbol de problemas/objetivos, metodología con marco lógico, consideraciones éticas, resultados esperados, impacto, ODS, presupuesto y cronograma). Cita 27 referencias, varias de las cuales **coinciden exactamente con los 9 PDFs ya auditados** (Lee et al., Gignoux et al. están en la bibliografía), confirmando una vez más que el corpus de literatura que se revisó es el que el propio médico construyó para su tesis.
 
@@ -61,7 +61,7 @@
   - **Componente 2 — "Capacitar el personal para la realización de cirugía."** Protocolos escritos de anestesia y enfermería para colectomías ambulatorias, con reuniones informativas y protocolos formales — un workstream completamente humano/clínico que no tiene ningún equivalente en el código del proyecto (ni debería tenerlo).
   - **Componente 3 — "Definir el dispositivo para monitoreo remoto."** Meta: tener un dispositivo definido para marzo 2024, con una lista de proveedores en Colombia, y explícitamente buscando medir **presión arterial, frecuencia cardíaca, temperatura y saturación de O2**. Piloto planeado con 20 pacientes entre abril y julio de 2024.
 - El árbol de objetivos (imagen del documento) muestra el objetivo central como **"Disminución de Estancia POP con el uso de Monitorización Remota en pacientes de Cirugía Gastrointestinal"** — un alcance todavía más amplio que "colorrectal": **cirugía gastrointestinal en general**. Los 6 medios listados para lograrlo incluyen tanto "Uso de Dispositivos de Monitorización Remota" como **"Encuestas a través de Apps"** — es decir, el camino que terminó tomando el bot de WhatsApp (encuestas conversacionales) era uno de los 6 medios planeados desde el inicio, no una desviación.
-- Presupuesto total: $35,006,481.41 COP, financiado enteramente por la Dirección de Investigación e Innovación de CES, cubriendo únicamente horas de personal científico (el investigador y un asesor de maestría) — no hay partida presupuestal ejecutada para "Equipos y Software" (la fila existe en la tabla, pero está vacía).
+- Presupuesto total: $35,006,481.41 COP, financiado enteramente por la Dirección de Investigación e Innovación de la universidad, cubriendo únicamente horas de personal científico (el investigador y un asesor de maestría) — no hay partida presupuestal ejecutada para "Equipos y Software" (la fila existe en la tabla, pero está vacía).
 
 **Conexión con el proyecto:** Este documento resuelve formalmente la pregunta de alcance (colorrectal/gastrointestinal en general, no Sugarbaker) y además expone algo que ningún documento anterior había mostrado: **el plan original tenía tres frentes paralelos, y el MVP de WhatsApp solo cubre una fracción del Componente 1.** El Componente 3 (el dispositivo de monitoreo con presión arterial, frecuencia cardíaca y saturación de O2) tenía fecha de definición para marzo de 2024 — hoy, junio de 2026, esa fecha lleva más de dos años vencida sin que el proyecto actual (Django + WhatsApp) la haya retomado. Esto no es necesariamente un problema, pero es una pregunta abierta que vale la pena resolver explícitamente con el médico: ¿el Componente 3 se abandonó deliberadamente a favor del enfoque conversacional (decisión razonable y respaldada por Outersterp 2025 y Coeckelberghs 2025, ya analizados), o sigue siendo una expectativa pendiente que el médico no ha vuelto a mencionar pero todavía espera?
 
@@ -74,10 +74,10 @@
 **Resumen:** Es el deck de 19 diapositivas que acompaña la transcripción de video ya analizada ("Preproyecto", documento previo de esta auditoría) — mismo contenido, mismo orden, mismas citas. No introduce un argumento nuevo, pero sí aporta el detalle bibliográfico exacto que la transcripción no tenía (la transcripción es audio, no incluye las referencias en pantalla) y dos datos biográficos y de cifras que no estaban en el video.
 
 **Datos accionables (lo que el deck agrega sobre la transcripción ya analizada):**
-- Formación del médico: Cirugía Oncológica, Universidad de Toronto (2016); Cirugía General, Universidad de Antioquia (2013); Medicina, Universidad de Antioquia (2008).
+- Formación del médico: Cirugía Oncológica, una universidad canadiense (2016); Cirugía General, una universidad pública colombiana (2013); Medicina, una universidad pública colombiana (2008).
 - Comparación de costos por enfoque quirúrgico (cita: Am J Surg. 2012;204:952-957): cirugía convertida a abierta USD 59,709 vs. abierta USD 56,977 vs. laparoscópica USD 46,624; laparoscópica asociada a 1.87 días menos de estancia en promedio.
-- Su experiencia personal en Clínica Medellín está descrita como **"En Proceso de Publicación"** — es decir, sus propios datos de mediana de estancia de 3 días no son todavía literatura publicada, son su propia base de datos no revisada por pares.
-- Lista de instituciones candidatas en esta versión: Clínica Medellín de Occidente, Clínica Vida, Hospital Pablo Tobón Uribe, Clínica AUNA, Hospital Manuel Uribe Ángel, Centro Oncológico de Antioquia — una lista distinta (y más amplia) a la mencionada en el video de vigilancia tecnológica, lo cual sugiere que la lista de "dónde expandir esto" sigue siendo una idea en evolución, no una decisión cerrada.
+- Su experiencia personal en la clínica donde ejerce está descrita como **"En Proceso de Publicación"** — es decir, sus propios datos de mediana de estancia de 3 días no son todavía literatura publicada, son su propia base de datos no revisada por pares.
+- Lista de instituciones candidatas en esta versión: otra clínica de la ciudad, Clínica Vida, Hospital Pablo Tobón Uribe, Clínica AUNA, Hospital Manuel Uribe Ángel, Centro Oncológico de Antioquia — una lista distinta (y más amplia) a la mencionada en el video de vigilancia tecnológica, lo cual sugiere que la lista de "dónde expandir esto" sigue siendo una idea en evolución, no una decisión cerrada.
 - Pequeño detalle de control de calidad: la diapositiva sobre Gignoux describe la toma de PCR/hemoleucograma en "día 1, 3, 5 y 7", pero el PDF original de Gignoux que ya se auditó especifica día 1, 3 y 7 (sin día 5) — una discrepancia menor de memoria/cita del médico, sin mayor impacto, pero vale la pena no propagarla si se vuelve a citar este dato.
 
 **Conexión con el proyecto:** Confirma, desde una tercera fuente, que Gignoux et al. es la referencia ancla y que el marco mental del médico desde el principio fue "cirugía colorrectal general", reforzando lo ya encontrado en la transcripción de video y en los formularios institucionales — es la pieza con menos información nueva, pero la que más triangula lo que ya sabíamos.
@@ -89,7 +89,7 @@
 ## Síntesis — lo que estos 4 documentos resuelven (y lo que abren)
 
 - **La decisión de alcance queda formalmente resuelta, no solo sugerida.** El título registrado ante la universidad y ante el comité de ética es "Programa de cirugías colorrectales con seguimiento ambulatorio remoto." El criterio de inclusión formal (ECOG 0-1, sin comorbilidades significativas) describe explícitamente un paciente que **no** es el paciente Sugarbaker/HIPEC típico. Esto ya no es una hipótesis de la auditoría de literatura — es lo que el médico firmó ante su comité de ética.
-- **Aparece una pregunta institucional nueva:** los formularios de CES registran "Clínica Medellín" como sede, mientras que el MVP que se está construyendo se documenta bajo "Clínica Somer." Vale la pena que el Arquitecto confirme si son la misma cosa con dos nombres o dos proyectos relacionados pero distintos.
+- **Aparece una pregunta institucional nueva:** los formularios de la universidad registran "la clínica donde ejerce" como sede, mientras que el MVP que se está construyendo se documenta bajo "la clínica del proyecto." Vale la pena que el Arquitecto confirme si son la misma cosa con dos nombres o dos proyectos relacionados pero distintos.
 - **El plan original tenía 3 componentes; el MVP de WhatsApp cubre fracciones de uno solo.** El Componente 3 (dispositivo de presión arterial/frecuencia cardíaca/temperatura/SpO2, con fecha de definición marzo 2024) sigue sin resolverse dos años después de su fecha límite — la misma brecha que ya habíamos visto en el video, pero ahora con fechas formales vencidas, lo que le sube la prioridad a resolver esa conversación con el médico.
 - **El enfoque de encuestas conversacionales (el bot) no es una desviación del plan — estaba en el árbol de objetivos original** como uno de 6 medios planeados, junto al uso de dispositivos. Es un argumento limpio para defender la arquitectura actual sin tener que presentarla como un cambio de rumbo.
 

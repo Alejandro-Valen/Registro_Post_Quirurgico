@@ -38,3 +38,53 @@
 # de `.gitleaks.toml`, que gitleaks no trae de fabrica y que se escribio
 # justamente por este caso.
 f7d25bdb8bb1243a0bb5d9343547e671033f2667:Resgistro_Post_Quirurgico/Resgistro_Post_Quirurgico/settings.py:django-secret-key-literal:23
+
+# ---------------------------------------------------------------------------
+# Cedulas en el `signos_sintomas/tests.py` que ya no existe — datos INVENTADOS
+#
+# Que son. Fixtures del archivo de pruebas monolitico que se partio el
+# 10/08/2026 en el paquete `tests/`. Los valores son inventados y secuenciales
+# (`123456789`, `999888777`, `800111222`), del mismo tipo que los que hoy viven
+# en `tests/` y que la regla ya no mira por su `paths`.
+#
+# Por que se silencian aqui y no por ruta. La ruta que la regla exime es
+# `.*/tests/.*` —el paquete actual—, y estos vivian en `tests.py`, un archivo.
+# Ampliar el patron para cubrir ambos habria dejado fuera de vigilancia tambien
+# los dos hallazgos REALES de mas abajo, que estan en ese mismo archivo.
+4c59d8be37cd37dce8e7da33b8a95667b0a517dc:Registro_Post_Quirurgico/signos_sintomas/tests.py:cedula-colombiana:1377
+719bb64c46e229998b78d4530824a83549a34561:Registro_Post_Quirurgico/signos_sintomas/tests.py:cedula-colombiana:1823
+719bb64c46e229998b78d4530824a83549a34561:Registro_Post_Quirurgico/signos_sintomas/tests.py:cedula-colombiana:2410
+719bb64c46e229998b78d4530824a83549a34561:Registro_Post_Quirurgico/signos_sintomas/tests.py:cedula-colombiana:2569
+719bb64c46e229998b78d4530824a83549a34561:Registro_Post_Quirurgico/signos_sintomas/tests.py:cedula-colombiana:2573
+
+# ---------------------------------------------------------------------------
+# Datos personales REALES del medico proponente en la historia — ficha D17
+#
+# Que son. El nombre completo del medico y su numero de cedula, tal como
+# venian en un documento que el mismo proporciono en junio de 2026 para
+# alimentar el contexto clinico del proyecto. Se transcribieron sin filtrar.
+#
+# ESTO NO ES INOFENSIVO, y por eso su entrada es distinta de todas las de
+# arriba: no se silencia porque no importe, sino porque **retirarlo de la
+# historia exige una decision que no es tecnica**. Ver ficha D17.
+#
+# Estado a 07/09/2026:
+#   - El arbol de trabajo esta LIMPIO. La cedula la redacto el Arquitecto y las
+#     menciones institucionales se sustituyeron por descripciones genericas.
+#   - La historia NO. `git show <commit>:<ruta>` sigue devolviendolo entero.
+#   - El repositorio es PRIVADO, asi que el dato solo lo alcanza quien ya tiene
+#     acceso: los dos miembros del equipo.
+#
+# Que falta, y no se puede resolver desde aqui:
+#   1. Decidir si el repositorio sera publico. Si lo es, reescribir la historia
+#      deja de ser opcional.
+#   2. Decirselo al medico. Es un tercero identificable que no consintio que
+#      sus datos vivieran en un repositorio de codigo, y la conversacion le
+#      corresponde al Arquitecto.
+#
+# Si esta seccion sigue aqui dentro de seis meses sin que (1) y (2) se hayan
+# resuelto, la excepcion se convirtio en el agujero que la exclusion de
+# `docs/auditoria_literatura/` ya fue una vez. Esa es la leccion de D17.
+4da66f14bb8acdd60f1ba3da935337a5470f6633:Registro_Post_Quirurgico/signos_sintomas/tests.py:cedula-colombiana:2319
+4da66f14bb8acdd60f1ba3da935337a5470f6633:Registro_Post_Quirurgico/signos_sintomas/tests.py:cedula-colombiana:2327
+74f3e04d4d4a88f7852e901e06ec23a91edaa9d3:docs/auditoria_literatura/ANALISIS_4_ARCHIVOS_RESTANTES.md:cedula-colombiana:17

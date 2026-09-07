@@ -45,14 +45,54 @@ regexes = [
 ]
 
 
+# --- Regla propia: numero de cedula colombiana ----------------------------
+#
+# Por que existe. El 07/09/2026 una auditoria encontro el nombre completo del
+# medico proponente, su numero de cedula y sus afiliaciones institucionales en
+# `docs/auditoria_literatura/`. Llegaron al repositorio al cargar un documento
+# que el propio medico proporciono para alimentar el contexto del proyecto.
+#
+# Lo grave no fue el dato: fue que la carpeta estaba EXCLUIDA del escaneo (ver
+# abajo), asi que esta guardia nunca la iba a mirar. Ficha D17.
+#
+# La regla se ancla a la palabra "cedula" y no a cualquier numero: un patron
+# suelto de 6-10 digitos produciria un falso positivo con cada fecha, cada
+# puerto y cada cifra de la documentacion.
+[[rules]]
+id = "cedula-colombiana"
+description = "Numero de cedula junto a la palabra que lo nombra"
+regex = '''(?i)c[eé]dula\D{0,12}\d{6,10}'''
+tags = ["pii", "habeas-data", "propia-del-proyecto"]
+
+[rules.allowlist]
+regexes = [
+    # La declaracion del campo en el modelo, que no lleva ningun valor.
+    '''cedula\s*=\s*models\.''',
+    # Los <corchetes> de las plantillas.
+    '''<[^>]*>''',
+]
+paths = [
+    # Datos de PRUEBA y de demostracion. Son inventados por definicion
+    # (`123456789`, `999888777`, `FILTRO-0001`) y meterlos aqui evita que la
+    # guardia grite en cada fixture. Que un dato REAL de paciente no entre en
+    # una prueba es una regla distinta —esta escrita en D11— y no se defiende
+    # desde aqui: se defiende no poniendolo.
+    '''.*/tests/.*''',
+    '''.*/seed_demo.*\.py$''',
+]
+
+
 # --- Rutas que no se escanean ---------------------------------------------
 [allowlist]
 description = "Rutas sin secretos por naturaleza"
 paths = [
-    # Documentacion del proyecto. Se revisa a mano en el Loop G (higiene de
-    # identidad); meterla aqui produciria falsos positivos con los ejemplos y
-    # los fragmentos de configuracion que citan los documentos.
-    '''docs/auditoria_literatura/.*''',
+    # NOTA (07/09/2026, ficha D17): aqui estaba `docs/auditoria_literatura/.*`.
+    # Se retiro. La exclusion era un aplazamiento declarado al "Loop G" de
+    # higiene de identidad, un loop que nunca se ejecuto — y mientras tanto esa
+    # carpeta fue la unica del repositorio sin vigilancia, justo la que tenia
+    # datos personales de un tercero. Una excepcion que espera a un trabajo
+    # futuro deja de ser una excepcion y pasa a ser un agujero.
+    #
     # Bytecode y estaticos generados.
     '''.*\.pyc$''',
     '''staticfiles/.*''',

@@ -15,7 +15,7 @@ Contiene cuatro análisis de las fuentes primarias revisadas:
   colorrectal (la evidencia que respalda el modelo de monitoreo remoto).
 
 - **ANALISIS_TRANSCRIPCIONES_MEDICO.md** — Análisis de las transcripciones
-  de presentaciones del médico proponente (Dr. Juan Camilo Correa); fuentes
+  de presentaciones del médico proponente; fuentes
   primarias del origen clínico del proyecto.
 
 - **ANALISIS_4_ARCHIVOS_RESTANTES.md** — Análisis de documentos
