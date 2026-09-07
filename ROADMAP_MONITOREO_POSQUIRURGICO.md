@@ -73,8 +73,9 @@ Registro_Post_Quirurgico/                    ← raíz del repositorio
 ├── AUDITORIA_SPRINT3_CIERRE.md              ← detalle de hallazgos A/B/C/D del hardening
 ├── .gitignore
 ├── inicio_entornoR.bat
-├── requirements.txt                         ← pip freeze completo (reproducir entorno dev)
-├── requirements-runtime.txt                 ← dependencias directas de runtime (producción)
+├── pyproject.toml                           ← dependencias (fuente única) + metadatos
+├── ruff.toml                                ← reglas del linter y el porqué de cada excepción
+├── LICENSE  README.md  CONTRIBUTING.md  SECURITY.md
 ├── docs/
 │   └── auditoria_literatura/                ← auditoría de evidencia ERAS (9 PDFs + transcripciones)
 │       ├── README.md
@@ -452,7 +453,7 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 
 > Rama: `sprint-3-hardening` (desde `Desarrollo` post-merge)
 > Prerequisito: merge de `sprint-3-whatsapp` → `Desarrollo`.
-> Detalle completo de cada hallazgo en `docs/proceso/auditorias/2026-06_informe_sprint3_cierre.md`.
+> Detalle completo de cada hallazgo en `proceso/auditorias/2026-06_informe_sprint3_cierre.md`.
 
 **Grupo A — Obligatorio antes de pacientes reales:**
 - [x] A1 — Conversación abandonada no reinicia al día siguiente
@@ -1128,7 +1129,7 @@ DB_PORT=5432
 *Última actualización: 21/07/2026. Sprint 5 en cierre sobre
 `sprint-5-produccion`: Loops 1-6 completados técnicamente, 280 tests OK y
 producción validada con flujos NORMAL/MEDIA/ALTA. Siguiente paso: ejecutar la
-auditoría independiente descrita en `docs/proceso/auditorias/2026-07-22_instruccion_loops_1_6.md`, resolver
+auditoría independiente descrita en `proceso/auditorias/2026-07-22_instruccion_loops_1_6.md`, resolver
 hallazgos bloqueantes y solo entonces preparar el PR hacia `Desarrollo`. Los
 requisitos externos de WhatsApp Business, correo con dominio propio, plan
 Railway, Habeas Data y datos definitivos del médico siguen siendo compuertas

@@ -37,7 +37,7 @@ Copiar y pegar tal cual:
 Retomamos desde Desarrollo. Soy __ (Arquitecto).
 
 Antes de proponer nada:
-1. Lee docs/proceso/2026-08-10_instruccion_crear_medico.md — es el guion de esta
+1. Lee proceso/instrucciones/2026-08-10_instruccion_crear_medico.md — es el guion de esta
    sesión.
 2. Verifica el estado real con git log, git status y la suite. Si algo no
    coincide con los documentos, manda Git y avísame.

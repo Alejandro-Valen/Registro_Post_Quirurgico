@@ -25,7 +25,7 @@ retome sin depender de una conversación que ya no existe.
 ## Estructura
 
 ```
-docs/proceso/
+proceso/
 ├── README.md              Este archivo
 ├── metodo_de_trabajo.md   Cómo se corrige algo en este proyecto: el método de loops
 ├── AAAA-MM-DD_instruccion_*.md   El guion de una sesión concreta (ver abajo)
@@ -78,7 +78,7 @@ verifica.
 
 ```powershell
 cd Registro_Post_Quirurgico
-$env:PYTHONPATH = "../docs/proceso/verificaciones"
+$env:PYTHONPATH = "../proceso/verificaciones"
 python manage.py test 2026-07-25_verificacion_loop_c -v 2 --noinput
 Remove-Item Env:PYTHONPATH
 ```
@@ -102,7 +102,7 @@ trae de fábrica**:
 ```powershell
 winget install Gitleaks.Gitleaks      # una sola vez; sirve la 8.30.1, la de ci.yml
 gitleaks version                       # comprobar que quedó en el PATH
-python docs/proceso/verificaciones/2026-08-10_verificacion_guardia_secretos.py
+python proceso/verificaciones/2026-08-10_verificacion_guardia_secretos.py
 ```
 
 Que la versión local coincida con la fijada en `ci.yml` no es cosmético: una

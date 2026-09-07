@@ -44,9 +44,9 @@ Copiar y pegar tal cual:
 Retomamos en la rama sprint-6-ci. Soy __ (Arquitecto).
 
 Antes de proponer nada:
-1. Lee docs/proceso/2026-07-30_instruccion_sprint6_ci.md — es el guion de esta
+1. Lee proceso/instrucciones/2026-07-30_instruccion_sprint6_ci.md — es el guion de esta
    sesión.
-2. Lee docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md — los 8 puntos
+2. Lee proceso/auditorias/2026-07-29_revision_pr_sprint5.md — los 8 puntos
    de deuda y su orden. Hoy es el punto 1.
 3. Verifica el estado real con git log, git status y la suite. Si algo no
    coincide con los documentos, manda Git y avísame.

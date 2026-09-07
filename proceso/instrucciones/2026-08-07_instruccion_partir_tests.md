@@ -45,7 +45,7 @@ Copiar y pegar tal cual:
 Retomamos desde Desarrollo. Soy __ (Arquitecto).
 
 Antes de proponer nada:
-1. Lee docs/proceso/2026-08-07_instruccion_partir_tests.md — es el guion de esta
+1. Lee proceso/instrucciones/2026-08-07_instruccion_partir_tests.md — es el guion de esta
    sesión.
 2. Verifica el estado real con git log, git status y la suite. Si algo no
    coincide con los documentos, manda Git y avísame.
@@ -132,7 +132,7 @@ se juntan.
    no bloquean, falta la protección de rama.
 5. Cierre: BITÁCORA, `CLAUDE.md`, ROADMAP y el guion de la sesión siguiente.
 
-**Esta sesión no necesita script de verificación en `docs/proceso/verificaciones/`.**
+**Esta sesión no necesita script de verificación en `proceso/verificaciones/`.**
 Las anteriores lo llevaban porque cambiaban comportamiento y había que
 demostrar cuál. Aquí la verificación es el conteo y la lista de clases, y va en
 el cuerpo del PR.
@@ -155,7 +155,7 @@ Ninguna es de código: hay que tomarlas antes de programar.
 `set_password`, `is_staff = True`, `groups.set([...])` y
 `user_permissions.clear()` sobre un usuario que ya existe. Si el médico cambia su
 contraseña en el Admin, el siguiente despliegue **la revierte en silencio**.
-Detalle en `docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`, punto 8.
+Detalle en `proceso/auditorias/2026-07-29_revision_pr_sprint5.md`, punto 8.
 
 *Nota:* con Railway caído esto no muerde hoy —no hay despliegues— pero la
 decisión sigue pendiente y es barata de tomar ahora.

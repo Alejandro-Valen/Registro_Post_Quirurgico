@@ -18,7 +18,7 @@
 - Generado `requirements.txt` con `pip freeze`
 - Actualizado `.gitignore` para excluir `.env`
 - Creado `CLAUDE.md` con contexto clínico completo del proyecto
-- Creado `BITACORA.md` (este archivo)
+- Creado `proceso/BITACORA.md` (este archivo)
 - Push exitoso a rama `Desarrollo`
 - Verificación: `python manage.py check` → 0 errores
 
@@ -1142,7 +1142,7 @@ Sincronización de docs de este cambio: commits `docs:` en esta misma sesión.
 ## Auditoría de cierre Sprint 3 — Veredicto y hallazgos
 **Fecha:** 24/06/2026
 **Responsable:** León (Arquitecto IA) con Claude Code (coherencia y lógica clínica) + Codex (seguridad y escalabilidad, pasada web + pasada local)
-**Estado:** COMPLETADO ✅ — ver `docs/proceso/auditorias/2026-06_informe_sprint3_cierre.md`
+**Estado:** COMPLETADO ✅ — ver `proceso/auditorias/2026-06_informe_sprint3_cierre.md`
 
 ### Qué se auditó y quién
 
@@ -1223,7 +1223,7 @@ detalles de los necesarios, y el endpoint de contacto web sin rate limit.
 - **Flujo del bot en 10 preguntas** (temperatura, dolor, drenaje ×2,
   gases+náuseas, hinchazón, FC, FR, tolerancia a líquidos).
 - **Documentación sincronizada:** CLAUDE.md, ROADMAP y BITACORA
-  reflejan el estado real del código. `docs/proceso/auditorias/2026-06_informe_sprint3_cierre.md`
+  reflejan el estado real del código. `proceso/auditorias/2026-06_informe_sprint3_cierre.md`
   creado en la raíz del repo con el detalle técnico de cada hallazgo.
 
 ### Próximo paso
@@ -1264,7 +1264,7 @@ de producción real), luego Sprint 4 (dashboard del médico).
 ### Qué se hizo
 
 Se resolvieron los 20 hallazgos del Grupo A, B y C de
-`docs/proceso/auditorias/2026-06_informe_sprint3_cierre.md`, en orden A1→A6, B1→B7, C1→C7.
+`proceso/auditorias/2026-06_informe_sprint3_cierre.md`, en orden A1→A6, B1→B7, C1→C7.
 Cada hallazgo tiene su commit individual en la rama.
 
 **Grupo A — Lógica y seguridad del bot:**
@@ -3195,7 +3195,7 @@ hasta recibir una auditoría independiente favorable.
   (`enviar_recordatorios` continúa stub), dominio propio de Resend, plan Railway
   con cron separado, Habeas Data firmado y datos definitivos del médico.
 
-**Compuerta de cierre:** se creó `docs/proceso/auditorias/2026-07-22_instruccion_loops_1_6.md` para que
+**Compuerta de cierre:** se creó `proceso/auditorias/2026-07-22_instruccion_loops_1_6.md` para que
 Claude Code contraste todo el árbol, los seis loops, las 280 pruebas y los
 controles de producción. No se abrirá PR ni se hará merge hasta clasificar sus
 hallazgos, resolver los bloqueantes y repetir las pruebas afectadas.
@@ -3257,7 +3257,7 @@ instrucciones activas contradictorias antes de la auditoría con Claude Code.
   funcional sigue siendo **280/280 tests OK**, `check --deploy` limpio y
   `pip-audit` sin vulnerabilidades conocidas.
 - No se abrió PR ni se hizo merge. El siguiente paso obligatorio es entregar a
-  Claude Code `docs/proceso/auditorias/2026-07-22_instruccion_loops_1_6.md`, recibir su informe completo y
+  Claude Code `proceso/auditorias/2026-07-22_instruccion_loops_1_6.md`, recibir su informe completo y
   volver a Codex para resolver conjuntamente cualquier hallazgo bloqueante.
 
 ---
@@ -3269,7 +3269,7 @@ corregido y verificado. Loops B y C pendientes.
 
 ### Auditoría independiente (Claude Code)
 
-Se ejecutó `docs/proceso/auditorias/2026-07-22_instruccion_loops_1_6.md` sobre `fbf62a8`, sin editar
+Se ejecutó `proceso/auditorias/2026-07-22_instruccion_loops_1_6.md` sobre `fbf62a8`, sin editar
 código. **Veredicto: BLOQUEADO PARA PR A DESARROLLO.**
 
 Las cuatro cifras que reportaba Codex se confirmaron reproduciéndolas: 280 tests
@@ -3722,7 +3722,7 @@ cifras del informe en vez de creerlas.
 **El informe de Codex volvió a bloquear el PR**, con dos hallazgos ALTOS. Los
 cuatro se reprodujeron contra el código antes de aceptar ninguno, con un arnés
 desechable fuera del repositorio. El resultado completo quedó escrito en
-`docs/proceso/auditorias/2026-07-27_informe_cierre_codex.md`.
+`proceso/auditorias/2026-07-27_informe_cierre_codex.md`.
 
 **Hallazgo 1 — identidad del paciente en la salida operativa.** Confirmado,
 pero **por un canal distinto al que reportaba el informe**. El logger
@@ -3893,7 +3893,7 @@ clínico mal escrito en un documento vivo**, no polvo documental.
 
 **Cierre.** Suite en **337 tests OK** (18 más que la línea base de 319), `check`
 sin issues, `makemigrations --check` limpio. Corrí yo mismo la verificación
-independiente `docs/proceso/verificaciones/2026-07-27_verificacion_loop_d.py`:
+independiente `proceso/verificaciones/2026-07-27_verificacion_loop_d.py`:
 **8 bloques, OK.**
 
 ### Decisiones tomadas y su justificación
@@ -3991,7 +3991,7 @@ fija D1 para una racha de 2 turnos.
    descarta tanto un fallo de migración como un Postgres o Redis inalcanzable.
 
 **Lo que queda, ya sin riesgo de producción** (guion completo en
-`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`):
+`proceso/instrucciones/2026-07-28_instruccion_cierre_rama_sprint5.md`):
 
 1. Revisión del diff completo contra `origin/Desarrollo` (~117 commits).
 2. PR y merge a `Desarrollo`. **No despliega nada.**
@@ -4023,7 +4023,7 @@ entradas históricas no se reescribieron: describen lo que se hizo en su momento
 
 ### Qué se hizo
 
-Los cuatro pasos del guion `docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`.
+Los cuatro pasos del guion `proceso/instrucciones/2026-07-28_instruccion_cierre_rama_sprint5.md`.
 No se escribió código nuevo: la sesión fue de revisión, documentación y cambio de
 topología de despliegue.
 
@@ -4149,10 +4149,10 @@ nada de la topología de despliegue.
 ### Qué queda pendiente
 
 **Instrucción de la próxima sesión:**
-`docs/proceso/2026-07-30_instruccion_sprint6_ci.md`.
+`proceso/instrucciones/2026-07-30_instruccion_sprint6_ci.md`.
 
 En una línea: **montar CI en `sprint-6-ci`**, que es el punto 1 de los 8 de
-`docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`. Después, el Loop E
+`proceso/auditorias/2026-07-29_revision_pr_sprint5.md`. Después, el Loop E
 (D14) en su propia sesión.
 
 **Decisión al cierre: los trámites del piloto quedan diferidos.** Se planteó
@@ -4182,7 +4182,7 @@ siguen ahí.
 
 Un solo objetivo, el punto 1 de los 8 de la revisión del PR del Sprint 5:
 **montar CI**. No se tocó lógica clínica, ni un umbral, ni una regla. Se siguió
-`docs/proceso/2026-07-30_instruccion_sprint6_ci.md`.
+`proceso/instrucciones/2026-07-30_instruccion_sprint6_ci.md`.
 
 **Verificación previa.** Antes de proponer nada verifiqué el estado real contra
 Git y contra la suite, y los documentos no mintieron: `sprint-6-ci` en `afe4b85`
@@ -4210,7 +4210,7 @@ al final, una columna inexistente en `list_display` (`admin.E108`), un `help_tex
 cambiado sin migración, `RESEND_API_KEY` retirada del entorno, y una prueba con
 una aserción que falla. Los dos commits **se borraron de la rama** con
 `reset --hard` y `push --force-with-lease`: la evidencia vive en
-`docs/proceso/verificaciones/2026-07-31_verificacion_ci.md` y en las corridas de
+`proceso/verificaciones/2026-07-31_verificacion_ci.md` y en las corridas de
 Actions, no en la historia que llegó a `Desarrollo`.
 
 Quedó demostrado de paso que los pasos son **independientes**: en la rotura 1
@@ -4321,7 +4321,7 @@ Pendientes menores que dejó esta sesión, ninguno bloqueante:
 
 Un solo objetivo, el punto 2 de los 8 de la revisión del PR del Sprint 5: **D14,
 aislar las tareas del cron**. No se tocó lógica clínica, ni un umbral, ni una
-regla. Se siguió `docs/proceso/2026-08-01_instruccion_loop_e.md`.
+regla. Se siguió `proceso/instrucciones/2026-08-01_instruccion_loop_e.md`.
 
 **La sesión se cortó a la mitad.** Se me cerró la pestaña con E-1 ya commiteado
 (`e37e1a4`) y E-2 escrito entero en el árbol de trabajo, sin correr ni commitear.
@@ -4403,7 +4403,7 @@ que el rojo es deliberado y que lo único que decide es la última línea: `OK` 
 
 ### Verificación
 
-**Script independiente:** `docs/proceso/verificaciones/2026-08-06_verificacion_loop_e.py`,
+**Script independiente:** `proceso/verificaciones/2026-08-06_verificacion_loop_e.py`,
 cinco bloques, `Ran 5 tests ... OK`.
 
 No repite E-1. El **bloque 1** comprueba el desenlace clínico con datos reales en
@@ -4451,7 +4451,7 @@ primera.
 en un paquete `tests/`, en su propia sesión. **Ahora es la ventana**: ninguna
 rama avanza en paralelo, y el Loop E —que era el que seguía añadiendo pruebas a
 ese archivo— ya cerró. Guion en
-`docs/proceso/2026-08-07_instruccion_partir_tests.md`. Es un refactor **sin
+`proceso/instrucciones/2026-08-07_instruccion_partir_tests.md`. Es un refactor **sin
 cambio de comportamiento**: la prueba de que salió bien es que el conteo no se
 mueva de **340** y que ninguna clase desaparezca.
 
@@ -4481,7 +4481,7 @@ Dos trabajos, cada uno en su rama, ninguno de lógica clínica.
 
 **1 · `signos_sintomas/tests.py` es ahora un paquete `tests/`.** El archivo tenía
 6.288 líneas y 46 clases. Quedó repartido en nueve archivos por tema más un
-`soporte.py`. Se siguió `docs/proceso/2026-08-07_instruccion_partir_tests.md`.
+`soporte.py`. Se siguió `proceso/instrucciones/2026-08-07_instruccion_partir_tests.md`.
 
 | Archivo | Líneas | Qué agrupa |
 |---|---:|---|
@@ -4614,7 +4614,7 @@ propio trabajo. Una verificación que su destinatario no puede correr es
 documentación, no verificación.
 
 Se corrigió el mismo día (PR #15, merge `7ed3fea`): el comando de instalación
-quedó en la cabecera del script y en `docs/proceso/README.md`. **`winget` sirve
+quedó en la cabecera del script y en `proceso/README.md`. **`winget` sirve
 la 8.30.1, la misma versión que `ci.yml` tiene fijada**, y eso se comprobó antes
 de escribirlo. Que ambas coincidan no es cosmético: una versión distinta en local
 puede dar otro resultado y mandar a buscar un problema que no existe.
@@ -4632,7 +4632,7 @@ un trámite pendiente a una decisión con coste.
 **Lo siguiente es la decisión sobre `crear_medico`**, que reescribe la cuenta del
 médico —contraseña, grupos y permisos— en **cada arranque** del servicio web. No
 es trabajo de código: es una decisión que hay que tomar antes de programar. Guion
-en `docs/proceso/2026-08-10_instruccion_crear_medico.md`.
+en `proceso/instrucciones/2026-08-10_instruccion_crear_medico.md`.
 
 Pendientes menores, ninguno bloqueante:
 
@@ -4657,7 +4657,7 @@ Pendientes menores, ninguno bloqueante:
 ### Qué se hizo
 
 La sesión empezó como **una decisión, no como código** — así lo pedía el guion
-`docs/proceso/2026-08-10_instruccion_crear_medico.md`— y terminó con la decisión
+`proceso/instrucciones/2026-08-10_instruccion_crear_medico.md`— y terminó con la decisión
 tomada, escrita e implementada, porque una vez decidida la corrección era
 pequeña y verificable sin producción.
 

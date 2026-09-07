@@ -33,9 +33,11 @@
 ## 1. Cómo está preparado el repo (parte código, ya hecha)
 
 - **`Dockerfile`** (raíz del repo) controla el build y el arranque:
-  - Instala desde **`requirements-runtime.txt`** (limpio), NO desde
-    `requirements.txt` (que es el `pip freeze` completo de desarrollo e incluye
-    paquetes solo-Windows —`pywin32`, `winrt-*`— que romperían el build en Linux).
+  - Instala con `pip install .` desde **`pyproject.toml`**, que desde el
+    07/09/2026 es la fuente única de las dependencias. Solo entran las nueve
+    de runtime; el extra `dev` (linter, pip-audit, freezegun) se queda fuera.
+    Antes había tres `requirements*.txt` y este build tenía que esquivar a
+    mano el que llevaba el nombre canónico.
   - Arranque: `collectstatic` + `migrate` + configuración idempotente de roles
     + `gunicorn`, con `--chdir Registro_Post_Quirurgico`
     porque `manage.py` vive un nivel debajo de la raíz del repo.
@@ -43,7 +45,8 @@
 - **`.python-version`** = `3.13` (fija la versión de Python del build).
 - **WhiteNoise** sirve los estáticos del Admin en producción (Railway no tiene
   Nginx delante). Configurado en `settings_production.py`.
-- **`gunicorn` + `whitenoise`** añadidos a `requirements-runtime.txt`.
+- **`gunicorn` + `whitenoise`** están entre las dependencias de runtime de
+  `pyproject.toml`.
 
 **No hay que cambiar nada de esto en Railway** — es automático al conectar el repo.
 
