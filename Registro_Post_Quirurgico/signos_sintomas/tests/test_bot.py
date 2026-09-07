@@ -341,7 +341,8 @@ class BotMensajeCierreAlertaTests(TestCase):
 
     def _completar_flujo(self, temperatura="37.0", aspecto="1", gases_nauseas="sí, 0"):
         """Recorre las 10 preguntas con drenaje presente. Devuelve la respuesta final."""
-        env = lambda t: bot.procesar_mensaje(self.TELEFONO_TWILIO, t)
+        def env(t):
+            return bot.procesar_mensaje(self.TELEFONO_TWILIO, t)
         env("hola")            # -> temperatura
         env(temperatura)       # -> dolor
         env("3")               # -> tiene_drenaje
@@ -586,7 +587,8 @@ class BotEstadoEvaluacionMotorTests(TestCase):
 
     def _completar_flujo(self):
         """Recorre las 10 preguntas sin drenaje. Devuelve la respuesta final."""
-        env = lambda t: bot.procesar_mensaje(self.TELEFONO_TWILIO, t)
+        def env(t):
+            return bot.procesar_mensaje(self.TELEFONO_TWILIO, t)
         env("hola")     # -> temperatura
         env("37.0")     # -> dolor
         env("3")        # -> tiene_drenaje

@@ -45,8 +45,12 @@ from django.utils import timezone
 
 from signos_sintomas.evaluacion_alertas import evaluar_registro_con_estado
 from signos_sintomas.models import (
-    Alerta, CheckInProgramado, ConversacionWhatsApp, NotificacionAlerta,
-    Paciente, RegistroDiario,
+    Alerta,
+    CheckInProgramado,
+    ConversacionWhatsApp,
+    NotificacionAlerta,
+    Paciente,
+    RegistroDiario,
 )
 
 logger = logging.getLogger(__name__)

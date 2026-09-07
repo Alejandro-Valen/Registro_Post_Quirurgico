@@ -28,7 +28,6 @@ Máquina de estados (10 preguntas):
 import logging
 import re
 import unicodedata
-
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
@@ -362,15 +361,14 @@ def _procesar_respuesta_flujo(conv, paciente, texto, checkin):
             conv.estado = ConversacionWhatsApp.ESTADO_ASPECTO_DRENAJE
             conv.save()
             return MSG_PREGUNTA_ASPECTO
-        elif respuesta_lower in ('no', 'no.', 'n', 'no tengo'):
+        if respuesta_lower in ('no', 'no.', 'n', 'no tengo'):
             conv.temp_tiene_drenaje = False
             conv.temp_aspecto_drenaje = 'sin_drenaje'
             conv.temp_cantidad_drenaje = 'sin_drenaje'
             conv.estado = ConversacionWhatsApp.ESTADO_GASES_NAUSEAS
             conv.save()
             return MSG_PREGUNTA_GASES_NAUSEAS
-        else:
-            return MSG_REINTENTO_TIENE_DRENAJE
+        return MSG_REINTENTO_TIENE_DRENAJE
 
     if estado == ConversacionWhatsApp.ESTADO_ASPECTO_DRENAJE:
         aspecto = _parse_aspecto(texto)

@@ -9,8 +9,9 @@
 > **Loop E el 07/08/2026**, el **reparto de `tests.py` + la guardia de secretos
 > el 10/08/2026** y **D15 · `crear_medico` el 12/08/2026**, 344 tests OK)
 > **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026 —
-> **siete comprobaciones** desde el 10/08/2026 (se sumaron la guardia de
-> secretos y el control de archivos de entorno)
+> **nueve comprobaciones** desde el 07/09/2026 (siete hasta entonces; se sumaron
+> el linter `ruff` y `pip-audit`, y `check --deploy` recuperó la capacidad de
+> fallar con `--fail-level WARNING`)
 > **⚠️ No hay producción viva desde el 07/08/2026** — venció la prueba de Railway.
 > Mergear a `produccion` no despliega nada. Ver `docs/railway_deploy.md`.
 
@@ -330,7 +331,7 @@ Restricción: como máximo una alerta abierta por `(paciente, tipo)`.
 - [x] Agregar campo `tipo_cirugia` a `Paciente` (descriptivo, sin lógica clínica)
 - [x] Generalizar título y descripción del proyecto en CLAUDE.md (sin afiliación institucional)
 - [x] Generalizar callout de agentes IA y base clínica de Regla 1 (corregir afirmación de evidencia HIPEC específica)
-- [x] Generalizar menciones de marca Sugarbaker/Clínica Somer en código y templates de producción (models.py, bot.py, knowledge_base.md, index.html, contacto.html)
+- [x] Generalizar las menciones de marca institucional en código y templates de producción (models.py, bot.py, knowledge_base.md, index.html, contacto.html)
 - [x] Renombrar base de datos local a `registro_postquirurgico_db`
 - [x] Sincronizar bloque de `Paciente` en CLAUDE.md con el campo `tipo_cirugia`
 - [x] Organizar auditoría de literatura en `docs/auditoria_literatura/` (4 documentos + README)

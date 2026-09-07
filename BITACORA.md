@@ -379,7 +379,7 @@ alerta quedó únicamente en BD para el oncólogo.
 Tras recibir y auditar 15 archivos del médico proponente (9 PDFs
 científicos sobre ERAS/alta temprana colorrectal, 2 transcripciones de
 presentaciones suyas, y 4 documentos institucionales/académicos —
-fichas técnicas de Universidad CES, preproyecto formal, slide deck), se
+fichas técnicas de la universidad, preproyecto formal, slide deck), se
 resolvió la pregunta de alcance del proyecto y se generalizó todo el
 código, la documentación y el branding que asumían exclusividad
 Sugarbaker/HIPEC o afiliación institucional formal.
@@ -405,7 +405,7 @@ Trabajo concreto:
 1. **Alcance ampliado a ERAS/cirugía colorrectal en general, no
    exclusivo de Sugarbaker/HIPEC.** Respaldado por evidencia múltiple:
    ninguno de los 9 PDFs trata HIPEC específicamente; el título oficial
-   del proyecto registrado ante el comité de ética de Universidad CES es
+   del proyecto registrado ante el comité de ética de la universidad es
    "Programa de cirugías colorrectales con seguimiento ambulatorio
    remoto"; el criterio de inclusión formal (ECOG 0-1, sin
    comorbilidades significativas) describe un perfil de paciente
@@ -418,7 +418,7 @@ Trabajo concreto:
    ni del `alert_engine`, pensado para estadística/investigación futura.
 3. **Sin afiliación institucional formal por ahora.** El proyecto no
    tiene vínculo formalizado con ninguna clínica o universidad a la
-   fecha; se removieron las menciones a "Clínica Somer" del código y la
+   fecha; se removieron las menciones a la clinica del código y la
    documentación en consecuencia.
 4. **Enfoque exclusivamente de software, sin hardware de monitoreo
    continuo.** Respaldado por evidencia reciente (2025) de que el

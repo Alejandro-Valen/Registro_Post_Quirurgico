@@ -1,5 +1,5 @@
 # Análisis Documento por Documento — 9 PDFs ERAS/Alta Temprana Colorrectal
-## MVP Sugarbaker / Clínica Somer — Auditoría de literatura científica
+## Monitoreo posquirúrgico remoto — Auditoría de literatura científica
 
 > **Documento histórico (junio de 2026).** Las frases sobre pasos o decisiones
 > pendientes reflejan la sesión original. Para el estado vigente consulta
@@ -22,7 +22,7 @@
 
 **Conexión con el proyecto:** Es el estudio más antiguo y menos "tecnológico" del set. No aporta umbrales numéricos de temperatura, dolor o náusea aprovechables para el `alert_engine`. Su valor es de respaldo conceptual: confirma que el alta temprana no es intrínsecamente riesgosa cuando hay criterios claros — relevante para la filosofía general del programa, no para sus reglas concretas.
 
-**Pros/contras de incorporar:** Pro — sirve como cita de respaldo si el médico necesita justificar el modelo de alta temprana con la Clínica Somer. Contra — no hay nada operacionalizable; incorporarlo no cambiaría ni una línea de `alert_engine.py`.
+**Pros/contras de incorporar:** Pro — sirve como cita de respaldo si el médico necesita justificar el modelo de alta temprana con la clínica del proyecto. Contra — no hay nada operacionalizable; incorporarlo no cambiaría ni una línea de `alert_engine.py`.
 
 ---
 
@@ -35,7 +35,7 @@
 
 **Conexión con el proyecto:** Es el estudio con mayor poder estadístico de todo el set (n=364,609) y el más citable frente a una junta médica escéptica del alta temprana. Pero, igual que Lawrence, no aporta nada operacionalizable para las reglas del bot — es evidencia "de macro nivel" (¿es seguro el alta temprana, en general?), no "de micro nivel" (¿qué umbral debe disparar una alerta en casa?).
 
-**Pros/contras de incorporar:** Pro — el dato más fuerte para tranquilizar a un comité de ética o a la propia Clínica Somer sobre la seguridad general del enfoque. Contra — cero impacto directo en el código; es argumento institucional, no técnico.
+**Pros/contras de incorporar:** Pro — el dato más fuerte para tranquilizar a un comité de ética o a la propia clínica del proyecto sobre la seguridad general del enfoque. Contra — cero impacto directo en el código; es argumento institucional, no técnico.
 
 ---
 

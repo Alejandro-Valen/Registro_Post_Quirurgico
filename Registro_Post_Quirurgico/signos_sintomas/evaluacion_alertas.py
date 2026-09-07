@@ -50,7 +50,7 @@ def evaluar_registro_con_estado(registro, fecha_referencia=None):
                     registro_bloqueado,
                     fecha_referencia=fecha_referencia,
                 )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  (se persiste el estado ERROR para que el reintento lo recoja)
             error = exc
             registro_bloqueado.estado_evaluacion_alertas = (
                 RegistroDiario.EVALUACION_ERROR

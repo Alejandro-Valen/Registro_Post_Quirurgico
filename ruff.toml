@@ -1,0 +1,97 @@
+# Linter del proyecto — configuracion de ruff
+#
+# Por que existe. Hasta el 07/09/2026 la CI no tenia linter. Se anade como
+# octava comprobacion y **bloquea**: un linter que reporta sin detener es
+# exactamente la guardia-que-no-puede-fallar que la ficha D16 viene a eliminar.
+#
+# Las reglas se declaran explicitamente en vez de heredar los defaults de ruff,
+# para que una version nueva de la herramienta no cambie en silencio lo que la
+# CI exige.
+#
+# Decision completa y su porque: docs/decisiones_correccion_auditoria.md, D16.
+
+target-version = "py313"
+line-length = 100
+
+# El codigo vive un nivel por debajo de la raiz del repositorio.
+src = ["Registro_Post_Quirurgico"]
+
+extend-exclude = [
+    # Codigo GENERADO por Django. No se lintea: reescribirlo a mano lo pondria
+    # en conflicto con el proximo `makemigrations`, y 60 de los 61 hallazgos
+    # que produce son el mismo falso positivo (`dependencies = []`).
+    "**/migrations/**",
+    # Generado por collectstatic, no versionado.
+    "staticfiles/**",
+    # Scripts de verificacion de loops ya cerrados. Son EVIDENCIA fechada de
+    # que una comprobacion se hizo, no codigo mantenido: reescribirlos para
+    # contentar al linter falsificaria el registro de lo que se ejecuto aquel
+    # dia. Mismo criterio que las migraciones: no se lintea lo que no se toca.
+    "docs/proceso/verificaciones/**",
+]
+
+[lint]
+select = [
+    "E4", "E7", "E9",  # pycodestyle: errores reales, sin quejas de formato
+    "F",               # pyflakes: nombres indefinidos, imports muertos
+    "I",               # orden de imports
+    "UP",              # sintaxis anticuada para la version de Python fijada
+    "B",               # bugbear: trampas conocidas de Python
+    "SIM",             # simplificaciones
+    "C4",              # comprehensions
+    "RET",             # returns
+    "RUF",             # reglas propias de ruff
+    "N",               # nombres (PEP 8)
+    "BLE",             # capturas de excepcion a ciegas
+]
+
+ignore = [
+    # --- Falsos positivos de Django, ignorados A PROPOSITO -----------------
+    #
+    # RUF012 exige anotar como `ClassVar` todo atributo de clase mutable. En
+    # Django eso alcanza a `list_display`, `search_fields`, `fieldsets` y
+    # `dependencies`, que es como se configura el framework: 117 hallazgos, y
+    # ningun proyecto Django los anota. Corregirlo haria el codigo MENOS
+    # idiomatico, no mas.
+    "RUF012",
+    # N999 se queja del nombre del paquete `Registro_Post_Quirurgico` (mayusculas
+    # y guiones bajos). Renombrarlo rompe DJANGO_SETTINGS_MODULE, el `--chdir`
+    # del Dockerfile, el `working-directory` de la CI, wsgi.py, asgi.py y las
+    # referencias de 28 migraciones. **Decidido no renombrar** (D16): el coste
+    # supera al beneficio y se resuelve explicandolo en el README.
+    "N999",
+    # N818 exige que toda excepcion termine en `Error`
+    # (`DestinatarioNoConfiguradoError`). Es una convencion INGLESA, y la de
+    # este proyecto es nombrar en espanol (CLAUDE.md, "Convenciones del
+    # equipo"). `DestinatarioNoConfigurado` se lee bien en espanol; anadirle un
+    # sufijo ingles lo empeora.
+    "N818",
+
+    # --- Tipografia correcta del espanol, no errores -----------------------
+    #
+    # RUF001/RUF002 avisan de caracteres Unicode "ambiguos". Los 6 hallazgos de
+    # este repositorio son tipografia DELIBERADA y correcta:
+    #   - `x` (signo de multiplicacion) en el contador de alertas agrupadas
+    #     ("x3"), que es lo que ve el medico en el panel.
+    #   - guion largo en los rangos ("30.0-45.0 grados"), que es la forma
+    #     correcta en espanol.
+    # Sustituirlos por `x` y `-` empeoraria el texto que lee una persona.
+    "RUF001",
+    "RUF002",
+]
+
+[lint.per-file-ignores]
+# Los settings por entorno se construyen con `from .settings import *`, que es
+# el patron estandar de Django para este caso. F403 avisa del import-star y
+# F405 de cada nombre que viene de el: son 9 avisos de algo deliberado.
+"Registro_Post_Quirurgico/Registro_Post_Quirurgico/settings_local.py" = ["F403", "F405"]
+"Registro_Post_Quirurgico/Registro_Post_Quirurgico/settings_production.py" = ["F403", "F405"]
+
+[lint.pep8-naming]
+# `User = get_user_model()` es el idiom canonico de Django y aparece 26 veces.
+# En vez de apagar N806 entera —que si debe avisar de una variable en mayusculas
+# de verdad—, se exime SOLO ese nombre.
+extend-ignore-names = ["User"]
+
+[lint.isort]
+known-first-party = ["signos_sintomas", "home"]

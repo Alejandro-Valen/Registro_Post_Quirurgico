@@ -53,7 +53,7 @@ def _rate_limit_contacto_excedido(ip):
         # El cache respondió "no existe la clave": primer envío de la ventana.
         cache.set(clave, 1, 3600)
         conteo = 1
-    except Exception:
+    except Exception:  # noqa: BLE001  (a propósito: cualquier fallo del cache degrada a fallo CERRADO)
         logger.warning(
             'Rate limit del formulario degradado: el cache no responde; se '
             'bloquea el envío (fallo cerrado).'
@@ -94,7 +94,7 @@ def salud(request):
         cache.set('salud_check', '1', 10)
         if cache.get('salud_check') != '1':
             raise RuntimeError('cache no confirmó la escritura')
-    except Exception:
+    except Exception:  # noqa: BLE001  (un health check DEBE atrapar todo: cualquier fallo es un 503)
         logger.warning('Health check /salud/ falló: base de datos o cache no responde.')
         return HttpResponse(status=503)
     return HttpResponse(status=200)

@@ -61,9 +61,8 @@ class EvaluacionAlertasPersistenteTests(TestCase):
         with patch(
             'signos_sintomas.evaluacion_alertas.evaluar_registro',
             side_effect=RuntimeError('paciente reporta dolor 9'),
-        ):
-            with self.assertRaises(RuntimeError):
-                evaluar_registro_con_estado(self.registro)
+        ), self.assertRaises(RuntimeError):
+            evaluar_registro_con_estado(self.registro)
 
         self.registro.refresh_from_db()
         self.assertEqual(
@@ -103,9 +102,8 @@ class EvaluacionAlertasPersistenteTests(TestCase):
         with patch(
             'signos_sintomas.evaluacion_alertas.evaluar_registro',
             side_effect=crear_parcial_y_fallar,
-        ):
-            with self.assertRaises(RuntimeError):
-                evaluar_registro_con_estado(self.registro)
+        ), self.assertRaises(RuntimeError):
+            evaluar_registro_con_estado(self.registro)
 
         self.registro.refresh_from_db()
         self.assertEqual(
@@ -169,7 +167,7 @@ class AlertDeduplicacionTests(TestCase):
         MEDIA y el contador a 2, sin crear una segunda fila."""
         paciente = self._paciente("+573008881002")
         alertas1 = evaluar_registro(self._reg_fc(paciente, 105))  # BAJA
-        self.assertEqual([a for a in alertas1 if a.tipo == "TAQUICARDIA"][0].severidad, "BAJA")
+        self.assertEqual(next(a for a in alertas1 if a.tipo == "TAQUICARDIA").severidad, "BAJA")
 
         alertas2 = evaluar_registro(self._reg_fc(paciente, 120))  # MEDIA > BAJA → escala
         taqui2 = [a for a in alertas2 if a.tipo == "TAQUICARDIA"]
@@ -231,7 +229,7 @@ class AlertDeduplicacionTests(TestCase):
         self.assertIn("SEPSIS", tipos)
         self.assertIn("ILEO_PARALITICO", tipos)
 
-    def test_gases_baja_y_nauseas_alta_mismo_checkin_una_ileo_alta(self):  # noqa: E501
+    def test_gases_baja_y_nauseas_alta_mismo_checkin_una_ileo_alta(self):
         """Gases=False (BAJA) y nauseas=5 (ALTA) en el MISMO registro:
         _evaluar_gases abre ILEO, _evaluar_nauseas la sube a ALTA — es UNA
         sola alerta ILEO (misma detección/check-in), con severidad ALTA y
@@ -302,8 +300,8 @@ class AlertDeduplicacionTests(TestCase):
         primera = evaluar_registro(registro)
         segunda = evaluar_registro(registro)
 
-        alerta = [a for a in segunda if a.tipo == 'TAQUICARDIA'][0]
-        self.assertEqual([a for a in primera if a.tipo == 'TAQUICARDIA'][0].pk, alerta.pk)
+        alerta = next(a for a in segunda if a.tipo == 'TAQUICARDIA')
+        self.assertEqual(next(a for a in primera if a.tipo == 'TAQUICARDIA').pk, alerta.pk)
         self.assertEqual(alerta.veces, 1)
         self.assertEqual(alerta.detecciones.count(), 1)
 
@@ -323,7 +321,7 @@ class AlertDeduplicacionTests(TestCase):
         registro_nuevo = self._reg_fc(paciente, 152)
         resultado = evaluar_registro(registro_nuevo)
 
-        alerta = [a for a in resultado if a.tipo == 'TAQUICARDIA'][0]
+        alerta = next(a for a in resultado if a.tipo == 'TAQUICARDIA')
         self.assertEqual(alerta.veces, 5)
         self.assertEqual(alerta.detecciones.count(), 1)
         self.assertEqual(alerta.detecciones.get().registro, registro_nuevo)
@@ -376,15 +374,14 @@ class AlertDeduplicacionConcurrenteTests(TransactionTestCase):
             mensaje='Primera',
         )
 
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                Alerta.objects.create(
-                    paciente=self.paciente,
-                    registro_origen=self.registros[1],
-                    tipo='SEPSIS',
-                    severidad='ALTA',
-                    mensaje='Segunda',
-                )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Alerta.objects.create(
+                paciente=self.paciente,
+                registro_origen=self.registros[1],
+                tipo='SEPSIS',
+                severidad='ALTA',
+                mensaje='Segunda',
+            )
 
     def test_dos_workers_convergen_en_una_alerta_abierta(self):
         from concurrent.futures import ThreadPoolExecutor
@@ -455,23 +452,21 @@ class DeteccionAlertaConstraintTests(TestCase):
         )
 
     def test_bd_exige_exactamente_una_fuente(self):
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                DeteccionAlerta.objects.create(
-                    alerta=self.alerta,
-                    severidad_detectada='ALTA',
-                    mensaje_detectado='Sin fuente',
-                )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DeteccionAlerta.objects.create(
+                alerta=self.alerta,
+                severidad_detectada='ALTA',
+                mensaje_detectado='Sin fuente',
+            )
 
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                DeteccionAlerta.objects.create(
-                    alerta=self.alerta,
-                    registro=self.registro,
-                    checkin=self.checkin,
-                    severidad_detectada='ALTA',
-                    mensaje_detectado='Dos fuentes',
-                )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DeteccionAlerta.objects.create(
+                alerta=self.alerta,
+                registro=self.registro,
+                checkin=self.checkin,
+                severidad_detectada='ALTA',
+                mensaje_detectado='Dos fuentes',
+            )
 
     def test_bd_impide_repetir_fuente_en_la_misma_alerta(self):
         DeteccionAlerta.objects.create(
@@ -481,11 +476,10 @@ class DeteccionAlertaConstraintTests(TestCase):
             mensaje_detectado='Primera',
         )
 
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                DeteccionAlerta.objects.create(
-                    alerta=self.alerta,
-                    registro=self.registro,
-                    severidad_detectada='ALTA',
-                    mensaje_detectado='Duplicada',
-                )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DeteccionAlerta.objects.create(
+                alerta=self.alerta,
+                registro=self.registro,
+                severidad_detectada='ALTA',
+                mensaje_detectado='Duplicada',
+            )

@@ -21,8 +21,14 @@ Variables de entorno OBLIGATORIAS en producción (además de las del .env base):
 B1: configuración de producción con cabeceras HTTPS, cookies seguras y HSTS.
 A6: DEBUG hardcodeado a False — nunca True en producción.
 """
-from .settings import *  # noqa: F401, F403
-from decouple import config, Csv
+# El import-estrella va PRIMERO y se queda ahí: este módulo parte de la
+# configuración base y la endurece. `isort: skip` impide que el ordenador de
+# imports lo mueva detrás de los demás — no porque hoy rompa algo, sino porque
+# este archivo gobierna la seguridad de producción y su orden de carga no se
+# reordena solo (Loop del arnés, 07/09/2026).
+from .settings import *  # isort: skip
+
+from decouple import Csv, config
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.csp import CSP
 

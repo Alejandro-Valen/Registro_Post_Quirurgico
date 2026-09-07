@@ -79,6 +79,7 @@ class AdminScopingTests(TestCase):
 
     def setUp(self):
         from decimal import Decimal
+
         from django.contrib.auth.models import Permission
         from django.contrib.contenttypes.models import ContentType
 
@@ -119,13 +120,13 @@ class AdminScopingTests(TestCase):
             fecha_cirugia=timezone.localdate(),
             medico_responsable=self.medico_b,
         )
-        _campos_base = dict(
-            temperatura=Decimal('37.0'),
-            dolor_eva=3,
-            aspecto_drenaje='sin_drenaje',
-            presencia_gases=True,
-            episodios_nauseas=0,
-        )
+        _campos_base = {
+            'temperatura': Decimal('37.0'),
+            'dolor_eva': 3,
+            'aspecto_drenaje': 'sin_drenaje',
+            'presencia_gases': True,
+            'episodios_nauseas': 0,
+        }
         self.registro_a = RegistroDiario.objects.create(
             paciente=self.paciente_a, **_campos_base
         )
@@ -368,8 +369,6 @@ class AlertaAdminAccionesTests(TestCase):
 
     def setUp(self):
         User = get_user_model()
-        from django.contrib.auth.models import Permission
-        from django.contrib.contenttypes.models import ContentType
         self.superuser = User.objects.create_superuser(
             username='super5a', password='pass',
         )
@@ -378,10 +377,10 @@ class AlertaAdminAccionesTests(TestCase):
             telefono_whatsapp="+573019990001",
             fecha_cirugia=timezone.localdate(),
         )
-        campos = dict(
-            temperatura=Decimal('37.0'), dolor_eva=2,
-            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
-        )
+        campos = {
+            'temperatura': Decimal('37.0'), 'dolor_eva': 2,
+            'aspecto_drenaje': 'sin_drenaje', 'presencia_gases': True, 'episodios_nauseas': 0,
+        }
         self.registro = RegistroDiario.objects.create(paciente=self.paciente, **campos)
         self.alerta = Alerta.objects.create(
             paciente=self.paciente,
@@ -468,9 +467,8 @@ class AlertaMotivoResolucionTests(TestCase):
         self.assertIsNone(self.alerta.motivo_resolucion)
 
     def test_base_de_datos_rechaza_cierre_sin_motivo_y_fecha(self):
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                Alerta.objects.filter(pk=self.alerta.pk).update(resuelta=True)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Alerta.objects.filter(pk=self.alerta.pk).update(resuelta=True)
 
     def test_modelo_rechaza_cierre_sin_motivo_y_fecha(self):
         self.alerta.resuelta = True
@@ -1100,9 +1098,9 @@ class AdminFiltrosNoExponenOtrasCuentasTests(TestCase):
 
         for indice, medico in enumerate((self.medico_a, self.medico_b), start=1):
             Paciente.objects.create(
-                nombre_completo="Paciente del filtro {}".format(indice),
-                telefono_whatsapp="+57301999000{}".format(indice),
-                cedula="FILTRO-000{}".format(indice),
+                nombre_completo=f"Paciente del filtro {indice}",
+                telefono_whatsapp=f"+57301999000{indice}",
+                cedula=f"FILTRO-000{indice}",
                 fecha_cirugia=timezone.localdate(),
                 medico_responsable=medico,
             )

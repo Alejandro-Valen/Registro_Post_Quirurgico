@@ -8,7 +8,7 @@ Equivalente a la configuración actual del .env con DEBUG=True.
 NO usar con credenciales reales de Twilio activas ni con ngrok expuesto
 (A6: DEBUG=True muestra stacktrace con variables locales al cliente HTTP).
 """
-from .settings import *  # noqa: F401, F403
+from .settings import *
 
 DEBUG = True
 

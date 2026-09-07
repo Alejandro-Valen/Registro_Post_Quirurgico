@@ -9,10 +9,9 @@ from django.db import transaction
 from django.db.models import F
 from django.http import HttpResponse, HttpResponseForbidden
 from django.utils import timezone
-from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_POST
-
 from twilio.request_validator import RequestValidator
 from twilio.twiml.messaging_response import MessagingResponse
 
@@ -169,7 +168,7 @@ def _rate_limit_excedido(telefono):
         # El cache respondió "no existe la clave": primer mensaje de la ventana.
         cache.set(clave, 1, 3600)
         conteo = 1
-    except Exception:
+    except Exception:  # noqa: BLE001  (a propósito: se degrada a fallo ABIERTO; la firma de Twilio sigue siendo la cerradura)
         logger.warning(
             'Rate limit del webhook degradado: el cache no responde; se procesa '
             'el mensaje (fallo abierto).'

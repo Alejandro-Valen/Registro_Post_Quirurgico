@@ -64,7 +64,7 @@ clasifica señales de alarma médicas.
 | `docs/trampas_conocidas.md` | Antes de tocar despliegue, cron, Twilio o correo. Son errores que ya costaron horas |
 | `docs/railway_deploy.md` | Antes de cambiar variables de entorno o desplegar |
 | `docs/cron_setup.md` | Antes de tocar los management commands programados |
-| `docs/decisiones_correccion_auditoria.md` | Antes de tocar lo que corrigieron los Loops A, B y C (fichas D1-D10) |
+| `docs/decisiones_correccion_auditoria.md` | Antes de tocar lo que corrigieron los loops de auditoría (fichas **D1-D17**) |
 | `ROADMAP_MONITOREO_POSQUIRURGICO.md` | Antes de proponer alcance nuevo o discutir prioridades |
 
 ### Consúltalo cuando necesites contexto
@@ -111,11 +111,20 @@ anotada para después.
   `docs/railway_deploy.md` §4.1.
 - **Rama activa de trabajo:** ninguna. `crear-medico-no-reescribe` se mergeó el
   12/08/2026 (PR #17); la siguiente se abre desde `Desarrollo`.
-- **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **siete
+- **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **nueve
   comprobaciones** en cada PR hacia `Desarrollo` y hacia `produccion`, y en cada
   push a esas dos ramas: la suite, `check`, `makemigrations --check`,
-  `check --deploy`, la higiene del diff, la **guardia de secretos** (`gitleaks`
-  sobre la historia completa) y que no haya ningún `.env` rastreado.
+  `check --deploy` **con `--fail-level WARNING`**, la higiene del diff, la
+  **guardia de secretos** (`gitleaks` sobre la historia completa), que no haya
+  ningún `.env` rastreado, el **linter** (`ruff`) y **`pip-audit`** sobre
+  `requirements-runtime.txt`.
+
+  **La bandera `--fail-level WARNING` no es un detalle.** Sin ella, el paso de
+  configuración de producción **nunca pudo fallar**: todos los checks de
+  despliegue de Django son de nivel WARNING y el umbral por defecto es ERROR,
+  así que reportaba los problemas y salía con código 0. Fue el hallazgo SEC-01
+  de la auditoría del 07/09/2026, y de él salió la ficha **D16**: ninguna
+  guardia entra ni permanece aquí sin haberse visto fallar al menos una vez.
 - **Los checks se ven pero no bloquean.** `Desarrollo` no tiene protección de
   rama. **Y no es cuestión de permisos**, como decía este archivo hasta el
   10/08/2026: en un repositorio **privado** de una cuenta personal sin GitHub
@@ -213,6 +222,8 @@ evidencia disponible, no decisiones ya tomadas.
 | Partir `tests.py` | Convertir el archivo de 6.288 líneas en un paquete `tests/` por tema | ✅ **Completado y mergeado** (10/08/2026, PR #12, merge commit `427153b`). Nueve archivos + `soporte.py`; **340 tests OK** y los 305 métodos comparados uno a uno |
 | Guardia de secretos | `gitleaks` y control de archivos de entorno en la CI | ✅ **Completado y mergeado** (10/08/2026, PR #13, merge commit `301c743`). La CI pasa de cinco a **siete comprobaciones** |
 | D15 · `crear_medico` | Que el arranque deje de reescribir la cuenta del médico | ✅ **Completado y mergeado** (12/08/2026, PR #17, merge commit `1396744`). **344 tests OK**; cierra D1-D15 |
+| Auditoría de seis frentes | Seguridad, datos, backend clínico, frontend, calidad de pruebas y repositorio, en paralelo y ciegas entre sí | ✅ **Ejecutada** (07/09/2026). **101 hallazgos, 15 de severidad ALTA.** Cuatro reproducidos ejecutando código, incluido un sabotaje que dejó las 344 pruebas en verde con el motor clínico roto |
+| Loop del arnés · D16-D17 | Que las guardias automáticas puedan fallar, y retirar la identidad de terceros | 🔄 **En curso** (07/09/2026). CI de **siete a nueve** comprobaciones; `check --deploy` recupera la capacidad de fallar; `ruff` y `pip-audit` entran bloqueando; identidad del médico fuera del árbol. **Sin commitear todavía** |
 
 **Qué pasó (22/07/2026).** Una auditoría independiente sobre `fbf62a8` confirmó
 las cuatro cifras que se reportaban (280 tests, `check --deploy`, `pip-audit`,
@@ -322,7 +333,10 @@ decisión de **protección de rama**.
 - La versión de PostgreSQL de Railway no está documentada; la CI usa
   `postgres:18` por ser la mayor de la base local.
 
-Las dos auditorías **ya se ejecutaron — no repetirlas.** Las decisiones D1-D14
+Las dos auditorías de julio **ya se ejecutaron — no repetirlas.** A ellas se
+sumó la **auditoría de seis frentes del 07/09/2026** (seguridad, datos,
+backend clínico, frontend, calidad de pruebas y repositorio), de la que salieron
+las fichas **D16** y **D17** y el loop del arnés. Las decisiones D1-D17
 están tomadas; no se reabren salvo que el Arquitecto lo pida.
 
 **Deuda técnica y su orden de atención (29/07/2026).** La revisión de cierre del

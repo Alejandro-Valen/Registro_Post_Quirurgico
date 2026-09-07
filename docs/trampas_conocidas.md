@@ -224,6 +224,35 @@ también un paquete al que se le perdió una prueba y se le duplicó otra. La
 comprobación que sirve es comparar los nombres `Clase.metodo` uno a uno contra
 el archivo original. Vale para cualquier refactor futuro que mueva pruebas.
 
+**`pip-audit` revienta en local por la tilde de la ruta, no por una
+vulnerabilidad (07/09/2026).** En esta máquina el usuario de Windows se llama
+`león`, así que la ruta del entorno virtual lleva una `ó`. `pip_api` —una
+dependencia de `pip-audit`— ejecuta `pip --version` y decodifica su salida como
+UTF-8; Windows la devuelve en cp1252 y el comando muere con
+`UnicodeDecodeError: 'utf-8' codec can't decode byte 0xf3` **antes de mirar
+ninguna dependencia**.
+
+Lo importante: **eso no dice absolutamente nada sobre la seguridad de las
+dependencias.** En la CI (Linux, rutas ASCII) corre sin problema, y es ahí donde
+la comprobación cuenta. `docs/proceso/verificaciones/2026-09-07_verificacion_arnes.py`
+distingue este caso a propósito y lo reporta como "no verificable en esta
+máquina" en vez de como fallo — dar por vulnerable lo que solo es un problema
+de codificación sería justo el tipo de conclusión falsa que las verificaciones
+existen para evitar.
+
+**Un linter recién añadido puede dejar espacios al final de línea y romper otra
+comprobación (07/09/2026).** Al convertir `'...'.format(x)` en f-strings, `ruff`
+dejó líneas en blanco **con espacios** donde estaba el `.format(...)`. Es válido
+para Python y para el propio linter, pero hace fallar el paso «Higiene del diff»
+de la CI, que corre `git diff --check`. Tras cualquier corrida de `ruff --fix`,
+comprobar `git diff --check` antes de commitear.
+
+**`ruff` mueve los import-estrella de los settings, y ahí el orden importa
+(07/09/2026).** El ordenador de imports movió `from .settings import *` detrás
+de los demás imports en `settings_production.py`. Funcionalmente no rompió nada,
+pero ese archivo gobierna la seguridad de producción y su orden de carga no debe
+reordenarse solo. Lleva `# isort: skip` por eso. No se lo quites.
+
 ## Secretos
 
 **`gitleaks` no detecta una `SECRET_KEY` de Django escrita a mano

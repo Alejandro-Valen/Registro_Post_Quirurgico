@@ -192,9 +192,8 @@ class WebhookWhatsAppTests(TestCase):
         with patch(
             'signos_sintomas.views.procesar_mensaje',
             side_effect=RuntimeError('detalle sensible'),
-        ):
-            with self.assertRaises(RuntimeError):
-                self.client.post(self.url, payload)
+        ), self.assertRaises(RuntimeError):
+            self.client.post(self.url, payload)
 
         recepcion = RecepcionWebhookTwilio.objects.get(
             message_sid='SMreintento0001'
@@ -239,9 +238,8 @@ class WebhookWhatsAppTests(TestCase):
         with patch(
             'signos_sintomas.views._marcar_recepcion_completada',
             side_effect=RuntimeError('caída antes del commit'),
-        ):
-            with self.assertRaises(RuntimeError):
-                self.client.post(self.url, payload)
+        ), self.assertRaises(RuntimeError):
+            self.client.post(self.url, payload)
 
         recepcion = RecepcionWebhookTwilio.objects.get(
             message_sid='SMatomicidad0001'
@@ -502,13 +500,12 @@ class WebhookConcurrenciaTests(TransactionTestCase):
         with patch(
             'signos_sintomas.views.procesar_mensaje',
             side_effect=procesar_lento,
-        ) as procesar:
-            with ThreadPoolExecutor(max_workers=2) as executor:
-                primera_futura = executor.submit(enviar)
-                self.assertTrue(iniciado.wait(timeout=10))
-                segunda = executor.submit(enviar).result(timeout=10)
-                liberar.set()
-                primera = primera_futura.result(timeout=10)
+        ) as procesar, ThreadPoolExecutor(max_workers=2) as executor:
+            primera_futura = executor.submit(enviar)
+            self.assertTrue(iniciado.wait(timeout=10))
+            segunda = executor.submit(enviar).result(timeout=10)
+            liberar.set()
+            primera = primera_futura.result(timeout=10)
 
         self.assertEqual(primera.status_code, 200)
         self.assertEqual(segunda.status_code, 503)

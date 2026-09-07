@@ -10,7 +10,6 @@ from django.utils import timezone
 
 from .models import NotificacionAlerta
 
-
 # Tope de reintentos (D6). Con el backoff (5, 15, 45, 135 min, luego cada 6 h),
 # 10 intentos son ≈39 horas: generoso para un fallo transitorio. Si a las 39 h
 # sigue fallando, la causa es configuración (API key, destinatario) y ninguna
@@ -159,7 +158,7 @@ def procesar_notificaciones_pendientes(limite=50):
             notificacion.fecha_ultimo_intento = timezone.now()
             try:
                 _enviar(notificacion)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001  (cualquier fallo de envío entra al backoff; D6)
                 errores += 1
                 notificacion.ultimo_error = type(exc).__name__[:100]
                 if notificacion.intentos >= MAX_INTENTOS_NOTIFICACION:

@@ -4,11 +4,11 @@ No lleva pruebas y su nombre no casa con el patron `test*.py`, asi que
 el descubridor de Django no lo recorre: no puede mover el conteo de la
 suite en ninguna direccion."""
 
-from datetime import datetime, time as hora_del_dia
+from datetime import datetime
+from datetime import time as hora_del_dia
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-
 
 # --- Ancla de reloj para las pruebas que arman escenarios de varios días ---
 #
@@ -57,7 +57,7 @@ def medico_de_pruebas(username='medico_fixture'):
         username=username,
         defaults={
             'is_staff': True,
-            'email': '{}@ejemplo.com'.format(username),
+            'email': f'{username}@ejemplo.com',
         },
     )
     return medico
@@ -85,7 +85,7 @@ class EspiaDeTareasCronMixin:
                     raise RuntimeError(f'fallo simulado de {nombre}')
                 # Devolver None: BaseCommand.execute escribe lo que retorne
                 # handle, y un MagicMock rompería el OutputWrapper.
-                return None
+                return
             return espia
 
         pila = ExitStack()
@@ -106,6 +106,7 @@ class EspiaDeTareasCronMixin:
         de la excepción y nunca llegaría a mirar lo que importa.
         """
         import io
+
         from django.core.management import call_command
 
         try:

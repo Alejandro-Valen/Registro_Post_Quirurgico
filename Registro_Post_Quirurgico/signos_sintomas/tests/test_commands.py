@@ -162,7 +162,7 @@ class SchedulerTests(TestCase):
             )
         fecha_dia = timezone.localdate() - timedelta(days=dias_atras)
         hora_prog = timezone.now() - timedelta(hours=horas_atras)
-        ci = CheckInProgramado.objects.create(
+        return CheckInProgramado.objects.create(
             paciente=paciente,
             fecha_dia=fecha_dia,
             orden=orden,
@@ -170,7 +170,6 @@ class SchedulerTests(TestCase):
             hora_programada=hora_prog,
             estado=estado,
         )
-        return ci
 
     # -------------------------------------------------------------------------
     # crear_checkins_diarios
@@ -736,6 +735,7 @@ class CrearAdminCommandTests(TestCase):
     def test_no_op_sin_variables(self):
         import os
         from unittest.mock import patch
+
         from django.core.management import call_command
         with patch.dict(os.environ):
             os.environ.pop('DJANGO_SUPERUSER_USERNAME', None)
@@ -746,6 +746,7 @@ class CrearAdminCommandTests(TestCase):
     def test_crea_superusuario_con_password_limpia(self):
         import os
         from unittest.mock import patch
+
         from django.core.management import call_command
         with patch.dict(os.environ, {
             'DJANGO_SUPERUSER_USERNAME': 'jefe',
@@ -761,6 +762,7 @@ class CrearAdminCommandTests(TestCase):
     def test_actualiza_password_de_usuario_existente(self):
         import os
         from unittest.mock import patch
+
         from django.core.management import call_command
         User = get_user_model()
         User.objects.create_user(username='jefe', password='vieja')
@@ -787,6 +789,7 @@ class CrearMedicoCommandTests(TestCase):
     def test_sin_credenciales_configura_solo_el_grupo(self):
         import os
         from unittest.mock import patch
+
         from django.contrib.auth.models import Group
         from django.core.management import call_command
 
@@ -803,6 +806,7 @@ class CrearMedicoCommandTests(TestCase):
     def test_crea_staff_no_superusuario_sin_permisos_extra(self):
         import os
         from unittest.mock import patch
+
         from django.core.management import call_command
 
         entorno = {
@@ -826,6 +830,7 @@ class CrearMedicoCommandTests(TestCase):
     def test_rechaza_convertir_un_superusuario_existente(self):
         import os
         from unittest.mock import patch
+
         from django.core.management import call_command
         from django.core.management.base import CommandError
 
@@ -836,9 +841,8 @@ class CrearMedicoCommandTests(TestCase):
             'DJANGO_MEDICO_USERNAME': 'jefe',
             'DJANGO_MEDICO_PASSWORD': 'otra-clave',
         }
-        with patch.dict(os.environ, entorno, clear=True):
-            with self.assertRaises(CommandError):
-                call_command('crear_medico', verbosity=0)
+        with patch.dict(os.environ, entorno, clear=True), self.assertRaises(CommandError):
+            call_command('crear_medico', verbosity=0)
 
         user.refresh_from_db()
         self.assertTrue(user.is_superuser)
@@ -856,6 +860,7 @@ class CrearMedicoCommandTests(TestCase):
         """Simula un arranque del servicio web: crear_medico con su entorno."""
         import os
         from unittest.mock import patch
+
         from django.core.management import call_command
 
         entorno = dict(self.ENTORNO_MEDICO, **extra)
@@ -902,6 +907,7 @@ class CrearMedicoCommandTests(TestCase):
         }
         import os
         from unittest.mock import patch
+
         from django.core.management import call_command
         with patch.dict(os.environ, entorno_sin_email, clear=True):
             call_command('crear_medico', verbosity=0)
@@ -1210,7 +1216,7 @@ class SalidaOperativaSinIdentidadTests(TestCase):
         """Retirar el nombre no puede dejar la salida inservible para operar."""
         escrito = self._todo_lo_que_escribe('desactivar_pacientes_vencidos')
 
-        self.assertIn('pk={}'.format(self.paciente.pk), escrito)
+        self.assertIn(f'pk={self.paciente.pk}', escrito)
 
     def test_enviar_recordatorios_no_expone_nombre_ni_telefono(self):
         CheckInProgramado.objects.create(
