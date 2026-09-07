@@ -223,16 +223,32 @@ jobs:
         # desde julio, pero NUNCA estuvo automatizado: eran corridas a mano que
         # nadie repitió. Esto lo vuelve real.
         #
-        # Audita el entorno instalado, que desde la migración a `pyproject.toml`
-        # es runtime + los tres paquetes del extra `dev`. Auditar también las
-        # herramientas de desarrollo es deliberado: una vulnerabilidad en el
-        # linter o en el propio auditor corre en esta misma máquina y con acceso
-        # al código.
+        # Audita la lista de dependencias derivada de `pyproject.toml` —runtime
+        # más el extra `dev`—, no el entorno instalado. La diferencia importa:
         #
-        # `--skip-editable` deja fuera el propio proyecto, que se instala con
-        # `-e` y no tiene advisories que consultar.
+        # Auditar el entorno hace que pip-audit tropiece con el propio proyecto,
+        # que se instala con `-e` y no es una distribución publicada: responde
+        # "distribution marked as editable" y, con `--strict`, eso es un fallo.
+        # Ocurrió en la primera corrida de este paso (PR #19).
+        #
+        # La salida fácil habría sido quitar `--strict`. No se hizo: `--strict`
+        # es lo que hace que la guardia avise cuando una dependencia NO SE PUDO
+        # auditar, y una guardia que calla ante lo que no pudo mirar es
+        # justamente lo que la ficha D16 vino a eliminar. Derivando la lista del
+        # pyproject se conserva `--strict` y el proyecto no entra en la ecuación.
+        #
+        # Se auditan también las herramientas de desarrollo a propósito: corren
+        # en esta misma máquina y con acceso al código.
         if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' }}
-        run: pip-audit --strict --skip-editable
+        run: |
+          python - <<'PY' > /tmp/dependencias-auditables.txt
+          import tomllib
+          d = tomllib.load(open('pyproject.toml', 'rb'))['project']
+          for req in d['dependencies'] + d['optional-dependencies']['dev']:
+              print(req)
+          PY
+          cat /tmp/dependencias-auditables.txt
+          pip-audit --strict --requirement /tmp/dependencias-auditables.txt
 
       - name: Configuración de producción
         # `--fail-level WARNING` NO es opcional, y su ausencia fue el hallazgo
