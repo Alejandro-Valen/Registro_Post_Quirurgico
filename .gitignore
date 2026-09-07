@@ -1,7 +1,37 @@
 __pycache__/
 *.pyc
+
+# --- Entornos virtuales ---------------------------------------------------
+# `.venv` es el nombre estándar y el que documenta el README: quien clone el
+# repositorio lo reconoce sin que nadie se lo explique.
+#
+# Los otros dos son históricos: `entorno_registro` es como se llamaba antes de
+# septiembre de 2026 (con y sin punto — el `.gitignore` solo cubría la variante
+# con punto, así que la carpeta real nunca estuvo protegida y solo se salvó por
+# suerte). Se dejan para que un árbol viejo no ensucie el estado.
+.venv/
+venv/
+entorno_registro/
 .entorno_registro
+
+# --- Base de datos y secretos ---------------------------------------------
 db.sqlite3
 .env
-# Generado por collectstatic — no se versiona (se regenera en cada build).
+
+# --- Generado, no versionado ----------------------------------------------
+# collectstatic lo reconstruye en cada build.
 staticfiles/
+
+# --- Herramientas ---------------------------------------------------------
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Configuración local de editores y agentes ----------------------------
+# `.claude/settings.local.json` es la configuración de UNA máquina. Hoy solo lo
+# salvaba el gitignore global del Arquitecto: en la máquina del otro
+# desarrollador se habría commiteado.
+.claude/
+.idea/
+.vscode/

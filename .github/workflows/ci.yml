@@ -195,12 +195,44 @@ jobs:
         working-directory: Registro_Post_Quirurgico
         run: python manage.py makemigrations --check --dry-run
 
+      - name: Linter
+        # Octava comprobación, añadida el 07/09/2026 (ficha D16).
+        #
+        # BLOQUEA a propósito. Un linter que informa sin detener es justo la
+        # guardia-que-no-puede-fallar que D16 viene a eliminar: se vería en cada
+        # corrida y no impediría nada.
+        #
+        # Las reglas, las exclusiones y el porqué de cada regla ignorada están
+        # en `ruff.toml`, en la raíz. Ninguna se silencia sin razón escrita.
+        if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' }}
+        run: ruff check .
+
+      - name: Dependencias sin vulnerabilidades conocidas
+        # Novena comprobación, añadida el 07/09/2026 (ficha D16).
+        #
+        # `pip-audit` se citaba como garantía en seis documentos del proyecto
+        # desde julio, pero NUNCA estuvo automatizado: eran corridas a mano que
+        # nadie repitió. Esto lo vuelve real.
+        #
+        # Mira `requirements-runtime.txt` —lo que de verdad va a producción— y
+        # no `requirements.txt`, que es un `pip freeze` de la máquina de
+        # desarrollo y ni siquiera instala en Linux.
+        if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' }}
+        run: pip-audit --requirement requirements-runtime.txt --strict
+
       - name: Configuración de producción
+        # `--fail-level WARNING` NO es opcional, y su ausencia fue el hallazgo
+        # SEC-01 de la auditoría del 07/09/2026: TODOS los checks de despliegue
+        # de Django son de nivel WARNING, y `--fail-level` vale ERROR por
+        # defecto. Sin esta bandera el paso reportaba los problemas y salía con
+        # código 0 — es decir, desde que existe la CI (31/07/2026) esta
+        # comprobación NUNCA pudo fallar. Reproducido: con DEBUG=True y las
+        # cookies inseguras, 5 issues y exit 0.
         if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' }}
         working-directory: Registro_Post_Quirurgico
         env:
           DJANGO_SETTINGS_MODULE: Registro_Post_Quirurgico.settings_production
-        run: python manage.py check --deploy
+        run: python manage.py check --deploy --fail-level WARNING
 
       - name: Suite completa
         # --noinput: sin él, una corrida anterior muerta deja la base de pruebas
