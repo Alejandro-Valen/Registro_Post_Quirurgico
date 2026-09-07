@@ -28,7 +28,7 @@ dependencies = [
     "Django==6.0.8",            # 6.0.8 cierra CVE-2026-15830 (ficha D16)
     "psycopg2-binary==2.9.12",  # controlador de PostgreSQL
     "python-decouple==3.8",     # lee el .env; se importa como `decouple`
-    "twilio==9.10.9",           # webhook de WhatsApp
+    "twilio==9.11.0",           # webhook de WhatsApp
     "django-axes==7.0.1",       # bloqueo por intentos de acceso fallidos
     "redis==8.0.1",             # cache y rate limit
     "requests==2.33.0",         # entrega de correo por HTTPS (Resend)
