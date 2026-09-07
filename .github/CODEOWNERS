@@ -1,0 +1,27 @@
+# Propietarios de código — quién tiene que revisar qué.
+#
+# Por qué existe. CLAUDE.md dice desde el principio que "ninguna regla, umbral o
+# mensaje clínico se cambia sin decisión explícita del Arquitecto". Hasta hoy eso
+# dependía de que alguien se acordara. Este archivo lo vuelve mecánico: GitHub
+# pide su revisión automáticamente en cuanto un PR toca uno de estos caminos.
+#
+# Ojo: sin protección de rama, esto SOLICITA la revisión pero no la exige. Es un
+# recordatorio automático, no una compuerta — igual que los checks de la CI.
+
+# Por defecto, los dos.
+*                                       @arboledaLeon @Alejandro-Valen
+
+# --- Núcleo clínico: revisión del Arquitecto ------------------------------
+# Estos archivos deciden cuándo se le avisa a un médico de que su paciente
+# puede estar complicándose. No se tocan sin que él lo vea.
+/docs/reglas_clinicas.md                @arboledaLeon
+/docs/auditoria_literatura/             @arboledaLeon
+/docs/decisiones_correccion_auditoria.md @arboledaLeon
+/Registro_Post_Quirurgico/signos_sintomas/alert_engine.py  @arboledaLeon
+/Registro_Post_Quirurgico/signos_sintomas/bot.py           @arboledaLeon
+/Registro_Post_Quirurgico/signos_sintomas/models.py        @arboledaLeon
+
+# --- Legal ----------------------------------------------------------------
+/docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md  @arboledaLeon
+/LICENSE                                @arboledaLeon
+/SECURITY.md                            @arboledaLeon

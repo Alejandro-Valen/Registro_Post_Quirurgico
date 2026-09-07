@@ -1,0 +1,15 @@
+# Unifica las identidades de git.
+#
+# El repositorio tiene dos personas y cuatro identidades: cada uno commiteó con
+# dos nombres distintos sobre el mismo correo. En el grafo de contribuyentes de
+# GitHub y en `git shortlog` se ven cuatro autores donde hay dos.
+#
+# Esto lo corrige sin reescribir la historia.
+
+León Arboleda <arboledaleon46@gmail.com> <arboledaleon46@gmail.com>
+León Arboleda <arboledaleon46@gmail.com> arboladaLeon <arboledaleon46@gmail.com>
+León Arboleda <arboledaleon46@gmail.com> arboledaLeon <arboledaleon46@gmail.com>
+León Arboleda <arboledaleon46@gmail.com> LeonArboleda <arboledaleon46@gmail.com>
+
+Jhon Alejandro Valencia González <jhonvalencia1112966@correo.itm.edu.co> Alejandro-Valen <jhonvalencia1112966@correo.itm.edu.co>
+Jhon Alejandro Valencia González <jhonvalencia1112966@correo.itm.edu.co> Jhon Alejandro Valencia Gonzalez <jhonvalencia1112966@correo.itm.edu.co>

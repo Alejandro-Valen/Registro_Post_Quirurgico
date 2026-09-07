@@ -1,0 +1,58 @@
+Todos los derechos reservados
+=============================
+
+Copyright (c) 2026 León Arboleda y Jhon Alejandro Valencia González.
+
+Este software y su documentación son propiedad de sus autores. No se concede
+ninguna licencia, expresa ni implícita, para usarlo, copiarlo, modificarlo,
+fusionarlo, publicarlo, distribuirlo, sublicenciarlo ni venderlo.
+
+Queda prohibido, sin autorización previa y por escrito de los titulares:
+
+  - Usar el software o cualquiera de sus partes, con o sin fines comerciales.
+  - Copiar, reproducir o distribuir el código o la documentación.
+  - Crear obras derivadas.
+  - Desplegarlo o prestarlo como servicio a terceros.
+
+El acceso a este repositorio no concede ninguno de los derechos anteriores.
+
+
+Por qué esta licencia y no una abierta
+--------------------------------------
+
+Es una decisión deliberada, no un descuido ni un archivo puesto por costumbre.
+
+Este proyecto nació de una necesidad clínica planteada por un médico que puede
+llegar a ser su adquiriente, y su núcleo —las reglas del motor de alertas y su
+respaldo en la literatura— es el resultado de un trabajo de análisis que
+conserva valor comercial. Publicarlo bajo una licencia permisiva regalaría ese
+trabajo antes de que exista una conversación sobre su destino.
+
+Sin un archivo LICENSE el estado legal por defecto ya es este mismo. La
+diferencia es que así queda dicho, en vez de deducido.
+
+Esta decisión puede ampliarse más adelante: pasar de "todos los derechos
+reservados" a una licencia abierta siempre es posible. Al revés, no.
+
+
+Aviso clínico
+-------------
+
+Este software NO es un dispositivo médico certificado y no ha sido evaluado ni
+aprobado por ninguna autoridad sanitaria. No diagnostica, no prescribe y no
+sustituye el juicio clínico de un profesional de la salud. Cualquier uso con
+pacientes reales requiere que el prestador cumpla la normatividad aplicable —en
+Colombia, la Resolución 1644 de 2026 sobre telesalud y telemedicina, la Ley 1581
+de 2012 de protección de datos personales, y el registro sanitario ante el
+INVIMA cuando aplique.
+
+El software se entrega "TAL CUAL", sin garantía de ningún tipo. En ningún caso
+los autores serán responsables de reclamación, daño o perjuicio alguno derivado
+de su uso.
+
+
+---
+
+All rights reserved. This software is the property of its authors. No license
+is granted to use, copy, modify or distribute it. It is not a certified medical
+device and must not be used to make clinical decisions.
