@@ -60,7 +60,7 @@ comprobación propia** que imprime la evidencia en pantalla, antes de pasar a lo
 siguiente.
 
 **Por qué:** el agente que escribió el código es el peor juez de si el código
-está bien. Las verificaciones viven en `docs/proceso/verificaciones/`.
+está bien. Las verificaciones viven en `proceso/verificaciones/`.
 
 ### 5. Un loop por sesión, y el estado en un archivo
 

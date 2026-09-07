@@ -34,7 +34,7 @@ habría pasado por bueno. Por eso están las dos mitades.
 CÓMO SE CORRE
 =============
 
-    python docs/proceso/verificaciones/2026-08-10_verificacion_guardia_secretos.py
+    python proceso/verificaciones/2026-08-10_verificacion_guardia_secretos.py
 
 Necesita `gitleaks` en el PATH, y **la máquina de desarrollo no lo trae**. Es la
 misma herramienta que corre la CI, así que conviene instalarla de forma
@@ -59,7 +59,20 @@ import subprocess
 import sys
 from pathlib import Path
 
-RAIZ = Path(__file__).resolve().parents[3]
+def _raiz_del_repositorio() -> Path:
+    """Sube hasta encontrar el `.git`, en vez de contar carpetas.
+
+    Nota del 07/09/2026: aqui habia `parents[3]`, que se rompio al mover
+    `docs/proceso/` a `proceso/`. Contar carpetas falla en silencio cuando el
+    script cambia de sitio; buscar el `.git` no.
+    """
+    for directorio in [Path(__file__).resolve(), *Path(__file__).resolve().parents]:
+        if (directorio / ".git").exists():
+            return directorio
+    raise RuntimeError("No se encontro la raiz del repositorio (.git) desde este script.")
+
+
+RAIZ = _raiz_del_repositorio()
 ARCHIVO_CEBO = RAIZ / "Registro_Post_Quirurgico" / "filtracion_de_prueba.py"
 RAMA = "verificacion-guardia-secretos"
 

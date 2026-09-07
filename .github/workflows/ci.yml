@@ -116,18 +116,21 @@ jobs:
           # 3.13, leído de .python-version — la misma fuente que usa el build.
           python-version-file: .python-version
           cache: pip
-          cache-dependency-path: |
-            requirements-runtime.txt
-            requirements-dev.txt
+          cache-dependency-path: pyproject.toml
 
       - name: Instalar dependencias
         id: dependencias
-        # requirements-dev.txt = requirements-runtime.txt + freezegun.
-        # requirements.txt NO se usa: es un `pip freeze` de Windows con
-        # paquetes que ni siquiera instalan en Linux.
+        # Desde el 07/09/2026 la fuente única es `pyproject.toml`. El extra
+        # `dev` añade a las nueve de runtime lo que solo necesitan las pruebas y
+        # las comprobaciones: freezegun, ruff y pip-audit.
+        #
+        # Antes había tres `requirements*.txt`, y el que llevaba el nombre
+        # canónico era un `pip freeze` de la máquina de desarrollo —214 líneas
+        # con TensorFlow, Jupyter y paquetes solo-Windows— que no lo usaba
+        # nadie pero era lo primero que abría cualquiera que llegara de fuera.
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+          pip install -e ".[dev]"
 
       # A partir de aquí, cada comprobación corre AUNQUE la anterior haya
       # fallado (`!cancelled()`), para que una corrida en rojo muestre todo lo
@@ -220,11 +223,32 @@ jobs:
         # desde julio, pero NUNCA estuvo automatizado: eran corridas a mano que
         # nadie repitió. Esto lo vuelve real.
         #
-        # Mira `requirements-runtime.txt` —lo que de verdad va a producción— y
-        # no `requirements.txt`, que es un `pip freeze` de la máquina de
-        # desarrollo y ni siquiera instala en Linux.
+        # Audita la lista de dependencias derivada de `pyproject.toml` —runtime
+        # más el extra `dev`—, no el entorno instalado. La diferencia importa:
+        #
+        # Auditar el entorno hace que pip-audit tropiece con el propio proyecto,
+        # que se instala con `-e` y no es una distribución publicada: responde
+        # "distribution marked as editable" y, con `--strict`, eso es un fallo.
+        # Ocurrió en la primera corrida de este paso (PR #19).
+        #
+        # La salida fácil habría sido quitar `--strict`. No se hizo: `--strict`
+        # es lo que hace que la guardia avise cuando una dependencia NO SE PUDO
+        # auditar, y una guardia que calla ante lo que no pudo mirar es
+        # justamente lo que la ficha D16 vino a eliminar. Derivando la lista del
+        # pyproject se conserva `--strict` y el proyecto no entra en la ecuación.
+        #
+        # Se auditan también las herramientas de desarrollo a propósito: corren
+        # en esta misma máquina y con acceso al código.
         if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' }}
-        run: pip-audit --requirement requirements-runtime.txt --strict
+        run: |
+          python - <<'PY' > /tmp/dependencias-auditables.txt
+          import tomllib
+          d = tomllib.load(open('pyproject.toml', 'rb'))['project']
+          for req in d['dependencies'] + d['optional-dependencies']['dev']:
+              print(req)
+          PY
+          cat /tmp/dependencias-auditables.txt
+          pip-audit --strict --requirement /tmp/dependencias-auditables.txt
 
       - name: Configuración de producción
         # `--fail-level WARNING` NO es opcional, y su ausencia fue el hallazgo

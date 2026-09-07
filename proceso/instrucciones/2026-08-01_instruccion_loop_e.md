@@ -51,7 +51,7 @@ Copiar y pegar tal cual:
 Retomamos desde Desarrollo para el Loop E. Soy __ (Arquitecto).
 
 Antes de proponer nada:
-1. Lee docs/proceso/2026-08-01_instruccion_loop_e.md — es el guion de esta
+1. Lee proceso/instrucciones/2026-08-01_instruccion_loop_e.md — es el guion de esta
    sesión.
 2. Lee la ficha D14 en docs/decisiones_correccion_auditoria.md — la decisión ya
    está tomada y no se reabre.
@@ -148,7 +148,7 @@ archivo se actualiza en el mismo lote**, no después. Y la ficha D14 pasa de
 3. PR a `Desarrollo`. **La CI lo verifica sola** — mirar que los cinco checks
    estén en verde antes de mergear, porque no bloquean.
 4. Verificación del Arquitecto: un script propio en
-   `docs/proceso/verificaciones/`, que imprima la evidencia en pantalla. El
+   `proceso/verificaciones/`, que imprima la evidencia en pantalla. El
    agente que escribió el código es el peor juez de si el código está bien.
 5. Cierre: BITÁCORA, `CLAUDE.md`, y el guion de la sesión siguiente.
 
@@ -174,7 +174,7 @@ Ninguna es de código: hay que tomarlas antes de programar.
 `user_permissions.clear()` sobre un usuario que ya existe. Si el médico cambia su
 contraseña en el Admin, el siguiente despliegue **la revierte en silencio**. Hoy
 `medico_piloto` no puede tener una contraseña propia que sobreviva a un deploy.
-Detalle en `docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`, punto 8.
+Detalle en `proceso/auditorias/2026-07-29_revision_pr_sprint5.md`, punto 8.
 
 **2 · Cómo mostrar el correo de alerta funcionando.** `signals.py` corta la
 notificación cuando la cédula empieza por `DEMO-`, **antes** de mirar la

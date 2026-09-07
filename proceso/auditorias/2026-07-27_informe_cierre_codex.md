@@ -109,7 +109,7 @@ está demostrado. El encabezado que escribe el propio código usa solo `pk`s.
 
 Se registra como **exposición condicional**: real como vía, sin caso conocido.
 
-→ Decisión **[D11](../../decisiones_correccion_auditoria.md#d11)**
+→ Decisión **[D11](../../docs/decisiones_correccion_auditoria.md#d11)**
 
 ---
 
@@ -150,7 +150,7 @@ como de `cron_operativo`, así que ese `CommandError` **no salta ninguna tarea
 posterior**. No hay efecto dominó. Se deja anotado para que la próxima revisión
 no lo investigue otra vez.
 
-→ Decisión **[D12](../../decisiones_correccion_auditoria.md#d12)**
+→ Decisión **[D12](../../docs/decisiones_correccion_auditoria.md#d12)**
 
 ---
 
@@ -182,7 +182,7 @@ exactamente el modo de fallo que ya costó una madrugada: el día que alguien la
 mueva a *Shared Variables* o la apunte mal, la cerradura del webhook se abre sin
 decir nada.
 
-→ Decisión **[D13](../../decisiones_correccion_auditoria.md#d13)**
+→ Decisión **[D13](../../docs/decisiones_correccion_auditoria.md#d13)**
 
 ---
 
@@ -196,7 +196,7 @@ decir nada.
 | `CLAUDE.md:180` | "Loop C en curso" | los tres loops están cerrados |
 | `bot_whatsapp.md:17` | "`views.py`, pendiente" · 69 tests | `views.py` existe desde el Sprint 3 · 319 tests |
 | `modelos_datos.md:173` | `fecha_ultimo_registro` "controla un registro por día" | nunca se lee (D9) |
-| `docs/proceso/README.md:68` | el verificador fechado no es importable | el comando documentado funciona |
+| `proceso/README.md:68` | el verificador fechado no es importable | el comando documentado funciona |
 
 **El primero no es polvo documental: es un umbral clínico mal escrito en un
 documento vivo.** Los otros cuatro sí lo son.
@@ -239,7 +239,7 @@ Añadido por esta verificación: el orden de tareas de los dos cron resiste que
 
 ## Qué pasa después
 
-Loop D, con el método de `docs/proceso/metodo_de_trabajo.md`: fichas
+Loop D, con el método de `proceso/metodo_de_trabajo.md`: fichas
 **D11, D12 y D13** escritas antes de programar, prueba en rojo, implementación,
 verificación del Arquitecto. Estado de avance en
 `docs/decisiones_correccion_auditoria.md`.

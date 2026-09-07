@@ -30,7 +30,7 @@ Eso produjo tres problemas concretos, todos verificados:
    uno, el proyecto tiene dos versiones de un umbral médico y ninguna forma de
    saber cuál manda.
 2. **Cronología duplicada de la BITÁCORA.** El 38% del archivo era narrativa de
-   qué pasó en cada loop — que ya estaba, con más detalle, en `BITACORA.md`.
+   qué pasó en cada loop — que ya estaba, con más detalle, en `proceso/BITACORA.md`.
 3. **Riesgo al actualizar el estado.** El protocolo de cierre obliga a
    actualizar el estado del proyecto en cada sesión, y eso significaba editar el
    mismo archivo que contiene las reglas clínicas. Un descuido al escribir el
@@ -153,7 +153,7 @@ la auditoría, que tiene que poder revisarse por lo que es.
 | Una pregunta o texto que ve el paciente | `docs/bot_whatsapp.md` |
 | Un error que costó horas y puede repetirse | `docs/trampas_conocidas.md` |
 | El porqué de una decisión de diseño | La ficha correspondiente en `docs/decisiones_*.md` |
-| Qué pasó hoy y qué problemas aparecieron | `BITACORA.md` |
+| Qué pasó hoy y qué problemas aparecieron | `proceso/BITACORA.md` |
 | Dónde vamos y cuál es el siguiente paso | `CLAUDE.md`, sección "Estado Actual" |
 | Alcance nuevo o una prioridad de producto | `ROADMAP_MONITOREO_POSQUIRURGICO.md` |
 

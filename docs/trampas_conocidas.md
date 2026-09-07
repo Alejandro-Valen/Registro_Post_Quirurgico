@@ -1,7 +1,7 @@
 # Trampas conocidas
 
 > **Qué es esto.** Cosas que ya costaron horas y volverán a morder si nadie las
-> escribe. No es historia —para eso está `BITACORA.md`— sino advertencias
+> escribe. No es historia —para eso está `proceso/BITACORA.md`— sino advertencias
 > vigentes: cada una describe un comportamiento que sigue siendo cierto hoy.
 >
 > Si vas a tocar despliegue, cron, Twilio o correo, **lee esto primero**.
@@ -105,8 +105,11 @@ UTC); mínimo de intervalo 5 min. Cambiar el Custom Start Command exige
   Railpack ignora `nixpacks.toml` ("No start command detected"); Nixpacks
   falló con `pip: command not found` (peculiaridad de Nix). El Dockerfile es
   determinista; `nixpacks.toml` queda como fallback inerte.
-- `requirements.txt` (raíz) es el pip freeze de desarrollo Windows y **NO** se
-  usa para deploy — el Dockerfile instala `requirements-runtime.txt`.
+- **Las dependencias se declaran en `pyproject.toml`** desde el 07/09/2026,
+  y el Dockerfile instala con `pip install .`. Antes había tres
+  `requirements*.txt` y el que llevaba el nombre canónico era un `pip freeze`
+  de la máquina Windows de desarrollo que habría roto el build en Linux; el
+  Dockerfile tenía que esquivarlo a mano. Ya no existe esa trampa.
 - **Variables de Railway: valor crudo, nunca entre `< >` ni comillas.** Los
   placeholders `<...>` pegados literalmente fueron la causa raíz del 403 de
   Twilio y de los login fallidos al Admin (detalle en BITACORA 06/07/2026).
@@ -158,7 +161,7 @@ hay que mirar cuando el médico reporte que no puede entrar.
 
 Razonamiento completo en `docs/decisiones_correccion_auditoria.md`, ficha D15;
 el hallazgo que lo originó, en
-`docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`, punto 8.
+`proceso/auditorias/2026-07-29_revision_pr_sprint5.md`, punto 8.
 
 **Trampa asociada, esta sigue viva:** `DJANGO_MEDICO_EMAIL` alimenta el campo que
 `notificaciones.py` usa como **destinatario de las alertas**. Hasta el
@@ -234,7 +237,7 @@ ninguna dependencia**.
 
 Lo importante: **eso no dice absolutamente nada sobre la seguridad de las
 dependencias.** En la CI (Linux, rutas ASCII) corre sin problema, y es ahí donde
-la comprobación cuenta. `docs/proceso/verificaciones/2026-09-07_verificacion_arnes.py`
+la comprobación cuenta. `proceso/verificaciones/2026-09-07_verificacion_arnes.py`
 distingue este caso a propósito y lo reporta como "no verificable en esta
 máquina" en vez de como fallo — dar por vulnerable lo que solo es un problema
 de codificación sería justo el tipo de conclusión falsa que las verificaciones

@@ -16,7 +16,7 @@ poder ponerse en rojo, y nadie lo noto porque siempre se lo miro en verde.
 CÓMO SE CORRE
 -------------
     cd <raiz del repositorio>
-    .venv\\Scripts\\python docs\\proceso\\verificaciones\\2026-09-07_verificacion_arnes.py
+    .venv\\Scripts\\python proceso\\verificaciones\\2026-09-07_verificacion_arnes.py
 
 No modifica nada de forma permanente: los sabotajes se aplican sobre copias
 temporales o se revierten en un `finally`.
@@ -30,7 +30,20 @@ import sys
 import tempfile
 from pathlib import Path
 
-RAIZ = Path(__file__).resolve().parents[3]
+def _raiz_del_repositorio() -> Path:
+    """Sube hasta encontrar el `.git`, en vez de contar carpetas.
+
+    Contar (`parents[3]`) rompe el script en cuanto alguien lo mueve, y en
+    silencio: se pone a mirar el directorio equivocado y reporta lo que
+    encuentre ahí. Pasó el 07/09/2026 al mover `docs/proceso/` a `proceso/`.
+    """
+    for directorio in [Path(__file__).resolve(), *Path(__file__).resolve().parents]:
+        if (directorio / '.git').exists():
+            return directorio
+    raise RuntimeError('No se encontró la raíz del repositorio (.git) desde este script.')
+
+
+RAIZ = _raiz_del_repositorio()
 PROYECTO = RAIZ / 'Registro_Post_Quirurgico'
 PY = sys.executable
 
@@ -197,10 +210,13 @@ def guardia_identidad() -> None:
             texto = ruta.read_text(encoding='utf-8', errors='replace')
         except OSError:
             continue
+        # Las pruebas usan cédulas inventadas a propósito, y ESTE script lleva
+        # el patrón en su propio código: sin la segunda exclusión se denuncia a
+        # sí mismo, que es un falso positivo garantizado.
+        if ('/tests/' in relativo or 'seed_demo' in relativo
+                or Path(relativo).name == Path(__file__).name):
+            continue
         for numero, linea in enumerate(texto.splitlines(), 1):
-            # Las pruebas usan cédulas inventadas a propósito.
-            if '/tests/' in relativo or 'seed_demo' in relativo:
-                continue
             if patron.search(linea):
                 encontrados.append(f'{relativo}:{numero}')
 

@@ -20,7 +20,7 @@ las migraciones **0027** (`PROTECT` en `medico_responsable`) y **0028**
 
 Estado al cerrar esa sesión: **337 tests OK**, `check` sin issues,
 `makemigrations --check` limpio, y la verificación independiente
-`docs/proceso/verificaciones/2026-07-27_verificacion_loop_d.py` en verde (8 bloques).
+`proceso/verificaciones/2026-07-27_verificacion_loop_d.py` en verde (8 bloques).
 
 **Lo que falta no es corrección de código.** Es cerrar la rama.
 
@@ -34,7 +34,7 @@ Copiar y pegar tal cual:
 Retomamos el cierre de la rama sprint-5-produccion. Soy León (Arquitecto).
 
 Antes de proponer nada:
-1. Lee docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md — es el guion
+1. Lee proceso/instrucciones/2026-07-28_instruccion_cierre_rama_sprint5.md — es el guion
    de esta sesión.
 2. Lee el "Estado de avance" de docs/decisiones_correccion_auditoria.md y la
    última entrada de BITACORA.md.

@@ -1,0 +1,38 @@
+# Vigilancia de dependencias.
+#
+# Complementa a `pip-audit`, que corre en cada PR y solo mira vulnerabilidades
+# conocidas de lo que ya está fijado. Dependabot avisa además de las versiones
+# nuevas, incluidas las que cierran un fallo antes de que tenga CVE público.
+#
+# Frecuencia mensual a propósito: son nueve dependencias de runtime y bien
+# fijadas. Un PR semanal por cada una sería ruido que nadie mira, y una alerta
+# que nadie mira es peor que no tenerla.
+
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    target-branch: "Desarrollo"
+    commit-message:
+      prefix: "chore"
+    labels:
+      - "dependencias"
+    groups:
+      # Los parches se agrupan en un solo PR: casi siempre son correcciones
+      # menores y revisarlos de a uno cuesta más de lo que aporta.
+      parches:
+        update-types:
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    target-branch: "Desarrollo"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencias"

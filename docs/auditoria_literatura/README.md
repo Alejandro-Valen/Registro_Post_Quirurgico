@@ -30,4 +30,4 @@ Contiene cuatro análisis de las fuentes primarias revisadas:
 > **Nota:** este material es referencia de apoyo para decisiones de
 > arquitectura, no un contrato que el proyecto deba cumplir al pie de la
 > letra. El alcance real del sistema, los umbrales clínicos vigentes y las
-> decisiones de diseño quedan documentados en `CLAUDE.md` y `BITACORA.md`.
+> decisiones de diseño quedan documentados en `CLAUDE.md` y `proceso/BITACORA.md`.

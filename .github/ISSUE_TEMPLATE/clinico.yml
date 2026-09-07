@@ -1,0 +1,72 @@
+name: Cuestión clínica
+description: Un umbral, una regla o un texto que lee el paciente
+labels: ["clinico", "requiere-arquitecto"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Esto no se resuelve programando.** Ninguna regla, umbral ni mensaje
+        clínico cambia sin decisión explícita del Arquitecto y, cuando toca
+        criterio médico, sin validación del médico.
+
+        Este issue sirve para **plantear la pregunta**, no para proponer el
+        parche. La decisión, si se toma, se escribe en
+        `docs/decisiones_correccion_auditoria.md` **antes** de tocar código.
+
+  - type: textarea
+    id: regla
+    attributes:
+      label: Qué regla o umbral
+      description: |
+        Cítala como aparece en `docs/reglas_clinicas.md`, que es la fuente
+        única. Si otro documento la repite, ese otro está desactualizado.
+      placeholder: "Regla 1b — subfebrícula 37.5–37.8 °C en 2 días con datos consecutivos → SEPSIS / MEDIA"
+    validations:
+      required: true
+
+  - type: textarea
+    id: situacion
+    attributes:
+      label: Qué situación la pone en duda
+      description: |
+        El caso concreto. "Un paciente en POD 4 con..." es útil; "creo que el
+        umbral es alto" no lo es.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidencia
+    attributes:
+      label: Evidencia
+      description: |
+        Si hay literatura que lo respalde, cítala. Si es criterio clínico sin
+        respaldo publicado, dilo así — también es válido, pero se registra
+        distinto.
+
+        Si no puedes citar la fuente, no es un hallazgo: es una preferencia. Y
+        una preferencia también puede ser correcta, pero se decide de otra
+        manera.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: direccion
+    attributes:
+      label: Hacia dónde iría el cambio
+      options:
+        - Más sensible (alertaría antes o más veces)
+        - Menos sensible (alertaría después o menos veces)
+        - No cambia la sensibilidad, cambia otra cosa
+        - No lo sé, por eso lo pregunto
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: consciencia
+    attributes:
+      label: Antes de enviar
+      options:
+        - label: Entiendo que el modelo es de **alta sensibilidad** a propósito, y que un falso positivo cuesta una llamada telefónica mientras que un falso negativo cuesta una complicación no detectada
+          required: true
+        - label: He leído la fila correspondiente en `docs/reglas_clinicas.md` y la base clínica que cita
+          required: true

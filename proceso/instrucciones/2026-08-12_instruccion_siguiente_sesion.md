@@ -41,7 +41,7 @@ Copiar y pegar tal cual:
 Retomamos desde Desarrollo. Soy León (Arquitecto).
 
 Antes de proponer nada:
-1. Lee docs/proceso/2026-08-12_instruccion_siguiente_sesion.md — es el guion de
+1. Lee proceso/instrucciones/2026-08-12_instruccion_siguiente_sesion.md — es el guion de
    esta sesión.
 2. Verifica el estado real con git log, git status y la suite. Si algo no
    coincide con los documentos, manda Git y avísame.
@@ -129,7 +129,7 @@ sobre lo que hay. Decidir si se recrea el entorno o si el `.bat` se retira.
 ## Un recordatorio de método, por si el candidato elegido es el 1
 
 Si la sesión audita pruebas, la regla que la hace útil está escrita en
-`docs/proceso/metodo_de_trabajo.md` y se confirmó otra vez el 12/08: **un test en
+`proceso/metodo_de_trabajo.md` y se confirmó otra vez el 12/08: **un test en
 verde no prueba nada si no se sabe por qué está verde.** La forma de saberlo es
 romper el código a propósito y comprobar **qué cae y qué no** — el sabotaje que
 no hace caer nada es el que encuentra la prueba floja.

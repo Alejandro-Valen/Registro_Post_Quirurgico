@@ -27,7 +27,7 @@ extend-exclude = [
     # que una comprobacion se hizo, no codigo mantenido: reescribirlos para
     # contentar al linter falsificaria el registro de lo que se ejecuto aquel
     # dia. Mismo criterio que las migraciones: no se lintea lo que no se toca.
-    "docs/proceso/verificaciones/**",
+    "proceso/verificaciones/**",
 ]
 
 [lint]

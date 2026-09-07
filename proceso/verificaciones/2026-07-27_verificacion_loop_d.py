@@ -2,7 +2,7 @@
 
 QUÉ ES: siete bloques que imprimen en pantalla la evidencia de que las
 correcciones del Loop D hacen lo que dicen. No es la suite del proyecto: es la
-comprobación independiente que exige el método (`docs/proceso/metodo_de_trabajo.md`,
+comprobación independiente que exige el método (`proceso/metodo_de_trabajo.md`,
 regla 4) — *el agente que escribió el código es el peor juez de si el código
 está bien*.
 
@@ -14,7 +14,7 @@ midiendo otra cosa.
 CÓMO SE CORRE, desde `Registro_Post_Quirurgico/` (PowerShell):
 
     cd Registro_Post_Quirurgico
-    $env:PYTHONPATH = "../docs/proceso/verificaciones"
+    $env:PYTHONPATH = "../proceso/verificaciones"
     python manage.py test 2026-07-27_verificacion_loop_d -v 2 --noinput
     Remove-Item Env:PYTHONPATH
 

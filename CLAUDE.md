@@ -67,13 +67,24 @@ clasifica señales de alarma médicas.
 | `docs/decisiones_correccion_auditoria.md` | Antes de tocar lo que corrigieron los loops de auditoría (fichas **D1-D17**) |
 | `ROADMAP_MONITOREO_POSQUIRURGICO.md` | Antes de proponer alcance nuevo o discutir prioridades |
 
+### Dónde está cada cosa (desde el 07/09/2026)
+
+`docs/` es **solo producto**: reglas clínicas, modelo de datos, bot, operación,
+legal. `proceso/` es el **cuaderno del equipo**: bitácora, auditorías, guiones
+de sesión y scripts de verificación. Un desarrollador nuevo no necesita abrir
+`proceso/` para usar ni extender el sistema; un agente que va a corregir algo,
+sí — ahí está el método y lo que ya falló antes.
+
 ### Consúltalo cuando necesites contexto
 
 | Documento | Qué responde |
 |-----------|--------------|
+| `README.md` (raíz) | La portada: qué hace el sistema, cómo se instala, y qué falta —técnico y normativo— para pacientes reales |
+| `CONTRIBUTING.md` | Las convenciones en forma corta: ramas, commits, qué correr antes del PR, y las reglas del código |
+| `SECURITY.md` | Qué cuenta como fallo de seguridad aquí, qué ya está resuelto y **qué sabemos que falta** |
 | `docs/README.md` | Índice general y **orden de autoridad** si dos documentos se contradicen |
-| `docs/proceso/metodo_de_trabajo.md` | **Cómo se corrige algo aquí:** decidir → documentar → test en rojo → implementar → verificar. Léelo antes de tu primer cambio |
-| `BITACORA.md` | Qué pasó en cada sesión, con los problemas encontrados y cómo se resolvieron |
+| `proceso/metodo_de_trabajo.md` | **Cómo se corrige algo aquí:** decidir → documentar → test en rojo → implementar → verificar. Léelo antes de tu primer cambio |
+| `proceso/BITACORA.md` | Qué pasó en cada sesión, con los problemas encontrados y cómo se resolvieron |
 | `docs/resumen_sprints.md` | Qué entregó cada sprint, bloque y loop — el mapa de la BITÁCORA |
 | `docs/auditoria_literatura/` | La evidencia clínica que respalda (o no) cada umbral |
 | `docs/transferencia_cuentas.md` | Propiedad de servicios y credenciales |
@@ -82,7 +93,7 @@ clasifica señales de alarma médicas.
 ### Si algo se contradice
 
 Manda **el código**; después el documento dueño de ese tema (los de la tabla
-"antes de tocar"); después este archivo. `BITACORA.md` describe el momento en
+"antes de tocar"); después este archivo. `proceso/BITACORA.md` describe el momento en
 que se escribió y nunca es fuente de verdad sobre el estado actual. Al
 encontrar una contradicción, **corrígela en el mismo commit** en vez de dejarla
 anotada para después.
@@ -116,8 +127,8 @@ anotada para después.
   push a esas dos ramas: la suite, `check`, `makemigrations --check`,
   `check --deploy` **con `--fail-level WARNING`**, la higiene del diff, la
   **guardia de secretos** (`gitleaks` sobre la historia completa), que no haya
-  ningún `.env` rastreado, el **linter** (`ruff`) y **`pip-audit`** sobre
-  `requirements-runtime.txt`.
+  ningún `.env` rastreado, el **linter** (`ruff`) y **`pip-audit`** sobre las
+  dependencias instaladas.
 
   **La bandera `--fail-level WARNING` no es un detalle.** Sin ella, el paso de
   configuración de producción **nunca pudo fallar**: todos los checks de
@@ -223,7 +234,8 @@ evidencia disponible, no decisiones ya tomadas.
 | Guardia de secretos | `gitleaks` y control de archivos de entorno en la CI | ✅ **Completado y mergeado** (10/08/2026, PR #13, merge commit `301c743`). La CI pasa de cinco a **siete comprobaciones** |
 | D15 · `crear_medico` | Que el arranque deje de reescribir la cuenta del médico | ✅ **Completado y mergeado** (12/08/2026, PR #17, merge commit `1396744`). **344 tests OK**; cierra D1-D15 |
 | Auditoría de seis frentes | Seguridad, datos, backend clínico, frontend, calidad de pruebas y repositorio, en paralelo y ciegas entre sí | ✅ **Ejecutada** (07/09/2026). **101 hallazgos, 15 de severidad ALTA.** Cuatro reproducidos ejecutando código, incluido un sabotaje que dejó las 344 pruebas en verde con el motor clínico roto |
-| Loop del arnés · D16-D17 | Que las guardias automáticas puedan fallar, y retirar la identidad de terceros | 🔄 **En curso** (07/09/2026). CI de **siete a nueve** comprobaciones; `check --deploy` recupera la capacidad de fallar; `ruff` y `pip-audit` entran bloqueando; identidad del médico fuera del árbol. **Sin commitear todavía** |
+| Loop del arnés · D16-D17 | Que las guardias automáticas puedan fallar, y retirar la identidad de terceros | ✅ **Completado y mergeado** (07/09/2026, PR #18, merge commit `5f51831`). CI de **siete a nueve** comprobaciones; `check --deploy` recupera la capacidad de fallar; identidad del médico fuera del árbol. **344 tests OK** |
+| Loop del repositorio · D18 | Separar producto de cuaderno de trabajo, y que el repositorio se pueda instalar | 🔄 **En curso** (07/09/2026). `README`, `LICENSE`, `CONTRIBUTING`, `SECURITY`, `pyproject.toml` en vez de tres `requirements`, plantillas de `.github/`, `CODEOWNERS`, `.mailmap`, y el proceso movido a `proceso/` |
 
 **Qué pasó (22/07/2026).** Una auditoría independiente sobre `fbf62a8` confirmó
 las cuatro cifras que se reportaban (280 tests, `check --deploy`, `pip-audit`,
@@ -249,7 +261,7 @@ operativa, y un paciente activo que puede quedarse sin médico responsable —
 invisible para todos. Los cuatro hallazgos se reprodujeron contra el código
 antes de aceptarlos; la verificación cambió de sitio una corrección y encontró
 una ocurrencia que el informe no vio. Informe completo en
-`docs/proceso/auditorias/2026-07-27_informe_cierre_codex.md`.
+`proceso/auditorias/2026-07-27_informe_cierre_codex.md`.
 
 - **Loop D** (privacidad operativa, responsable clínico, firma del webhook):
   **cerrado y verificado (27/07).** Los nueve pasos, 15 commits, suite en **337
@@ -285,24 +297,24 @@ guion escrito esperando, a propósito. El candidato con más peso es **auditar l
 calidad de las pruebas**: el 12/08/2026 un sabotaje de verificación demostró con
 un caso concreto que hay pruebas verdes que no protegen lo que parecen
 (`test_crea_staff_no_superusuario_sin_permisos_extra` seguía en verde con
-`user_permissions.clear()` retirado). Ver la entrada del 12/08 en `BITACORA.md`.
+`user_permissions.clear()` retirado). Ver la entrada del 12/08 en `proceso/BITACORA.md`.
 
 Los cinco cierres anteriores están **completos**: la rama del Sprint 5
-(`docs/proceso/2026-07-28_instruccion_cierre_rama_sprint5.md`, 29/07), la CI
-(`docs/proceso/2026-07-30_instruccion_sprint6_ci.md`, 31/07), el Loop E
-(`docs/proceso/2026-08-01_instruccion_loop_e.md`, 07/08) y el reparto de
-`tests.py` (`docs/proceso/2026-08-07_instruccion_partir_tests.md`, 10/08) y
-`crear_medico` (`docs/proceso/2026-08-10_instruccion_crear_medico.md`, 12/08).
+(`proceso/instrucciones/2026-07-28_instruccion_cierre_rama_sprint5.md`, 29/07), la CI
+(`proceso/instrucciones/2026-07-30_instruccion_sprint6_ci.md`, 31/07), el Loop E
+(`proceso/instrucciones/2026-08-01_instruccion_loop_e.md`, 07/08) y el reparto de
+`tests.py` (`proceso/instrucciones/2026-08-07_instruccion_partir_tests.md`, 10/08) y
+`crear_medico` (`proceso/instrucciones/2026-08-10_instruccion_crear_medico.md`, 12/08).
 
 Lo que sigue, en este orden (razonamiento y detalle en
-`docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`):
+`proceso/auditorias/2026-07-29_revision_pr_sprint5.md`):
 
 1. ~~**Montar CI**~~ — ✅ hecho el 31/07/2026 (PR #5, `5b40c01`). Las cinco
    comprobaciones se verificaron en rojo:
-   `docs/proceso/verificaciones/2026-07-31_verificacion_ci.md`.
+   `proceso/verificaciones/2026-07-31_verificacion_ci.md`.
 2. ~~**Loop E**~~ — ✅ hecho el 07/08/2026 (PR #10, `4fc690d`). D14 implementada;
    verificación independiente en
-   `docs/proceso/verificaciones/2026-08-06_verificacion_loop_e.py`.
+   `proceso/verificaciones/2026-08-06_verificacion_loop_e.py`.
 3. ~~**Partir `tests.py`**~~ — ✅ hecho el 10/08/2026 (PR #12, `427153b`). Nueve
    archivos por tema más `soporte.py`; 340 tests y los 305 métodos comparados
    uno a uno contra el archivo original.
@@ -342,7 +354,7 @@ están tomadas; no se reabren salvo que el Arquitecto lo pida.
 **Deuda técnica y su orden de atención (29/07/2026).** La revisión de cierre del
 PR dejó **8 puntos** de deuda que no bloquean el merge, con la secuencia decidida
 de dónde se atiende cada uno:
-`docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`. Lo esencial: **el
+`proceso/auditorias/2026-07-29_revision_pr_sprint5.md`. Lo esencial: **el
 Loop E es solo el punto 2** (D14, aislar el cron) y no se le agrega nada más —
 un loop, un tema. El punto 1 (CI) **ya está hecho**; **partir `tests.py` va
 después del Loop E**, en la ventana en que ninguna rama esté avanzando en

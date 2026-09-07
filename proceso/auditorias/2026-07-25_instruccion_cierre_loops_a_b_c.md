@@ -77,8 +77,8 @@ paciente real en el sistema**: todo lo que hay son datos de demostración.
 | `docs/bot_whatsapp.md` | Máquina de estados del bot y sus reglas no negociables |
 | `docs/decisiones_correccion_auditoria.md` | Fichas D1-D10 con el razonamiento de cada corrección |
 | `docs/trampas_conocidas.md` | Errores de despliegue que ya costaron horas |
-| `docs/proceso/metodo_de_trabajo.md` | Cómo se corrige algo en este proyecto |
-| `BITACORA.md` | Cronología completa, incluidos los problemas y cómo se resolvieron |
+| `proceso/metodo_de_trabajo.md` | Cómo se corrige algo en este proyecto |
+| `proceso/BITACORA.md` | Cronología completa, incluidos los problemas y cómo se resolvieron |
 
 ---
 
@@ -250,7 +250,7 @@ anterior dejó la base de pruebas a medias.
 
 También hay una verificación que imprime evidencia en pantalla de las
 correcciones del Loop C, en
-`docs/proceso/verificaciones/2026-07-25_verificacion_loop_c.py`.
+`proceso/verificaciones/2026-07-25_verificacion_loop_c.py`.
 
 **Si algo de este documento no coincide con `git log` o con la suite, manda
 Git** y anótalo como hallazgo: significa que la documentación quedó desfasada.
@@ -274,7 +274,7 @@ Un informe escrito con:
 
 No propongas parches en el informe: describe el problema con precisión. Las
 correcciones se deciden después, y se implementan con el método de
-`docs/proceso/metodo_de_trabajo.md` — decidir, documentar, prueba en rojo,
+`proceso/metodo_de_trabajo.md` — decidir, documentar, prueba en rojo,
 implementar, verificar.
 
 ---

@@ -1,0 +1,66 @@
+# Dependencias del proyecto, en un solo archivo.
+#
+# Sustituye a los tres `requirements*.txt` que había hasta el 07/09/2026. El
+# problema no era tenerlos separados —runtime y dev es una separación correcta—
+# sino que el que lleva el nombre canónico, `requirements.txt`, era un
+# `pip freeze` de la máquina Windows del Arquitecto: 214 líneas con TensorFlow,
+# Jupyter, esptool y bibliotecas de Bluetooth, que ni siquiera instalaba en
+# Linux. Nadie lo usaba —el Dockerfile instalaba `requirements-runtime.txt` y la
+# CI `requirements-dev.txt`— pero era lo primero que abría cualquiera que
+# llegara de fuera, y sacaba una conclusión falsa del proyecto.
+#
+# Las nueve dependencias de runtime se comprobaron contra los `import` reales
+# del código: no sobra ninguna.
+#
+# Instalación:
+#     pip install -e ".[dev]"     desarrollo y pruebas
+#     pip install .               solo runtime (es lo que hace el Dockerfile)
+
+[project]
+name = "registro-post-quirurgico"
+version = "0.9.0"
+description = "Monitoreo posquirúrgico remoto para pacientes de cirugía colorrectal"
+requires-python = ">=3.13"
+license = { file = "LICENSE" }
+readme = "README.md"
+
+dependencies = [
+    "Django==6.0.8",            # 6.0.8 cierra CVE-2026-15830 (ficha D16)
+    "psycopg2-binary==2.9.12",  # controlador de PostgreSQL
+    "python-decouple==3.8",     # lee el .env; se importa como `decouple`
+    "twilio==9.10.9",           # webhook de WhatsApp
+    "django-axes==7.0.1",       # bloqueo por intentos de acceso fallidos
+    "redis==8.0.1",             # cache y rate limit
+    "requests==2.33.0",         # entrega de correo por HTTPS (Resend)
+    "gunicorn==26.0.0",         # servidor WSGI de producción
+    "whitenoise==6.12.0",       # estáticos en producción (Railway no tiene Nginx)
+]
+
+[project.optional-dependencies]
+dev = [
+    # Ancla el reloj de las clases cuyos fixtures lo leen varias veces, para que
+    # una corrida que cruce la medianoche de Bogotá no haga caer "ayer" y "hoy"
+    # el mismo día (`ANCLA_MEDIANOCHE` en tests/soporte.py). Entró en el Loop C.
+    "freezegun==1.5.5",
+    # Linter. Octava comprobación de la CI (ficha D16). Sus reglas y el porqué
+    # de cada excepción viven en `ruff.toml`, en la raíz.
+    "ruff==0.16.6",
+    # Vulnerabilidades conocidas de las dependencias. Novena comprobación.
+    "pip-audit==2.10.1",
+]
+
+[project.urls]
+Repositorio = "https://github.com/Alejandro-Valen/Registro_Post_Quirurgico"
+
+# --- Empaquetado -----------------------------------------------------------
+# Esto es una APLICACIÓN, no una biblioteca: no se publica ni se importa desde
+# fuera. El bloque existe solo para que `pip install -e .` pueda resolver las
+# dependencias de arriba; `packages = []` le dice a setuptools que no intente
+# descubrir ni instalar ningún paquete, que además fallaría con los tres
+# directorios anidados que se llaman igual.
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []

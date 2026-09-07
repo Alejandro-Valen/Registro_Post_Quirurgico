@@ -7,7 +7,7 @@
 > corridas de GitHub Actions, con su SHA y su mensaje de error. Esto las
 > registra.
 >
-> **Regla que aplica:** `docs/proceso/metodo_de_trabajo.md`, regla 2 — *un test
+> **Regla que aplica:** `proceso/metodo_de_trabajo.md`, regla 2 — *un test
 > en verde no prueba nada si no se verifica por qué está verde.* Aplicada a la
 > propia CI: un workflow que nunca vio un rojo no está probado.
 

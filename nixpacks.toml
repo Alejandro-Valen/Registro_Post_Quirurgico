@@ -4,9 +4,9 @@
 # - manage.py NO está en la raíz del repo, sino en Registro_Post_Quirurgico/.
 #   Por eso todos los comandos usan la ruta "Registro_Post_Quirurgico/manage.py"
 #   y gunicorn usa "--chdir Registro_Post_Quirurgico".
-# - Se instala desde requirements-runtime.txt (limpio), NO desde requirements.txt
-#   (pip freeze de desarrollo con paquetes solo-Windows —pywin32, winrt-*— que
-#   romperían el build en Linux).
+# - Se instala desde pyproject.toml, fuente unica de las dependencias desde el
+#   07/09/2026. Antes habia tres requirements*.txt y el canonico era un pip
+#   freeze de desarrollo que ni siquiera instalaba en Linux.
 # - collectstatic corre en el build; migrate y gunicorn en el arranque.
 #
 # Variables de entorno que deben estar configuradas en Railway ANTES del primer
@@ -18,7 +18,7 @@
 #   DJANGO_MEDICO_USERNAME, DJANGO_MEDICO_PASSWORD, DJANGO_MEDICO_EMAIL
 
 [phases.install]
-cmds = ["pip install -r requirements-runtime.txt"]
+cmds = ["pip install ."]
 
 [phases.build]
 cmds = ["python Registro_Post_Quirurgico/manage.py collectstatic --noinput"]

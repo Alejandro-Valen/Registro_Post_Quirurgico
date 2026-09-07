@@ -6,15 +6,15 @@
 >
 > **Para qué sirve.** Para responder "¿por qué se hizo así?" sin depender de
 > la memoria de nadie ni de una conversación. Se consulta **por tema**, no por
-> fecha — la cronología vive en `BITACORA.md`.
+> fecha — la cronología vive en `proceso/BITACORA.md`.
 >
 > **A quién le sirve.** Al Arquitecto, al médico (decisión D4), a Codex, y a
 > cualquier agente IA que retome el proyecto.
 
 **Fecha de las decisiones:** 22/07/2026
 **Rama:** `sprint-5-produccion` · **Punto de partida:** `fbf62a8`
-**Auditoría de origen:** ver `docs/proceso/auditorias/2026-07-22_instruccion_loops_1_6.md` (instrucción) y
-la entrada de `BITACORA.md` del 22/07/2026 (informe y hallazgos).
+**Auditoría de origen:** ver `proceso/auditorias/2026-07-22_instruccion_loops_1_6.md` (instrucción) y
+la entrada de `proceso/BITACORA.md` del 22/07/2026 (informe y hallazgos).
 
 ---
 
@@ -42,14 +42,14 @@ Los hallazgos 2, 6, 7, 8, 9, 11 y 14 son correcciones técnicas sin decisión de
 producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
 
 **D15 no viene de ninguna de las dos auditorías.** Salió del punto 8 de la
-revisión de cierre del PR del Sprint 5 (`docs/proceso/auditorias/2026-07-29_revision_pr_sprint5.md`),
+revisión de cierre del PR del Sprint 5 (`proceso/auditorias/2026-07-29_revision_pr_sprint5.md`),
 que la primera lectura de ese mismo PR no había visto. No tiene loop asignado:
 se decidió en su propia sesión, siguiendo el guion
-`docs/proceso/2026-08-10_instruccion_crear_medico.md`.
+`proceso/instrucciones/2026-08-10_instruccion_crear_medico.md`.
 
 **D11, D12 y D13 vienen de una auditoría posterior**, la de cierre pre-merge del
 27/07/2026 — informe y verificación en
-`docs/proceso/auditorias/2026-07-27_informe_cierre_codex.md`. Los "hallazgos
+`proceso/auditorias/2026-07-27_informe_cierre_codex.md`. Los "hallazgos
 cierre 1-3" de la tabla son los de **ese** informe, no los de la auditoría del
 22/07.
 
@@ -69,7 +69,7 @@ código antes de aceptarlas.
 **Última actualización:** 12/08/2026
 **Punto alcanzado:** **LOS CINCO LOOPS CERRADOS; D1-D14 IMPLEMENTADAS Y
 MERGEADAS.** El Loop E se verificó con un script propio
-(`docs/proceso/verificaciones/2026-08-06_verificacion_loop_e.py`) y entró a
+(`proceso/verificaciones/2026-08-06_verificacion_loop_e.py`) y entró a
 `Desarrollo` el 07/08/2026 (PR #10, `4fc690d`). Los Loops A, B, C y D estaban
 cerrados y verificados desde el 27/07; el Sprint 5 se mergeó el 29/07 y la CI el
 31/07. Suite comprobada de nuevo el 12/08/2026 sobre `c1ec1ca`: **340 tests OK**
@@ -89,9 +89,9 @@ mirarlos antes de mergear sigue siendo manual.
 (`Desarrollo` antes del loop)
 **Línea base de la suite:** 337 tests OK antes del Loop E · **340 OK** al
 implementarlo
-**Guion de la sesión:** `docs/proceso/2026-08-01_instruccion_loop_e.md`
+**Guion de la sesión:** `proceso/instrucciones/2026-08-01_instruccion_loop_e.md`
 **Informe de la auditoría de cierre:**
-`docs/proceso/auditorias/2026-07-27_informe_cierre_codex.md`
+`proceso/auditorias/2026-07-27_informe_cierre_codex.md`
 
 ### Loop A — Corrección clínica *(bloquea el merge)*
 
@@ -225,7 +225,7 @@ Nace de la auditoría de cierre del 27/07/2026. Decisiones D11-D13 aprobadas
 - [x] **D-8** `fix: negar la creacion de pacientes de ejemplo sin medico usable` → D12 — `76c4869`
 - [x] **D-9** `docs: corregir los cinco desfases entre documentos y codigo` — `e67dab1`
 - [x] Cierre: **337 tests OK** · `check` sin issues · `makemigrations --check` limpio · script de verificación `5eff498`
-- [x] **Verificación del Arquitecto:** corrí `docs/proceso/verificaciones/2026-07-27_verificacion_loop_d.py` — **8 bloques, OK**. Confirmé las dos líneas que distinguen la verificación del trámite: la ficha histórica inactiva **sí** se sigue creando (la restricción no es `NOT NULL`), y el aviso del tablero da **0** con un médico que sí puede atender (no salta siempre)
+- [x] **Verificación del Arquitecto:** corrí `proceso/verificaciones/2026-07-27_verificacion_loop_d.py` — **8 bloques, OK**. Confirmé las dos líneas que distinguen la verificación del trámite: la ficha histórica inactiva **sí** se sigue creando (la restricción no es `NOT NULL`), y el aviso del tablero da **0** con un médico que sí puede atender (no salta siempre)
 - [x] **D-0 repetido antes del push** (27/07, dato fresco): `a_sin_medico = 0` otra vez. La 0028 no puede fallar por datos existentes
 - [x] **Un solo push** a `origin/sprint-5-produccion` (`2fe6815 → 0f51ec0`, 18 commits). Las tres tarjetas de Railway en **SUCCESS** y `/salud/` en **HTTP 200 durante diez sondeos consecutivos** tras el deploy. **El Loop D está en producción**
 
@@ -292,7 +292,7 @@ Por eso el push es único, con todo verde, y **mirando el log del deploy y
 - [x] **E-1** `test: reproducir que un fallo temprano del cron impide entregar alertas` — `e37e1a4`
 - [x] **E-2** `fix: aislar las tareas del cron conservando las dependencias clinicas` → D14 — `d48ba41`
 - [x] Cierre: **340 tests OK** · `check`, `makemigrations --check` y `check --deploy` sin issues · `git diff --check` limpio contra `origin/Desarrollo`
-- [x] **Verificación del Arquitecto** — `docs/proceso/verificaciones/2026-08-06_verificacion_loop_e.py`
+- [x] **Verificación del Arquitecto** — `proceso/verificaciones/2026-08-06_verificacion_loop_e.py`
 - [x] PR a `Desarrollo` — **PR #10, mergeado el 07/08/2026** (`4fc690d`). Con él quedan implementadas las catorce decisiones D1-D14
 
 > Desde el 10/08/2026 la CI corre **siete** comprobaciones, no cinco: se sumaron
@@ -969,7 +969,7 @@ Y `settings.py:189` afirma que el LOGGING "filtra PHI/PII". **No filtra nada:**
 el único filtro configurado es `RequireDebugFalse`.
 
 Reproducido el 27/07/2026 — ver
-`docs/proceso/auditorias/2026-07-27_informe_cierre_codex.md`.
+`proceso/auditorias/2026-07-27_informe_cierre_codex.md`.
 
 ### Decisión
 
@@ -1312,7 +1312,7 @@ sí solo. D14 es lo que hace que el sistema sea correcto **mientras tanto**.
 
 **Hallazgo:** revisión de cierre del PR del Sprint 5, punto 8 · **Loop:** — ·
 **Estado:** **Decidida** (12/08/2026), **pendiente de implementar.**
-Guion de la sesión: `docs/proceso/2026-08-10_instruccion_crear_medico.md`.
+Guion de la sesión: `proceso/instrucciones/2026-08-10_instruccion_crear_medico.md`.
 
 ### Problema
 
@@ -1469,7 +1469,7 @@ contenedor. Eso solo se ve desplegando, cuando haya plan de pago.
 
 **Hallazgo:** auditoría de seis frentes del 07/09/2026, SEC-01 · **Loop:** Arné
 · **Estado:** **Decidida** (07/09/2026).
-Guion de la sesión: `docs/proceso/2026-09-07_instruccion_loop_arnes.md`.
+Guion de la sesión: `proceso/instrucciones/2026-09-07_instruccion_loop_arnes.md`.
 
 ### Problema
 
@@ -1517,7 +1517,9 @@ al menos una vez.** En concreto, para esta sesión:
 
 1. **`check --deploy` lleva `--fail-level WARNING`.** Verificado rompiendo una
    directiva a propósito y viendo la CI caer.
-2. **`pip-audit` entra en la CI**, sobre `requirements-runtime.txt`, y bloquea.
+2. **`pip-audit` entra en la CI** y bloquea. (Al migrar a `pyproject.toml` en
+   el mismo loop pasó a auditar el entorno instalado en vez de un archivo de
+   requisitos, que dejó de existir.)
 3. **`ruff` entra en la CI y bloquea**, con el conjunto amplio. Dos familias se
    ignoran **con el porqué escrito en la configuración**, no en silencio:
    - `RUF012` (117 hallazgos): exige anotar `list_display` y `dependencies` como
@@ -1626,6 +1628,77 @@ un tercero identificable que no consintió su publicación en un repositorio de
 código: **conviene decírselo y preguntarle qué prefiere.** Esa conversación es
 del Arquitecto, no del equipo técnico, y queda anotada aquí para que no se
 pierda.
+
+---
+
+## D18 — Qué es producto y qué es cuaderno de trabajo
+
+**Hallazgo:** auditoría del 07/09/2026, REPO-01 a REPO-21 · **Loop:** Repositorio
+· **Estado:** **Decidida** (07/09/2026).
+
+### Problema
+
+De cada 100 KB de documentación del repositorio, **solo 12 describían el
+producto**. El resto —59 % proceso puro, 21 % mixto— era cómo trabajan dos
+personas, y estaba en la portada.
+
+Consecuencias concretas, medidas:
+
+- **No había `README.md` en la raíz.** Lo primero que veía quien abría el
+  repositorio era `BITACORA.md`, 277 KB.
+- **No había licencia.** El estado legal por defecto ya era "todos los derechos
+  reservados", pero nadie podía saberlo mirando.
+- **No había una sola instrucción de instalación** en los 44 documentos. Lo más
+  parecido era una ruta absoluta de la máquina del Arquitecto apuntando a un
+  entorno virtual que no existía.
+- **`requirements.txt` (214 líneas) era un `pip freeze`** de esa misma máquina,
+  con TensorFlow, Jupyter y paquetes solo-Windows. No lo usaba nadie —el
+  Dockerfile y la CI instalaban los otros dos— pero era el primero que abría
+  cualquiera, y le faltaban `gunicorn` y `whitenoise`.
+- **Ni una captura de pantalla.** Para un panel médico que se quiere enseñar a un
+  médico y a un desarrollador externo, es la ausencia más cara.
+
+### Decisión
+
+**1 · `docs/` es producto. `proceso/` es cuaderno.** La bitácora, los informes
+de auditoría, los guiones de sesión y los scripts de verificación se mueven a
+`proceso/`, un nivel por encima de `docs/`. Se **mueven, no se parten**: el
+ROADMAP y el archivo de decisiones se quedan enteros por ahora, porque partirlos
+rompe las referencias de los cinco informes de auditoría y ese coste no compra
+nada hoy.
+
+**2 · Licencia: todos los derechos reservados, explícita.** El médico proponente
+puede ser adquiriente, y el núcleo del trabajo —las reglas y su respaldo en
+literatura— conserva valor comercial. Una licencia permisiva lo regalaría antes
+de que exista esa conversación. Ampliarla después siempre es posible; al revés,
+no. El `LICENSE` incluye además el **aviso clínico**: esto no es un dispositivo
+médico certificado.
+
+**3 · `pyproject.toml` como fuente única de dependencias.** Se borran los tres
+`requirements*.txt`. El `Dockerfile` pasa a `pip install .` y la CI a
+`pip install -e ".[dev]"`. Las nueve dependencias de runtime se comprobaron
+contra los `import` reales del código: no sobra ninguna.
+
+**4 · Lo que NO se toca: el nombre del repositorio ni la carpeta anidada.** Tres
+directorios llamados `Registro_Post_Quirurgico` confunden, y renombrarlos rompe
+`DJANGO_SETTINGS_MODULE`, el `--chdir` del `Dockerfile`, el `working-directory`
+de la CI, `wsgi.py`, `asgi.py` y las referencias de 28 migraciones. Se resuelve
+con tres líneas en el README, no con un `git mv`.
+
+**5 · `CODEOWNERS` le da fuerza mecánica a una regla que ya existía.** `CLAUDE.md`
+dice desde el principio que ninguna regla clínica se cambia sin el Arquitecto;
+hasta hoy eso dependía de que alguien se acordara. Ahora GitHub pide su revisión
+automáticamente cuando un PR toca `alert_engine.py`, `bot.py`, `models.py`, las
+reglas clínicas o la evidencia. Sin protección de rama **solicita** la revisión,
+no la exige — es un recordatorio automático, como los checks.
+
+### Lo que este loop dejó a la vista y no resolvió
+
+Mover documentación **rompió dos scripts de verificación** que calculaban la raíz
+del repositorio contando carpetas (`parents[3]`). Fallaban en silencio: se ponían
+a mirar el directorio equivocado. Se cambiaron por una búsqueda del `.git`, que
+sobrevive a cualquier mudanza futura. Es el mismo patrón de D16 —una guardia que
+falla sin avisar— apareciendo en las propias verificaciones.
 
 ---
 
