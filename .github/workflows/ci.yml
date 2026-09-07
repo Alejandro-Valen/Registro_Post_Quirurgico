@@ -1,9 +1,15 @@
-# Integración continua — siete comprobaciones ejecutadas en Linux por cada PR.
+# Integración continua — nueve comprobaciones ejecutadas en Linux por cada PR.
 #
 # Cinco nacieron con esta CI (31/07/2026) y eran las que hasta entonces solo
 # corrían en la máquina Windows del Arquitecto. Las dos de seguridad —guardia
 # de secretos y archivos de entorno— se añadieron el 10/08/2026; esas nunca
 # corrieron en local, y esa es justamente la razón de que existan.
+#
+# Las dos últimas —linter y pip-audit— entraron el 07/09/2026 con la ficha D16,
+# junto con la bandera `--fail-level WARNING` que le devolvió a `check --deploy`
+# la capacidad de fallar: la había perdido desde el primer día y nadie lo notó,
+# porque una comprobación que siempre sale verde se ve exactamente igual que
+# una que funciona.
 #
 # Por qué existe: el repo recibe trabajo desde dos herramientas distintas
 # (Claude Code y Codex CLI) en sesiones que no comparten memoria. Sin esto, la
