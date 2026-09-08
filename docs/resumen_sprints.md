@@ -234,6 +234,21 @@ entre el Sprint 5 y hoy.
   `requirements*.txt`; y el cuaderno de trabajo se mudó a `proceso/`, dejando
   `docs/` solo con producto. Ficha **D18**.
 
+- **Loop de umbrales (08/09/2026, rama `umbrales-frontera`).** La auditoría de
+  pruebas había medido el patrón que dejó pasar el sabotaje del drenaje
+  fecaloide: **la ausencia sistemática de la frontera inferior**. De las 30
+  severidades del sistema solo 15 tenían el valor justo por debajo del umbral,
+  que es el que de verdad lo ancla; sin él, una prueba describe el código en vez
+  de fijar la regla. Se añadieron **22 pruebas de frontera** —16 en el motor,
+  clase `FronterasDeUmbralTests`, y 6 en el bot, un flujo por cada opción del
+  menú de drenaje— y un arnés re-ejecutable,
+  `proceso/verificaciones/2026-09-08_verificacion_umbrales.py`, que rompe el
+  motor a propósito una constante a la vez y exige que la prueba caiga: **21
+  sabotajes, los 21 atrapados**, más la corrida limpia en verde. Suite: 344 →
+  **366 tests**. Cierra los hallazgos **TEST-01 a TEST-05**. **No se movió ningún
+  umbral**: el loop fija lo decidido, no lo revisa. Es la ficha **D16** —toda
+  guardia debe poder ponerse en rojo— aplicada a las pruebas clínicas.
+
 ---
 
 ## Preguntas de arquitectura ya resueltas

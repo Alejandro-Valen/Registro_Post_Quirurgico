@@ -152,9 +152,9 @@ el `signos_sintomas/tests.py` que ya no existe. ✅ **Árbol limpio** (PR #18) �
 | **DB-01** | **Cero validadores de rango** en todo el proyecto. `episodios_nauseas` no tiene techo ni en el bot: `"si, 99999"` → `DataError` → webhook 500 → el paciente no recibe respuesta | ⬜ Abierto |
 | **DB-02** | El parser de temperatura trunca: `379` → 37,0, sin alerta | ⬜ Abierto |
 | **BE-01** | El bot le dice "no tienes reporte pendiente" al paciente que empezó por la mañana y vuelve por la tarde, y le pierde el turno | ⬜ Abierto |
-| **TEST-01** | `fecaloide` sin ninguna prueba (sabotaje ejecutado) | ⬜ Abierto |
-| **TEST-02** | El bot nunca prueba las opciones "4" (purulento) y "5" (fecaloide) del menú de drenaje — las dos que significan urgencia | ⬜ Abierto |
-| **TEST-03** | Cuatro umbrales clínicos se pueden mover sin que caiga una prueba | ⬜ Abierto |
+| **TEST-01** | `fecaloide` sin ninguna prueba (sabotaje ejecutado) | ✅ Corregido, loop de umbrales (08/09/2026) — sabotaje S01 |
+| **TEST-02** | El bot nunca prueba las opciones "4" (purulento) y "5" (fecaloide) del menú de drenaje — las dos que significan urgencia | ✅ Corregido, loop de umbrales (08/09/2026) — las cinco opciones, sabotajes S18-S21 |
+| **TEST-03** | Cuatro umbrales clínicos se pueden mover sin que caiga una prueba | ✅ Corregido, loop de umbrales (08/09/2026) — 21 sabotajes, los 21 atrapados |
 | **UX-P01** | El tablero imprime *"Sin alertas pendientes. Todo bajo control"* mientras su propio indicador muestra una alerta ALTA sin resolver (ocurre siempre que la ALTA es de tipo SILENCIO) | ⬜ Abierto |
 | **UX-B01** | **No hay palabra de auxilio.** *"estoy sangrando mucho"* en la pregunta 7 se guarda como distensión abdominal y el bot pasa a la siguiente pregunta | ⬜ Abierto |
 | **UX-B02** | El bot promete *"Te escribiré cuando sea la hora"*, pero el envío saliente es un stub: nadie le va a escribir nunca | ⬜ Abierto |
@@ -283,8 +283,8 @@ justo las dos que pasaron por una auditoría previa.
 
 | ID | Hallazgo | Estado |
 |---|---|---|
-| TEST-04 | La decisión D8 (un día sin datos corta el conteo) **no tiene guardián** | ⬜ |
-| TEST-05 | La ventana de dolor POD 3-5 y las fronteras entre ventanas no se prueban | ⬜ |
+| TEST-04 | La decisión D8 (un día sin datos corta el conteo) **no tiene guardián** | ✅ Reglas 1b, 3, 4 y 6 (08/09/2026) — sabotajes S05, S06, S10, S16 |
+| TEST-05 | La ventana de dolor POD 3-5 y las fronteras entre ventanas no se prueban | ✅ Corregido (08/09/2026) — matriz de las tres ventanas, sabotajes S11-S14 |
 | TEST-06 | El backoff de reintentos del correo ALTA no está probado: cualquier valor positivo satisface la aserción | ⬜ |
 | TEST-07 | Umbrales operativos sin frontera: gracia del cron, ingreso tardío, aviso del Admin | ⬜ |
 | TEST-08 | Cinco pruebas sin ninguna aserción; dos de ellas no protegen nada | ⬜ |
@@ -313,7 +313,7 @@ están en el guion `proceso/instrucciones/2026-09-07_instruccion_umbrales.md`.
 | REPO-11 | `.github/` sin plantillas, `CODEOWNERS` ni `dependabot` | ✅ PR #19 |
 | REPO-12 | `.gitignore` no cubría `entorno_registro/` sin punto, `.venv/`, `.claude/` ni las cachés | ✅ PR #18 |
 | REPO-13 | `requirements-dev.txt` citaba `tests.py`, borrado el 10/08 | ✅ PR #18 |
-| REPO-14 | `CLAUDE.md` da una ruta de `cd` ambigua según desde dónde se ejecute | ⬜ |
+| REPO-14 | `CLAUDE.md` da una ruta de `cd` ambigua según desde dónde se ejecute | ✅ Corregido (08/09/2026): costó un arranque en falso al abrir el loop de umbrales |
 | REPO-15 | `resumen_sprints.md` decía que el correo se resolvió con SMTP + Gmail; producción usó Resend por HTTPS | ✅ Corregido |
 | REPO-16 | Cuatro sitios decían "fichas D1-D10" | ✅ Corregido |
 | REPO-17 | `inicio_entornoR.bat` activaba un entorno que no existía | ✅ PR #18 |

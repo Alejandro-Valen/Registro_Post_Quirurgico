@@ -7,7 +7,8 @@
 > Rama activa de trabajo: ninguna — **lo siguiente se decide en sesión**, desde
 > `Desarrollo` (Sprint 5 mergeado el 29/07/2026, `sprint-6-ci` el 31/07/2026,
 > **Loop E el 07/08/2026**, el **reparto de `tests.py` + la guardia de secretos
-> el 10/08/2026** y **D15 · `crear_medico` el 12/08/2026**, 344 tests OK)
+> el 10/08/2026** y **D15 · `crear_medico` el 12/08/2026**; **umbrales
+> anclados con pruebas de frontera el 08/09/2026**, 366 tests OK)
 > **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026 —
 > **nueve comprobaciones** desde el 07/09/2026 (siete hasta entonces; se sumaron
 > el linter `ruff` y `pip-audit`, y `check --deploy` recuperó la capacidad de
@@ -1027,16 +1028,24 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   en el Sprint 0.
 - [x] **Retirar el correo personal del equipo** de la documentación (aparecía
   literal en siete lugares).
-- [ ] **Auditar la calidad de las pruebas** ahora que están repartidas por tema.
+- [x] **Auditar la calidad de las pruebas** ahora que están repartidas por tema.
   Al partirlas **no se revisó ninguna**, a propósito: mezclar movimiento y
-  corrección habría dejado la verificación sin poder afirmar nada. Es una sesión
-  propia, sin fecha.
+  corrección habría dejado la verificación sin poder afirmar nada.
+  **Hecho el 07/09/2026** como uno de los seis frentes de la auditoría (nueve
+  hallazgos, TEST-01 a TEST-12), y **corregido el 08/09/2026** en el loop de
+  umbrales: 22 pruebas de frontera y un arnés de 21 sabotajes, los 21 atrapados.
+  Quedan abiertos los hallazgos de calidad que no son de frontera (TEST-06 a
+  TEST-12: el backoff del correo, los umbrales operativos, las cinco pruebas sin
+  aserción, el badge de severidad).
 
 **Limpieza técnica menor (no bloqueante):**
 - [ ] Revisar/limpiar el dominio duplicado en Railway (si quedaron dos).
 - [ ] `inicio_entornoR.bat` apunta a un venv (`entorno_registro`) que ya no
-  existe; recrear el venv o borrar el `.bat` (hoy todo corre en el Python
-  global).
+  existe; recrear el venv o borrar el `.bat`. **Corrección del 08/09/2026:** la
+  parte final de esta línea era falsa — el proyecto **no** corre en el Python
+  global. Existe `.venv/` con Python 3.13, Django y `ruff`, y es el intérprete
+  real; el `python` del PATH es un 3.10 pelado. Lo que falta es que el `.bat`
+  apunte a `.venv` o desaparezca.
 
 ---
 
