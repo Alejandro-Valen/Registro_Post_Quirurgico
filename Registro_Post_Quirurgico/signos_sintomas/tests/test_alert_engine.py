@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.utils import timezone
 from freezegun import freeze_time
 
-from ..alert_engine import evaluar_registro
+from ..alert_engine import _severidad_dolor_por_ventana, evaluar_registro
 from ..models import (
     Alerta,
     DeteccionAlerta,
@@ -1210,3 +1210,298 @@ class HinchazonCondicionMediaTests(TestCase):
         hoy = self._reportar("algo")
 
         self.assertEqual(self._severidad_ileo(hoy), 'MEDIA')
+
+
+@freeze_time(ANCLA_MEDIANOCHE)
+class FronterasDeUmbralTests(TestCase):
+    """El valor que dispara cada umbral, y el inmediatamente inferior que NO.
+
+    **Por que existe.** El 07/09/2026 se ejecuto un sabotaje de una linea sobre
+    `alert_engine.py`: quitar `'fecaloide'` de `DRENAJES_ALTA`. Las 344 pruebas
+    de entonces quedaron **en verde** con el motor clinico roto — un paciente
+    podia reportar contenido intestinal por el drenaje y no generarse ninguna
+    alerta. La auditoria de calidad de pruebas midio el patron detras: de las 30
+    severidades del sistema solo 15 tenian el caso frontera, y `dolor_eva` nunca
+    valia 7 ni `episodios_nauseas` 3 en toda la suite.
+
+    **Que hace esta clase.** Aplica a las demas familias de reglas el patron que
+    la Regla 8 (frecuencia cardiaca) ya tenia en casa: por cada umbral, el valor
+    que dispara y el valor justo por debajo, que es el que de verdad ancla la
+    constante. Sin la mitad inferior, mover el umbral no rompe nada.
+
+    **Que NO hace.** No fija ningun umbral nuevo ni revisa los existentes: ancla
+    los que ya decidio el Arquitecto y documenta `docs/reglas_clinicas.md`.
+
+    **Como se verificaron.** Cada prueba se dio por buena solo despues de
+    aplicarle su sabotaje y **verla caer**; el registro sabotaje por sabotaje
+    esta en `proceso/verificaciones/2026-09-08_verificacion_umbrales.py`. Una
+    prueba de frontera que nace en verde no sabe lo que dice saber.
+    """
+
+    def setUp(self):
+        self.medico = medico_de_pruebas()
+        self.telefonos_usados = 0
+
+    def _paciente(self, dias_desde_cirugia=5):
+        """Paciente nuevo con telefono unico y un dia postoperatorio conocido.
+
+        `dia_postoperatorio` lo congela `RegistroDiario.save()` al crear el
+        registro, restando `fecha_cirugia` de la fecha de ESE momento — que con
+        el ancla de reloj es siempre hoy. Por eso el POD se controla desde aqui,
+        retrocediendo la fecha de cirugia, y no tocando el registro.
+        """
+        self.telefonos_usados += 1
+        return Paciente.objects.create(
+            medico_responsable=self.medico,
+            nombre_completo=f"Paciente Frontera {self.telefonos_usados}",
+            telefono_whatsapp=f"+57300{self.telefonos_usados:07d}",
+            fecha_cirugia=timezone.localdate() - timedelta(days=dias_desde_cirugia),
+        )
+
+    def _registro(self, paciente, dias_atras=0, **campos):
+        """Registro clinicamente NEUTRO salvo los campos que la prueba mueva.
+
+        Neutro quiere decir que ninguna de las ocho reglas dispara: 37.0 grados,
+        EVA 2 (por debajo del piso de la ventana mas sensible, POD 6+), con
+        gases, sin nauseas, sin drenaje y sin frecuencia cardiaca. Asi la alerta
+        que aparezca solo puede venir de la variable que la prueba movio, y una
+        asercion de "no hay alerta" significa algo.
+
+        `dias_atras` retro-fecha el registro DESPUES de crearlo, que es como lo
+        hacen el resto de las pruebas multidia: el motor agrupa por
+        `fecha_registro__date`.
+        """
+        valores = {
+            'temperatura': Decimal("37.0"),
+            'dolor_eva': 2,
+            'tiene_drenaje': False,
+            'presencia_gases': True,
+            'episodios_nauseas': 0,
+        }
+        valores.update(campos)
+        registro = RegistroDiario.objects.create(paciente=paciente, **valores)
+        if dias_atras:
+            RegistroDiario.objects.filter(pk=registro.pk).update(
+                fecha_registro=timezone.now() - timedelta(days=dias_atras)
+            )
+            registro.refresh_from_db()
+        return registro
+
+    def _severidades(self, registro, tipo):
+        return [a.severidad for a in evaluar_registro(registro) if a.tipo == tipo]
+
+    # --- Regla 2: drenaje ---
+
+    def test_drenaje_fecaloide_crea_fuga_alta(self):
+        """El sabotaje del 07/09/2026: quitar 'fecaloide' de DRENAJES_ALTA.
+
+        Contenido intestinal saliendo por el drenaje es una fuga anastomotica
+        franca — el peor signo que captura el sistema. No tenia ni una prueba.
+        """
+        paciente = self._paciente()
+        registro = self._registro(
+            paciente, tiene_drenaje=True, aspecto_drenaje='fecaloide'
+        )
+        self.assertEqual(self._severidades(registro, 'FUGA_ANASTOMOTICA'), ['ALTA'])
+
+    # --- Regla 1: temperatura ---
+
+    def test_temperatura_378_un_dia_no_crea_alerta(self):
+        """Frontera inferior de SEPSIS/ALTA (37.9).
+
+        37.8 cae en la banda de subfebricula, que con un solo dia no alerta:
+        el registro no debe producir NINGUNA alerta de sepsis. Es la prueba que
+        ancla el 37.9 — sin ella, bajar el umbral a 37.8 no rompe nada.
+        """
+        paciente = self._paciente()
+        registro = self._registro(paciente, temperatura=Decimal("37.8"))
+        self.assertEqual(self._severidades(registro, 'SEPSIS'), [])
+
+    def test_temperatura_375_dos_dias_crea_sepsis_media(self):
+        """Frontera inferior de la banda de subfebricula (37.5)."""
+        paciente = self._paciente()
+        self._registro(paciente, dias_atras=1, temperatura=Decimal("37.5"))
+        hoy = self._registro(paciente, temperatura=Decimal("37.5"))
+        self.assertEqual(self._severidades(hoy, 'SEPSIS'), ['MEDIA'])
+
+    def test_temperatura_374_dos_dias_no_crea_alerta(self):
+        """El valor justo por debajo de la subfebricula, con el mismo escenario.
+
+        Mismo montaje que la prueba anterior cambiando solo una decima: si el
+        piso de la banda bajara a 37.4, esta prueba lo denuncia.
+        """
+        paciente = self._paciente()
+        self._registro(paciente, dias_atras=1, temperatura=Decimal("37.4"))
+        hoy = self._registro(paciente, temperatura=Decimal("37.4"))
+        self.assertEqual(self._severidades(hoy, 'SEPSIS'), [])
+
+    def test_subfebricula_con_hueco_de_un_dia_no_crea_alerta(self):
+        """Decision D8: los dos dias de la Regla 1b son CONSECUTIVOS.
+
+        Antier 37.6, ayer sin ningun reporte, hoy 37.6. Son dos dias con dato
+        de subfebricula, pero no dos dias seguidos: el dia sin reporte es un
+        desconocido genuino y contar a traves de el inventaria un hecho clinico.
+        """
+        paciente = self._paciente()
+        self._registro(paciente, dias_atras=2, temperatura=Decimal("37.6"))
+        hoy = self._registro(paciente, temperatura=Decimal("37.6"))
+        self.assertEqual(self._severidades(hoy, 'SEPSIS'), [])
+
+    # --- Regla 3: gases ---
+
+    def test_gases_hueco_de_un_dia_corta_el_conteo(self):
+        """Decision D8 sobre la Regla 3, la unica de dias que llega hasta ALTA.
+
+        Cuatro dias de calendario: tres sin gases y uno sin ningun reporte en
+        medio. Contando dias con dato serian tres — ALTA, "ir a urgencias".
+        Contando dias consecutivos son dos: MEDIA. El hueco corta.
+
+        Sin esta prueba, borrar la guarda `if not existe_registro: break` de
+        `_evaluar_gases` no rompe nada, y el sistema empieza a mandar pacientes
+        a urgencias por dias que nunca reportaron.
+        """
+        paciente = self._paciente()
+        self._registro(paciente, dias_atras=3, presencia_gases=False)
+        # dias_atras=2 se deja vacio a proposito: es el hueco.
+        self._registro(paciente, dias_atras=1, presencia_gases=False)
+        hoy = self._registro(paciente, presencia_gases=False)
+        self.assertEqual(self._severidades(hoy, 'ILEO_PARALITICO'), ['MEDIA'])
+
+    # --- Regla 4: nauseas ---
+
+    def test_nauseas_dos_episodios_crea_baja(self):
+        """Frontera superior de BAJA (1-2 episodios)."""
+        paciente = self._paciente()
+        registro = self._registro(paciente, episodios_nauseas=2)
+        self.assertEqual(self._severidades(registro, 'ILEO_PARALITICO'), ['BAJA'])
+
+    def test_nauseas_tres_episodios_crea_media(self):
+        """Frontera inferior de MEDIA (NAUSEAS_MEDIA_MIN = 3).
+
+        `episodios_nauseas` no valia 3 en ninguna de las 344 pruebas: subir la
+        constante a 4 pasaba sin que cayera nada.
+        """
+        paciente = self._paciente()
+        registro = self._registro(paciente, episodios_nauseas=3)
+        self.assertEqual(self._severidades(registro, 'ILEO_PARALITICO'), ['MEDIA'])
+
+    def test_nauseas_persistencia_tres_dias_no_escala_a_alta(self):
+        """Frontera inferior de la Regla 4e (DIAS_NAUSEAS_ALTA = 4).
+
+        Tres dias seguidos con nauseas se quedan en MEDIA por persistencia. La
+        prueba que ya existia usaba cuatro dias y daba ALTA; sin esta, bajar el
+        umbral a tres convertiria en "ir a urgencias" un cuadro que el
+        Arquitecto decidio que se llama por telefono.
+        """
+        paciente = self._paciente()
+        self._registro(paciente, dias_atras=2, episodios_nauseas=1)
+        self._registro(paciente, dias_atras=1, episodios_nauseas=1)
+        hoy = self._registro(paciente, episodios_nauseas=1)
+        self.assertEqual(self._severidades(hoy, 'ILEO_PARALITICO'), ['MEDIA'])
+
+    def test_nauseas_hueco_de_un_dia_corta_la_persistencia(self):
+        """Decision D8 sobre la Regla 4d.
+
+        Antier y hoy con nauseas, ayer sin ningun reporte: la persistencia vale
+        1, no 2, asi que manda la suma del dia (1 episodio -> BAJA) y no la
+        escalada a MEDIA.
+        """
+        paciente = self._paciente()
+        self._registro(paciente, dias_atras=2, episodios_nauseas=1)
+        hoy = self._registro(paciente, episodios_nauseas=1)
+        self.assertEqual(self._severidades(hoy, 'ILEO_PARALITICO'), ['BAJA'])
+
+    # --- Regla 5: dolor ---
+
+    def test_dolor_pod2_eva7_crea_media(self):
+        """Frontera inferior de MEDIA en la ventana POD 0-2 (EVA 7).
+
+        `dolor_eva` no valia 7 en ninguna de las 344 pruebas. El sabotaje
+        `VENTANAS_DOLOR (2, 5, 7, 9) -> (2, 5, 8, 9)` pasaba sin que cayera
+        nada: un paciente con dolor 7 en el segundo dia postoperatorio quedaba
+        clasificado BAJA, "monitorear", en vez de MEDIA, "llamar al medico".
+        """
+        paciente = self._paciente(dias_desde_cirugia=2)
+        registro = self._registro(paciente, dolor_eva=7)
+        self.assertEqual(self._severidades(registro, 'DOLOR_AGUDO'), ['MEDIA'])
+
+    def test_dolor_pod2_eva4_no_crea_alerta(self):
+        """Frontera inferior de toda la ventana POD 0-2 (BAJA arranca en 5)."""
+        paciente = self._paciente(dias_desde_cirugia=2)
+        registro = self._registro(paciente, dolor_eva=4)
+        self.assertEqual(self._severidades(registro, 'DOLOR_AGUDO'), [])
+
+    def test_matriz_de_ventanas_de_dolor(self):
+        """Las tres ventanas completas, y los saltos entre ellas.
+
+        Se ejercita `_severidad_dolor_por_ventana` directamente porque es la
+        tabla clinica en si; el cableado hacia `evaluar_registro` ya lo fijan
+        las dos pruebas end-to-end de arriba y las de `AlertEngineTests`.
+
+        Las dos ultimas parejas son las fronteras ENTRE ventanas: el mismo EVA
+        cambia de severidad al cruzar de POD 2 a POD 3 y de POD 5 a POD 6, que
+        es lo que hace util tener tres ventanas en vez de una.
+        """
+        casos = [
+            # POD 0-2 -> BAJA 5 / MEDIA 7 / ALTA 9
+            (2, 4, None), (2, 5, 'BAJA'), (2, 6, 'BAJA'), (2, 7, 'MEDIA'),
+            (2, 8, 'MEDIA'), (2, 9, 'ALTA'), (2, 10, 'ALTA'),
+            # POD 3-5 -> BAJA 4 / MEDIA 6 / ALTA 8
+            (3, 3, None), (3, 4, 'BAJA'), (3, 5, 'BAJA'), (3, 6, 'MEDIA'),
+            (3, 7, 'MEDIA'), (3, 8, 'ALTA'),
+            (5, 3, None), (5, 4, 'BAJA'), (5, 7, 'MEDIA'), (5, 8, 'ALTA'),
+            # POD 6+ -> BAJA 3 / MEDIA 5 / ALTA 7
+            (6, 2, None), (6, 3, 'BAJA'), (6, 4, 'BAJA'), (6, 5, 'MEDIA'),
+            (6, 6, 'MEDIA'), (6, 7, 'ALTA'),
+            (30, 2, None), (30, 3, 'BAJA'), (30, 7, 'ALTA'),
+            # Fronteras ENTRE ventanas: el mismo EVA, un dia de diferencia.
+            (2, 4, None), (3, 4, 'BAJA'),
+            (5, 3, None), (6, 3, 'BAJA'),
+        ]
+        for pod, eva, esperada in casos:
+            with self.subTest(pod=pod, eva=eva):
+                self.assertEqual(_severidad_dolor_por_ventana(pod, eva), esperada)
+
+    def test_dolor_tendencia_delta_dos_no_escala(self):
+        """Frontera inferior de la Regla 5b (DOLOR_DELTA_TENDENCIA = 3).
+
+        Promedio de 3 hace dos y tres dias, promedio de 5 ayer y hoy: la subida
+        es de 2 puntos y NO debe escalar. Por tabla, POD 5 con EVA 5 es BAJA, y
+        BAJA se queda. La prueba que ya existia probaba delta 3 y si escalaba;
+        esta es la mitad que faltaba.
+        """
+        paciente = self._paciente(dias_desde_cirugia=5)
+        for dias_atras, eva in ((3, 3), (2, 3), (1, 5)):
+            self._registro(paciente, dias_atras=dias_atras, dolor_eva=eva)
+        hoy = self._registro(paciente, dolor_eva=5)
+        self.assertEqual(self._severidades(hoy, 'DOLOR_AGUDO'), ['BAJA'])
+
+    # --- Regla 6: tolerancia a liquidos ---
+
+    def test_liquidos_hueco_de_un_dia_corta_el_conteo(self):
+        """Decision D8 sobre la Regla 6.
+
+        Antier no tolero, ayer sin ningun reporte, hoy no tolera: son dos dias
+        con dato pero no dos consecutivos, asi que la alerta es MEDIA ("vigilar
+        hidratacion") y no ALTA ("ir a urgencias").
+        """
+        paciente = self._paciente()
+        self._registro(paciente, dias_atras=2, tolero_liquidos=False)
+        hoy = self._registro(paciente, tolero_liquidos=False)
+        self.assertEqual(self._severidades(hoy, 'INTOLERANCIA_ORAL'), ['MEDIA'])
+
+    # --- Regla 7: hinchazon ---
+
+    def test_hinchazon_mucho_tres_dias_no_escala_a_alta(self):
+        """Frontera inferior de la Regla 7c (DIAS_HINCHAZON_MUCHO_ALTA = 4).
+
+        Tres dias seguidos en "mucho" no alertan por ninguna de las tres
+        clausulas: no hay empeoramiento contra ayer ni contra antier —el nivel
+        no sube, ya esta en el techo— y no se alcanzan los cuatro dias. Bajar
+        el umbral a tres pasaba sin que cayera nada.
+        """
+        paciente = self._paciente()
+        self._registro(paciente, dias_atras=2, hinchazon_abdominal='mucho')
+        self._registro(paciente, dias_atras=1, hinchazon_abdominal='mucho')
+        hoy = self._registro(paciente, hinchazon_abdominal='mucho')
+        self.assertEqual(self._severidades(hoy, 'ILEO_PARALITICO'), [])
