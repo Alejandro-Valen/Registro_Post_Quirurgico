@@ -5398,7 +5398,8 @@ historia.
 ## Loop de los bugs que tocan al paciente
 **Fecha:** 08/09/2026
 **Responsable:** León (Arquitecto) con Claude Code
-**Estado:** COMPLETADO ✅ — rama `bugs-del-paciente`
+**Estado:** COMPLETADO ✅ — **PR #29 abierto**, nueve comprobaciones en verde,
+pendiente de la compuerta humana al cerrar la sesión
 **Fichas:** D19, D20, D21, D22, D23
 
 ### Cómo empezó
@@ -5545,14 +5546,32 @@ que corre después: el cache no se limpia entre pruebas. Se resolvió con
 
 ### Qué queda pendiente
 
-**Este loop está cerrado.** Lo siguiente del plan:
+**Este loop está cerrado en código y documentación; falta el merge.** El PR #29
+quedó abierto con la CI en verde al terminar la sesión, porque el merge es
+decisión del Arquitecto y no del agente. **Es el primer punto de la próxima
+sesión**, antes de tocar nada más: `Desarrollo` no debe avanzar con 43 pruebas
+y tres migraciones esperando en una rama.
+
+Lo siguiente del plan, después del merge:
 
 1. **Los 34 hallazgos de criterio del linter.** Estaban diferidos «hasta que la
    red aguante»: aguanta. Y casi todos están en `tests/`, que es lo que los dos
    loops de hoy acaban de reescribir — conviene no dejarlos enfriar.
-2. **Los PR de Dependabot #23 y #26.** El de Django puede entrar. El de
-   `django-axes` sigue esperando: es el del hallazgo SEC-02 y no hay una prueba
-   que fije su comportamiento.
+2. **Los siete PR de Dependabot (#20 a #26), abiertos desde el 07/09.**
+   Recomendación **actualizada al 08/09**, porque la razón para esperar cambió:
+
+   - **#22, #24, #25** (twilio, requests, redis) y **#20, #21** (actions de la
+     CI): pueden entrar cuando se quiera.
+   - **#23** (`django` 6.0.8 → 6.1.1): ya puede entrar. Se dejaba esperando
+     porque «pasa una suite que no protege siete de las ocho familias de
+     reglas», y eso dejó de ser cierto hoy: 409 pruebas y dos arneses.
+   - **#26** (`django-axes` 7.0.1 → 8.3.1): **sigue esperando.** Es el del
+     hallazgo SEC-02 —bloquea por IP, y detrás del edge de Railway esa IP es
+     una sola— y **no hay ninguna prueba que fije ese comportamiento**. Su
+     verde vale poco. Antes de mergearlo hay que escribir esa prueba.
+
+   Y sigue pendiente **agrupar también las versiones menores en
+   `dependabot.yml`**, para que esto sea un PR mensual en vez de siete.
 3. **Los hallazgos de calidad de pruebas que no son de frontera** (TEST-06 a
    TEST-12) y el resto de UX del panel y del bot (UX-P02 a UX-P11, UX-B06 a
    UX-B11), ninguno bloqueante.

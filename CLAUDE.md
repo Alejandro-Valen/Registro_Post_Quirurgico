@@ -120,10 +120,11 @@ anotada para después.
 - **Rama de despliegue:** `produccion` — la miran los tres servicios de Railway.
   Nadie trabaja aquí; solo recibe merges desde `Desarrollo`. Ver
   `docs/railway_deploy.md` §4.1.
-- **Rama activa de trabajo:** `bugs-del-paciente` (08/09/2026), terminada y
-  pendiente de PR hacia `Desarrollo`. Antes: `umbrales-frontera` (PR #28,
+- **Rama activa de trabajo:** `bugs-del-paciente` — **PR #29 ABIERTO**, con las
+  nueve comprobaciones en verde, esperando la compuerta humana. **Es lo primero
+  que hay que resolver al retomar.** Antes: `umbrales-frontera` (PR #28,
   `21105a2`), `arnes-verificable` (PR #18) y `repositorio-profesional`
-  (PR #19).
+  (PR #19), los tres mergeados.
 - **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **nueve
   comprobaciones** en cada PR hacia `Desarrollo` y hacia `produccion`, y en cada
   push a esas dos ramas: la suite, `check`, `makemigrations --check`,
@@ -321,7 +322,14 @@ detiene el cuestionario y avisa al médico desde cualquier punto; y el turno de
 la tarde ya no se le niega. Para el médico: el tablero dejó de decir «todo bajo
 control» con una ALTA sin resolver, y ve a quien tiene el seguimiento detenido.
 
-**Próximo paso exacto (al retomar): los 34 hallazgos de criterio del linter.**
+**Antes que nada, al retomar: decidir sobre el PR #29** (`bugs-del-paciente`).
+Está abierto con la CI en verde y con el arnés de reversiones corrido sobre el
+estado commiteado. Nada más de la lista de abajo se empieza hasta que ese PR
+esté mergeado o explícitamente aparcado: trabajar sobre `Desarrollo` con 43
+pruebas y tres migraciones esperando en una rama es la forma clásica de crear
+un conflicto que nadie quiere resolver.
+
+**Próximo paso exacto (después del #29): los 34 hallazgos de criterio del linter.**
 Estaban diferidos a propósito «hasta que la red aguante», y **ya aguanta**: la
 suite pasó de 344 a 409 pruebas en un día, con dos arneses que comprueban que
 esas pruebas pueden ponerse en rojo. Pesa además que casi todos están en
