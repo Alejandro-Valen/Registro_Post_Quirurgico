@@ -23,8 +23,8 @@ bot sigue capturando 1 vez/día):
 
 | # | Variable | Tipo | Unidad |
 |---|----------|------|--------|
-| 1 | Temperatura corporal | Decimal | °C |
-| 2 | Dolor EVA | Entero | Escala 1-10 |
+| 1 | Temperatura corporal | Decimal **nullable** | °C — `null` si el paciente no pudo medirla (D20) |
+| 2 | Dolor EVA | Entero | Escala **0-10** — 0 = sin dolor (D20) |
 | 3 | ¿Tiene drenaje activo? | Booleano nullable | sí/no/no capturado |
 | 4 | Aspecto del drenaje | Choices | seroso/hemático/turbio/purulento/fecaloide/sin_drenaje |
 | 5 | Cantidad del drenaje | Choices | poco/normal/mucho/sin_drenaje (cualitativo) |
@@ -52,6 +52,7 @@ modelo — fase de decisiones de arquitectura clínica completa.**
 |-------|-----------------|-------------|-----------|--------------|
 | 1a | temperatura >= 37.9°C (cualquier registro del día) | SEPSIS | ALTA | Outersterp 2025 — umbral de notificación domiciliaria |
 | 1b | temperatura 37.5–37.8°C en 2 días con datos consecutivos | SEPSIS | MEDIA | Subfebrícula persistente — construcción propia |
+| 1c | temperatura **sin dato** (el paciente saltó la pregunta) | — | ninguna | D20 — un día sin medición es un desconocido, no una temperatura normal |
 | 2a | tiene_drenaje is True AND aspecto in ['purulento','fecaloide'] | FUGA_ANASTOMOTICA | ALTA | Fuga anastomótica confirmada |
 | 2b | tiene_drenaje is True AND aspecto in ['turbio','hematico'] | FUGA_ANASTOMOTICA | MEDIA | Drenaje sospechoso — seguimiento |
 | 2c | tiene_drenaje is True AND aspecto == 'seroso' | FUGA_ANASTOMOTICA | BAJA | Drenaje dentro de lo esperado |
@@ -78,6 +79,21 @@ modelo — fase de decisiones de arquitectura clínica completa.**
 valor de cada registro, sin lógica de días calendario ni persistencia
 (el valor por sí solo ya es clínicamente significativo). Solo se vigila
 FC alta, no bradicardia.
+
+**Nota Regla 1 (temperatura ausente) — decisión D20, 08/09/2026.** Desde el
+08/09/2026 `RegistroDiario.temperatura` admite `null`: el paciente que no
+tiene termómetro responde *saltar* y reporta las otras nueve variables en vez
+de perder el turno entero. **La Regla 1 no se evalúa cuando no hay dato**, con
+el mismo criterio que la Regla 8 aplica a una frecuencia cardíaca ausente y
+que la D8 aplica a un día sin reporte: no inventar un hecho clínico.
+
+Lo que se gana: antes, ese paciente no podía pasar de la pregunta 1, su turno
+vencía y el sistema generaba una alerta **SILENCIO** — le decía al médico
+«este paciente no responde» sobre alguien que estaba intentando responder.
+
+**Nota Regla 5 (dolor 0) — decisión D20.** `dolor_eva` acepta **0**, «sin
+dolor». No dispara ninguna regla: queda por debajo del piso de las tres
+ventanas (5 en POD 0-2, 4 en POD 3-5, 3 en POD 6+).
 
 **Frecuencia respiratoria (FR): SOLO DASHBOARD, sin regla.** Se captura y
 almacena pero el `alert_engine` NO la evalúa — decisión del Arquitecto:
@@ -119,6 +135,22 @@ escala un nivel de severidad sobre el valor de la tabla (nunca baja
 una severidad ya alcanzada). Base: Delaney 2008, Lee 2022, Outersterp
 2025, Coeckelberghs 2025.
 
+**Regla operativa: AUXILIO (el paciente pide ayuda) — decisión D21,
+08/09/2026.** No la produce `alert_engine.evaluar_registro` ni ninguna regla:
+la produce `bot.py` cuando el paciente escribe **AYUDA**, **auxilio**,
+**socorro** o **emergencia** en cualquier estado de la conversación. El bot
+detiene el cuestionario, le indica buscar atención inmediata y crea una alerta
+`AUXILIO` de severidad **ALTA** — siempre ALTA, no hay grados en pedir socorro.
+
+Tiene tipo propio, y no se mete en ningún tipo clínico, porque **no es una
+conclusión del sistema sobre telemetría**: es una petición de la persona.
+Clasificarla como SEPSIS o DOLOR_AGUDO sería diagnosticar, que es justo lo que
+este proyecto promete no hacer.
+
+`urgencia` y `urgencias` **no** están en la lista a propósito: aparecen en
+preguntas normales del paciente («¿debo ir a urgencias?») y dispararían una
+alerta ALTA por una duda. Una lista de auxilio que cría ruido acaba ignorada.
+
 **Regla operativa: SILENCIO (paciente sin responder).** No la produce
 `alert_engine.evaluar_registro` sino el command `cerrar_checkins_vencidos`,
 que cierra los check-in `PENDIENTE` pasadas 10 horas de su
@@ -129,6 +161,14 @@ que cierra los check-in `PENDIENTE` pasadas 10 horas de su
 | 1 turno | SILENCIO | BAJA |
 | 2-3 turnos | SILENCIO | MEDIA |
 | 4+ turnos | SILENCIO | ALTA |
+
+**El silencio del paciente sin consentimiento NO genera SILENCIO** (decisión
+D22, 08/09/2026). Si el médico revoca el consentimiento, `crear_checkins_diarios`
+deja de crear turnos y los que quedaran abiertos se cierran con estado
+`SIN_CONSENTIMIENTO`. La alerta SILENCIO afirma «el paciente no responde», y
+aquí no responde porque el propio sistema se lo impide: emitirla sería falsear
+su conducta. El paciente aparece en el panel como *seguimiento detenido* para
+que no se vuelva invisible.
 
 **Decisión D1 (22/07/2026):** la racha cuenta **check-ins, no días
 calendario** — la agrupación por día existe para de-duplicar mediciones y

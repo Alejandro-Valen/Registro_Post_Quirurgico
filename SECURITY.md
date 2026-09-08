@@ -56,9 +56,21 @@ Para que un reporte no repita lo conocido:
 
 Se dice aquí en vez de esperar a que alguien lo "descubra":
 
-- **El formulario público recoge datos de salud sin autorización de tratamiento**
-  (hallazgo SEC-03 de la auditoría del 07/09/2026, **severidad ALTA**, todavía
-  sin corregir). `home/views.py` guarda en `MensajeContacto` el nombre, el
+- ~~**El formulario público recoge datos de salud sin autorización de
+  tratamiento**~~ — **corregido el 08/09/2026** (ficha D23). El formulario tiene
+  ahora una casilla obligatoria, sin marcar por defecto y comprobada en el
+  servidor (un `required` de HTML se salta con un POST directo); se guarda la
+  fecha de la autorización, porque hay que poder demostrarla y no solo
+  recogerla; la finalidad se declara junto a la casilla y enlaza a
+  `/politica-datos/`; y el campo libre dejó de invitar a contar síntomas.
+
+  **Lo que sigue pendiente, y es de verdad:** la página de política de
+  tratamiento está marcada como BORRADOR. Le faltan el responsable del
+  tratamiento identificado, su dirección, el canal formal para ejercer los
+  derechos y el plazo máximo de retención — los mismos `[corchetes]` sin llenar
+  que arrastra la decisión P-12. **No se inventó ninguno.**
+
+  Descripción del hallazgo original, que sigue siendo la razón de todo esto: `home/views.py` guarda en `MensajeContacto` el nombre, el
   teléfono y un campo libre que dice *"Cuéntanos brevemente qué necesitas…"* —
   donde un paciente va a escribir su estado de salud— y los conserva
   indefinidamente. Los tres campos son obligatorios.

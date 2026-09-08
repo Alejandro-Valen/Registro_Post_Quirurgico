@@ -5392,3 +5392,174 @@ cualquier cambio es la suite local más la CI.
 **Las tres decisiones de grupo siguen fuera de la mesa técnica:** el canal del
 paciente, repositorio público o privado, y avisarle al médico de sus datos en la
 historia.
+
+---
+
+## Loop de los bugs que tocan al paciente
+**Fecha:** 08/09/2026
+**Responsable:** León (Arquitecto) con Claude Code
+**Estado:** COMPLETADO ✅ — rama `bugs-del-paciente`
+**Fichas:** D19, D20, D21, D22, D23
+
+### Cómo empezó
+
+Segundo loop del día, inmediatamente después de cerrar el de umbrales. El plan
+del 07/09 lo tenía como el siguiente: **los bugs que llegan al paciente**. Ahora
+sí había red debajo para tocarlos — que era justo la razón de haberlos dejado
+para después.
+
+Lo primero fue **reproducirlos**. La auditoría dejó 97 de sus 101 hallazgos
+trazados pero no ejecutados, y la regla del proyecto es que un hallazgo trazado
+es una hipótesis. Se escribió
+`proceso/verificaciones/2026-09-08_reproduccion_bugs_paciente.py`: ocho bloques
+que ejecutan el sistema real e imprimen lo que de verdad pasa.
+
+**Los ocho se reprodujeron.** Uno de ellos, no a la primera: el escenario que
+escribí para BE-01 estaba mal montado —el cron respeta a propósito una
+conversación viva y reciente, así que no cerraba el turno— y hubo que
+reconstruirlo envejeciendo la conversación. Que el primer intento no reprodujera
+el bug **no significaba que el bug no existiera**, y conviene recordarlo: con
+el escenario correcto salió limpio.
+
+### Lo que se encontró, ejecutando
+
+| # | Hallazgo | Lo que hacía el sistema |
+|---|---|---|
+| 1 | DB-02 | `379` → guardaba **37,0**, cero alertas, mensaje de cierre normal |
+| 2 | DB-01 | `"si, 99999"` → `DataError` → **webhook 500**, el paciente sin respuesta |
+| 3 | UX-B04 · BE-07 | `saltar` no funcionaba en temperatura; dolor `0` rechazado |
+| 4 | UX-B01 | *"estoy sangrando mucho, necesito ayuda"* → guardado como `hinchazon='mucho'` |
+| 5 | BE-01 | *"no tienes un reporte pendiente"* con el turno TARDE **pendiente** |
+| 6 | UX-P01 | KPI **1 ALTA** y debajo *"Todo bajo control"* |
+| 7 | Consentimiento | Revocado: 2 turnos creados, 2 NO_RESPONDIDO, **1 alerta SILENCIO** |
+| 8 | SEC-03 | POST guardaba *"fiebre de 39 y el drenaje salió con pus"*, sin casilla |
+
+El más grave no es el más aparatoso. **El del parser de temperatura es
+invisible por los dos lados**: el paciente recibe el cierre normal y el médico
+ve 37,0 °C, que es un valor perfectamente creíble en un postoperatorio. Nadie
+tiene forma de sospecharlo.
+
+Y el más injusto es el tercero. Un paciente sin termómetro **no podía reportar
+nada**: sin pasar la pregunta 1 no llegaba a las otras nueve, su turno vencía y
+el sistema generaba una alerta SILENCIO. Le decía al médico *"este paciente no
+responde"* sobre alguien que había intentado responder cuatro veces.
+
+### Decisiones tomadas y su justificación
+
+Cuatro se consultaron con el Arquitecto **todas juntas antes de escribir una
+línea**, con lo que implicaba cada una en el día a día y la alternativa
+descartada. Las cuatro se aprobaron tal como venían recomendadas.
+
+- **D19 — temperatura ambigua: rechazar, y devolver lo entendido.** No se
+  interpreta `379` como 37,9 a propósito: sería adivinar el valor que dispara la
+  alerta más grave del sistema, y un acierto y un error se verían idénticos en la
+  ficha. El eco cubre la otra mitad, el **dedazo válido**, que ningún filtro
+  puede detectar.
+- **D20 — el dato que el paciente no puede dar.** `saltar` funciona en
+  temperatura (la Regla 1 no evalúa sin dato, igual que la Regla 8 con la FC
+  ausente) y `0` pasa a ser un dolor válido. Costó una migración. Se descartó
+  dejar la temperatura obligatoria porque es justo el caso que pierde el turno
+  entero, y se descartó abrir el salto a todas las preguntas porque hoy no
+  existe ninguna alerta por «reporte incompleto».
+- **D21 — palabra de auxilio, con tipo de alerta propio.** No se reutiliza un
+  tipo clínico: una petición de socorro no es una conclusión del motor, y
+  meterla en SEPSIS sería hacer que la IA diagnostique. Se dijo claro que hoy,
+  sin producción, esa alerta solo llega al abrir el panel.
+- **D22 — revocar el consentimiento detiene la generación de datos, y se avisa
+  en el panel.** Cumplir habeas data no puede producir un punto ciego: un
+  paciente que desaparece del tablero sin dejar rastro es el mismo fallo que la
+  ficha D12 combatió.
+
+**D23 (SEC-03) no se preguntó** porque no tenía bifurcación real —el artículo 6
+de la Ley 1581/2012 exige casilla explícita— pero sí tiene un **bloqueo**: la
+política de tratamiento necesita responsable identificado, dirección, canal de
+derechos y plazo de retención, que son los mismos `[corchetes]` de P-12. Se
+implementó el mecanismo completo y la página quedó marcada como BORRADOR. **No
+se inventó ningún dato de responsable.**
+
+### Problemas encontrados y cómo se resolvieron
+
+**El eco chocaba con una decisión anterior, y la decisión anterior tenía razón.**
+Se puso el eco de la temperatura al final del mensaje de cierre, y
+`test_alerta_no_se_muestra_al_paciente` se puso en rojo. Esa prueba defiende una
+regla del Bloque B (02/07/2026): *el paciente ve la recomendación de severidad,
+nunca los valores que la dispararon*. Mostrar «38.5 °C» junto a «ve a urgencias»
+es exactamente eso.
+
+**No se tocó la prueba: se cambió el diseño.** El eco se movió al paso de la
+temperatura, justo cuando el paciente teclea el número y todavía no se ha
+evaluado nada. Sale mejor de lo que estaba —queda pegado a lo que acaba de
+escribir, que es donde más probable es que lo lea— y los mensajes de cierre no
+cambian ni una letra, así que **ninguna prueba existente tuvo que aflojar su
+aserción**.
+
+**La palabra de auxilio no atrapaba el caso que la originó.** Se implementó
+comparando el mensaje **completo** contra la lista, con lo cual *"estoy
+sangrando mucho, necesito ayuda"* seguía sin dispararla. Las pruebas escritas en
+ese momento pasaban. Lo destapó **volver a ejecutar la reproducción**, no leer el
+código. Ahora busca la palabra suelta dentro del mensaje. Quedó grabado como la
+reversión **R09** del arnés, para que no pueda repetirse.
+
+**`"no tengo termómetro"` seguía atascando.** Mismo patrón, misma forma de
+detectarlo: el salto exigía coincidencia exacta, y esa es la respuesta más
+natural de quien no tiene termómetro — el caso exacto que D20 venía a resolver.
+Ahora se acepta también la frase completada.
+
+**Un docstring que afirmaba algo falso.** Escribí que el prefijo impedía que
+`"no tengo dolor"` contara como salto. **Sí cuenta.** La razón real es otra —esa
+función solo se consulta en las tres preguntas que admiten saltarse, y la del
+dolor no es una— y está escrita así, en vez de dejar una explicación cómoda que
+no se sostiene.
+
+**Dos restricciones de base con listas escritas a mano.** Añadir el tipo
+`AUXILIO` y el estado `SIN_CONSENTIMIENTO` reventó contra `alerta_tipo_valido` y
+`checkin_estado_valido`, que enumeran los valores a mano. Es el precio de tener
+esas guardas, y el precio está bien pagado: son justo las que impiden que entre
+un valor inventado. Ambas se ampliaron en su migración.
+
+**11 pruebas del scheduler cayeron por una razón que valía la pena mirar.**
+`consentimiento_informado` es `default=False`, así que sus fixtures creaban
+pacientes sin consentimiento y, con D22, dejaron de recibir turnos. El
+comportamiento nuevo es el correcto; lo que había que arreglar eran los
+fixtures. Pero deja una consecuencia operativa que conviene tener presente: **un
+paciente que el médico cree sin marcar la casilla no recibe seguimiento**. Por
+eso el panel lo muestra como *seguimiento detenido*.
+
+**Contaminación entre pruebas por el cache.** Las pruebas nuevas del formulario
+público se comían el cupo del rate limit por IP y hacían caer a `ContactoTests`,
+que corre después: el cache no se limpia entre pruebas. Se resolvió con
+`cache.clear()` en `setUp` y en `addCleanup`.
+
+### Verificación
+
+- **Suite: 366 → 409 tests OK** (43 nuevas). `ruff check .` sin hallazgos.
+- **Arnés de reversiones: 17 de 17 atrapadas**
+  (`proceso/verificaciones/2026-09-08_verificacion_bugs_paciente.py`). Cada
+  arreglo se revierte por separado y se exige que su prueba caiga; la corrida
+  limpia final comprueba la otra dirección.
+- **La reproducción se corre en los dos estados** y ese es su valor: la segunda
+  corrida fue la que destapó los dos errores de implementación de arriba.
+- Migraciones **0029** (rangos, temperatura nullable, AUXILIO,
+  SIN_CONSENTIMIENTO), **0030** (tipo de alerta en la restricción) y
+  **home/0003** (autorización de habeas data).
+
+### Qué queda pendiente
+
+**Este loop está cerrado.** Lo siguiente del plan:
+
+1. **Los 34 hallazgos de criterio del linter.** Estaban diferidos «hasta que la
+   red aguante»: aguanta. Y casi todos están en `tests/`, que es lo que los dos
+   loops de hoy acaban de reescribir — conviene no dejarlos enfriar.
+2. **Los PR de Dependabot #23 y #26.** El de Django puede entrar. El de
+   `django-axes` sigue esperando: es el del hallazgo SEC-02 y no hay una prueba
+   que fije su comportamiento.
+3. **Los hallazgos de calidad de pruebas que no son de frontera** (TEST-06 a
+   TEST-12) y el resto de UX del panel y del bot (UX-P02 a UX-P11, UX-B06 a
+   UX-B11), ninguno bloqueante.
+
+**Lo que este loop dejó explícitamente sin cerrar, y depende de ti:** la política
+de tratamiento de datos está publicada como BORRADOR y necesita responsable,
+dirección, canal de derechos y plazo de retención. Es el mismo pendiente de P-12
+y del formato de consentimiento.
+
+**Sigue sin haber producción.** La verificación es la suite local más la CI.

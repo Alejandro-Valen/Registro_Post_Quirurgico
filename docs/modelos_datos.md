@@ -86,8 +86,8 @@ un paciente con `dia_postoperatorio >= 8`.
 ### RegistroDiario (Sprint 1, ampliado en Sprint 3)
 ```python
 paciente              ForeignKey(Paciente, PROTECT)
-temperatura           DecimalField(4,1)
-dolor_eva             PositiveSmallIntegerField  # 1-10
+temperatura           DecimalField(4,1) NULLABLE  # null = el paciente la saltó (D20)
+dolor_eva             PositiveSmallIntegerField  # 0-10, 0 = sin dolor (D20)
 tiene_drenaje         BooleanField null=True  # null=legado, False=sin drenaje, True=con drenaje
 aspecto_drenaje       CharField choices=[seroso,hematico,turbio,purulento,fecaloide,sin_drenaje]
 cantidad_drenaje      CharField choices=[poco,normal,mucho,sin_drenaje] null=True blank=True

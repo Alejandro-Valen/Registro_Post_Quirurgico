@@ -148,15 +148,15 @@ el `signos_sintomas/tests.py` que ya no existe. ✅ **Árbol limpio** (PR #18) �
 |---|---|---|
 | **SEC-01** | `check --deploy` sin `--fail-level`: la CI no podía fallar | ✅ Corregido, PR #18 |
 | **SEC-02** | `django-axes` bloquea por IP; detrás del edge de Railway esa IP es una sola → **5 intentos fallidos anónimos dejan al médico sin panel una hora** | ⬜ Abierto |
-| **SEC-03** | El formulario público guarda nombre, teléfono y texto libre de salud **sin autorización de tratamiento** (Ley 1581/2012, art. 6) | ⬜ Abierto · detallado en `SECURITY.md` |
-| **DB-01** | **Cero validadores de rango** en todo el proyecto. `episodios_nauseas` no tiene techo ni en el bot: `"si, 99999"` → `DataError` → webhook 500 → el paciente no recibe respuesta | ⬜ Abierto |
-| **DB-02** | El parser de temperatura trunca: `379` → 37,0, sin alerta | ⬜ Abierto |
-| **BE-01** | El bot le dice "no tienes reporte pendiente" al paciente que empezó por la mañana y vuelve por la tarde, y le pierde el turno | ⬜ Abierto |
+| **SEC-03** | El formulario público guarda nombre, teléfono y texto libre de salud **sin autorización de tratamiento** (Ley 1581/2012, art. 6) | ✅ Mecanismo corregido (08/09/2026, D23) · ⬜ la política sigue en BORRADOR: le faltan los datos de P-12 |
+| **DB-01** | **Cero validadores de rango** en todo el proyecto. `episodios_nauseas` no tiene techo ni en el bot: `"si, 99999"` → `DataError` → webhook 500 → el paciente no recibe respuesta | ✅ Corregido (08/09/2026): techo en el bot + validadores + **restricciones en la base** — reversión R07 |
+| **DB-02** | El parser de temperatura trunca: `379` → 37,0, sin alerta | ✅ Corregido (08/09/2026, D19): se rechaza lo ambiguo **y** el bot devuelve lo que anotó — reversiones R01-R03 |
+| **BE-01** | El bot le dice "no tienes reporte pendiente" al paciente que empezó por la mañana y vuelve por la tarde, y le pierde el turno | ✅ Corregido (08/09/2026) — reversión R11 |
 | **TEST-01** | `fecaloide` sin ninguna prueba (sabotaje ejecutado) | ✅ Corregido, loop de umbrales (08/09/2026) — sabotaje S01 |
 | **TEST-02** | El bot nunca prueba las opciones "4" (purulento) y "5" (fecaloide) del menú de drenaje — las dos que significan urgencia | ✅ Corregido, loop de umbrales (08/09/2026) — las cinco opciones, sabotajes S18-S21 |
 | **TEST-03** | Cuatro umbrales clínicos se pueden mover sin que caiga una prueba | ✅ Corregido, loop de umbrales (08/09/2026) — 21 sabotajes, los 21 atrapados |
-| **UX-P01** | El tablero imprime *"Sin alertas pendientes. Todo bajo control"* mientras su propio indicador muestra una alerta ALTA sin resolver (ocurre siempre que la ALTA es de tipo SILENCIO) | ⬜ Abierto |
-| **UX-B01** | **No hay palabra de auxilio.** *"estoy sangrando mucho"* en la pregunta 7 se guarda como distensión abdominal y el bot pasa a la siguiente pregunta | ⬜ Abierto |
+| **UX-P01** | El tablero imprime *"Sin alertas pendientes. Todo bajo control"* mientras su propio indicador muestra una alerta ALTA sin resolver (ocurre siempre que la ALTA es de tipo SILENCIO) | ✅ Corregido (08/09/2026) — reversión R14 |
+| **UX-B01** | **No hay palabra de auxilio.** *"estoy sangrando mucho"* en la pregunta 7 se guarda como distensión abdominal y el bot pasa a la siguiente pregunta | ✅ Corregido (08/09/2026, D21): tipo de alerta `AUXILIO` propio — reversiones R08-R10 |
 | **UX-B02** | El bot promete *"Te escribiré cuando sea la hora"*, pero el envío saliente es un stub: nadie le va a escribir nunca | ⬜ Abierto |
 | **REPO-01** | Cédula y nombre de un tercero en el repositorio, en la carpeta que gitleaks excluía | ✅ Árbol · ⬜ Historia |
 | **REPO-02** | El proyecto no se podía instalar: cero instrucciones en 44 documentos | ✅ Corregido, PR #19 |
@@ -212,7 +212,7 @@ escritas.** Las dos desviaciones son de sobre-alerta, no de falso negativo.
 | BE-04 | Una palabra clave de la FAQ impide que arranque el check-in: *"hoy tengo mucho dolor"* devuelve la respuesta enlatada y el cuestionario no empieza | ⬜ |
 | BE-05 | Los mensajes prometen un contacto que ningún código realiza (amplifica BE-01 y BE-04) | ⬜ |
 | BE-06 | La mitad clínica de D8 —que un día sin datos **corta** el conteo— no tiene ninguna prueba | ⬜ |
-| BE-07 | Sin salida para el paciente que no puede medir: temperatura, dolor, gases, hinchazón y líquidos no admiten "saltar". Sin termómetro, el turno se pierde | ⬜ |
+| BE-07 | Sin salida para el paciente que no puede medir: temperatura, dolor, gases, hinchazón y líquidos no admiten "saltar". Sin termómetro, el turno se pierde | ✅ Parcial (08/09/2026, D20): temperatura y dolor resueltos. Gases, hinchazón y líquidos **siguen obligatorios a propósito** — abrir el salto en todas dejaría llegar check-ins casi vacíos sin ninguna alerta que lo denuncie |
 | BE-08 | Regla 5b escala **dos niveles** cuando la tabla no da alerta; el promedio se calcula por registro, no por día | ⬜ |
 | BE-09 | Regla 6 cuenta como "no toleró" un día cuyo dato **no se capturó** | ⬜ |
 | BE-10 | `.date()` sobre datetime aware en los seeds (mismo que DB-08) | ⬜ |
@@ -244,8 +244,8 @@ escritas.** Las dos desviaciones son de sobre-alerta, no de falso negativo.
 | ID | Hallazgo | Estado |
 |---|---|---|
 | UX-B03 | La pregunta 6 mete dos cosas en un mensaje: *"si, no tuve nauseas: 0"* se registra como **sin gases**, que alimenta la regla de íleo | ⬜ |
-| UX-B04 | **Sin termómetro no se puede avanzar**, y "saltar" no funciona en esa pregunta. Un paciente sin dolor tampoco puede responder: el rango es 1-10 y "0" se rechaza | ⬜ |
-| UX-B05 | El parser de temperatura trunca y **el bot nunca devuelve lo que entendió** (mismo que DB-02) | ⬜ |
+| UX-B04 | **Sin termómetro no se puede avanzar**, y "saltar" no funciona en esa pregunta. Un paciente sin dolor tampoco puede responder: el rango es 1-10 y "0" se rechaza | ✅ Corregido (08/09/2026, D20) — reversiones R04-R06 |
+| UX-B05 | El parser de temperatura trunca y **el bot nunca devuelve lo que entendió** (mismo que DB-02) | ✅ Corregido (08/09/2026, D19): el eco va en el paso de la temperatura, no en el cierre — ver la nota de `bot_whatsapp.md` |
 | UX-B06 | El paciente sin drenaje ve saltar del 3 al 6 sin explicación, y el cuestionario de "10 preguntas" nunca llega a 10 | ⬜ |
 | UX-B07 | Conversación abandonada sin check-in hoy: el bot hace una pregunta y luego ignora la respuesta | ⬜ |
 | UX-B08 | La FAQ contesta y **no encadena** el inicio del reporte | ⬜ |

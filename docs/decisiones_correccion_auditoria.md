@@ -40,6 +40,11 @@ la entrada de `proceso/BITACORA.md` del 22/07/2026 (informe y hallazgos).
 | [D16](#d16) | Toda guardia automática debe poder ponerse en rojo | SEC-01 | Arnés | **Implementada** (07/09/2026) |
 | [D17](#d17) | Qué hacer con los datos personales que ya están en la historia | REPO-01 | Arnés | Aceptada — **historia pendiente** |
 | [D18](#d18) | Qué es producto y qué es cuaderno de trabajo | REPO-02/03 | Repositorio | **Implementada** (07/09/2026) |
+| [D19](#d19) | Qué hace el bot con una temperatura ambigua | DB-02 · UX-B05 | Bugs del paciente | **Decidida** (08/09/2026) |
+| [D20](#d20) | El dato que el paciente no puede dar | UX-B04 · BE-07 | Bugs del paciente | **Decidida** (08/09/2026) |
+| [D21](#d21) | Palabra de auxilio, y por qué no es un diagnóstico | UX-B01 | Bugs del paciente | **Decidida** (08/09/2026) |
+| [D22](#d22) | Revocar el consentimiento detiene la generación de datos | — | Bugs del paciente | **Decidida** (08/09/2026) |
+| [D23](#d23) | Autorización de habeas data en el formulario público | SEC-03 | Bugs del paciente | **Decidida** (08/09/2026), parte bloqueada |
 
 Los hallazgos 2, 6, 7, 8, 9, 11 y 14 son correcciones técnicas sin decisión de
 producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
@@ -1745,6 +1750,291 @@ sobrevive a cualquier mudanza futura. Es el mismo patrón de D16 —una guardia 
 falla sin avisar— apareciendo en las propias verificaciones.
 
 ---
+
+---
+
+## D19 — Qué hace el bot con una temperatura ambigua
+
+**Hallazgo:** auditoría de seis frentes del 07/09/2026, DB-02 y UX-B05 ·
+**Loop:** Bugs del paciente · **Estado:** **Decidida** (08/09/2026).
+
+### Problema
+
+Reproducido ejecutando código el 08/09/2026
+(`proceso/verificaciones/2026-09-08_reproduccion_bugs_paciente.py`, bloque 1):
+
+```
+paciente escribe "37.9"  ->  guarda 37.9  ->  SEPSIS / ALTA
+paciente escribe "379"   ->  guarda 37.0  ->  sin alerta
+paciente escribe "37 9"  ->  guarda 37.0  ->  sin alerta
+paciente escribe "375"   ->  guarda 37.0  ->  sin alerta
+```
+
+El regex `\d{2}(?:[.,]\d)?` toma los dos primeros dígitos y descarta el resto.
+Escribir sin separador es lo más natural desde un teclado de celular, así que
+esto no es un caso raro: es la forma en que mucha gente va a responder.
+
+Lo que lo hace grave no es el truncado sino que **es invisible por los dos
+lados**. El paciente recibe el mensaje de cierre normal — «¡Listo! Hemos
+registrado tu reporte de hoy» — y el médico ve 37,0 °C, que es un valor
+perfectamente creíble en un postoperatorio. Nadie tiene forma de sospecharlo.
+
+### Decisión
+
+**Dos cambios, y el segundo importa tanto como el primero.**
+
+1. **El bot no acepta lo ambiguo.** Solo se admite una temperatura escrita de
+   forma inequívoca. Cualquier otra cosa produce un reintento que **enseña el
+   formato con un ejemplo concreto**, no una regla abstracta.
+
+2. **El bot devuelve siempre lo que entendió.** El mensaje de cierre del
+   check-in incluye la temperatura anotada. Es lo que cierra UX-B05, y sirve
+   para algo que el rechazo no cubre: el dedazo *válido*. Quien quiso escribir
+   37 y escribió 38 pasa hoy todos los filtros; con el eco, lo ve.
+
+### Por qué esta decisión y no otra
+
+**Por qué rechazar y no interpretar.** Interpretar `379` como 37,9 parece
+evidente, y para ese caso lo es. Pero el sistema estaría **adivinando el valor
+que dispara su alerta más grave**, y un acierto y un error se ven idénticos en
+la ficha: quien quiso decir 39 y tecleó `390` quedaría registrado en 39,0 por
+casualidad, o en 3,90 si la heurística cambia. En un sistema cuya razón de ser
+es detectar fiebre, **un mensaje extra cuesta menos que un número equivocado**.
+
+**Por qué el eco, si el rechazo ya arregla el bug reportado.** Porque el bug
+reportado es solo la mitad visible. El rechazo protege contra lo que el bot no
+entiende; el eco protege contra lo que el bot entiende **mal pero
+plausiblemente**, que no tiene ninguna otra defensa en todo el sistema.
+
+---
+
+## D20 — El dato que el paciente no puede dar
+
+**Hallazgo:** auditoría de seis frentes del 07/09/2026, UX-B04 y BE-07 ·
+**Loop:** Bugs del paciente · **Estado:** **Decidida** (08/09/2026).
+
+### Problema
+
+Reproducido el 08/09/2026 (bloque 3 del script de reproducción). Un paciente sin
+termómetro queda atascado en la pregunta 1:
+
+```
+"saltar"               -> reintento
+"no tengo termometro"  -> reintento
+"no se"                -> reintento
+"no puedo"             -> reintento
+```
+
+`saltar` **sí** funciona en frecuencia cardíaca y respiratoria, pero no en
+temperatura. Y el paciente que hoy no tiene dolor tampoco puede responder: el
+rango es 1-10 y `0` se rechaza.
+
+El daño no es la incomodidad. Es que ese paciente **no puede reportar nada**:
+sin pasar la pregunta 1 no llega a las otras nueve. Su turno vence, el cron lo
+cierra y genera una alerta **SILENCIO** — es decir, el sistema le dice al médico
+«este paciente no responde» sobre alguien que estuvo intentando responder cuatro
+veces. Es la peor clase de señal falsa: la que apunta en la dirección contraria.
+
+### Decisión
+
+1. **`saltar` funciona en temperatura**, igual que ya funciona en pulso y
+   respiración. `RegistroDiario.temperatura` pasa a admitir nulo, y la **Regla 1
+   no se evalúa cuando no hay dato** — exactamente el mismo tratamiento que la
+   Regla 8 le da a una frecuencia cardíaca ausente.
+
+2. **`0` es un valor válido de dolor**: «sin dolor». No dispara ninguna regla,
+   porque queda por debajo del piso de las tres ventanas.
+
+3. **El resto de preguntas sigue siendo obligatorio.** No se generaliza el salto.
+
+### Por qué esta decisión y no otra
+
+**Por qué no dejar la temperatura obligatoria.** Era la opción barata —sin
+migración y sin tocar el motor—, pero deja intacto el único caso que pierde el
+turno **entero**, que es justo el que se reprodujo.
+
+**Por qué no permitir saltar cualquier pregunta.** Porque un check-in puede
+llegar casi vacío y **hoy no existe ninguna alerta por reporte incompleto**: el
+motor perdería señal sin que nadie se entere. Abrir el salto donde hace falta es
+distinto de abrirlo en todas partes.
+
+**Qué se acepta a cambio.** Un día sin temperatura es un desconocido genuino
+para la Regla 1, igual que un día sin reporte lo es para las reglas de días
+consecutivos (ficha D8). El criterio es el mismo y por la misma razón: **no
+inventar un hecho clínico**. La diferencia es que aquí el paciente sí reporta
+todo lo demás, así que el sistema conserva nueve de las diez señales en vez de
+ninguna.
+
+---
+
+## D21 — Palabra de auxilio, y por qué no es un diagnóstico
+
+**Hallazgo:** auditoría de seis frentes del 07/09/2026, UX-B01 ·
+**Loop:** Bugs del paciente · **Estado:** **Decidida** (08/09/2026).
+
+### Problema
+
+Reproducido el 08/09/2026 (bloque 4). A mitad del cuestionario:
+
+```
+El paciente escribe : "estoy sangrando mucho, necesito ayuda"
+El bot lo guarda como hinchazon = 'mucho'
+Y responde          : 8. ¿Cuál es su frecuencia cardíaca (pulso) en este momento?
+```
+
+No existe ninguna palabra que saque al paciente del cuestionario. En cualquier
+estado, **un grito de auxilio se parsea como el dato que tocaba en ese momento**
+y la conversación continúa como si nada.
+
+### Decisión
+
+**La palabra `AYUDA`, reconocida en cualquier estado**, incluido el medio del
+cuestionario. Cuando llega:
+
+1. El bot **detiene** el cuestionario y descarta el flujo en curso.
+2. Le responde al paciente con la indicación de buscar atención inmediata —
+   emergencias o su médico— sin pedirle ningún dato más.
+3. Crea una alerta de tipo nuevo, **`AUXILIO`, severidad ALTA**.
+4. La palabra **se le anuncia al paciente** en el mensaje de bienvenida. Una
+   palabra de auxilio que nadie sabe que existe no es una palabra de auxilio.
+
+### Por qué esta decisión y no otra
+
+**Por qué un tipo nuevo y no reutilizar uno clínico.** Los siete tipos actuales
+son conclusiones del motor de reglas sobre telemetría. Esto no lo es: es una
+**petición de socorro de la persona**, sin clasificación clínica detrás.
+Meterla en `SEPSIS` o en `DOLOR_AGUDO` sería exactamente lo que el proyecto
+promete no hacer —la IA no diagnostica— y además ensuciaría las estadísticas de
+esos tipos.
+
+**Por qué crear la alerta aunque hoy no llegue lejos.** Con Railway caído y el
+envío saliente en stub, la alerta solo se ve al abrir el panel o por el correo
+ALTA. Se dice claro para no vender lo que no hay. Aun así se crea, por dos
+razones: deja de guardarse como hinchazón —que es corrupción de datos clínicos—
+y queda registrada para cuando el despliegue exista. La alternativa, responder
+al paciente sin dejar rastro, hace que **el médico nunca se entere**.
+
+**Sobre los falsos positivos.** Se reconoce una palabra explícita y anunciada,
+no una lista de síntomas. `AYUDA` puede escribirse por error; una alerta de más
+cuesta una llamada. No reconocerla cuesta lo contrario.
+
+---
+
+## D22 — Revocar el consentimiento detiene la generación de datos
+
+**Hallazgo:** auditoría de seis frentes del 07/09/2026 · **Loop:** Bugs del
+paciente · **Estado:** **Decidida** (08/09/2026).
+
+### Problema
+
+Reproducido el 08/09/2026 (bloque 7). Con el consentimiento revocado:
+
+```
+el bot al paciente ->  "Tu médico aún no ha confirmado tu registro..."   (bien)
+check-ins creados por el cron   2
+turnos marcados NO RESPONDIDO   2
+alertas SILENCIO generadas      1
+```
+
+El guard del bot existe y funciona. Lo que no mira el consentimiento es
+**`crear_checkins_diarios`**, que filtra solo por `activo=True`. Resultado: el
+sistema sigue produciendo datos —turnos, estados, alertas— sobre una persona que
+retiró su permiso, y el médico recibe alarmas por el silencio de alguien a quien
+el propio sistema le prohibió hablar.
+
+### Decisión
+
+1. **`crear_checkins_diarios` deja de crear turnos** para pacientes sin
+   consentimiento.
+2. **Los turnos PENDIENTE que ya existan se cierran sin generar SILENCIO.** Un
+   estado propio los distingue de los que el paciente sí ignoró.
+3. **El panel del médico lo muestra**: el paciente aparece como *seguimiento
+   detenido por consentimiento*, no desaparece.
+
+### Por qué esta decisión y no otra
+
+**Por qué parar y avisar, en vez de solo parar.** Un paciente que se esfuma del
+panel sin dejar rastro es el mismo fallo que la ficha **D12** combatió: nadie lo
+mira, y nadie sabe que nadie lo mira. Cumplir habeas data no puede producir un
+punto ciego clínico; el médico tiene que poder distinguir «está bien» de «dejé
+de saber de él porque el sistema paró».
+
+**Por qué no desactivar al paciente.** Se propuso y se descarta: mezcla dos
+hechos distintos —«retiró el permiso» y «terminó el seguimiento»—, y desactivar
+es una decisión clínica y administrativa del médico, no un efecto automático.
+
+**Por qué no generar SILENCIO por los turnos que quedaron abiertos.** Porque la
+alerta SILENCIO significa «el paciente no responde», y aquí el paciente no
+responde **porque el sistema se lo impide**. Emitirla sería afirmar algo falso
+sobre su conducta.
+
+---
+
+## D23 — Autorización de habeas data en el formulario público
+
+**Hallazgo:** auditoría de seis frentes del 07/09/2026, SEC-03 (severidad ALTA) ·
+**Loop:** Bugs del paciente · **Estado:** **Decidida** (08/09/2026),
+**con una parte bloqueada** (ver más abajo).
+
+### Problema
+
+Reproducido el 08/09/2026 (bloque 8). Un POST anónimo al formulario público:
+
+```
+mensaje guardado -> "Tengo fiebre de 39 y el drenaje salio con pus desde ayer."
+campos de MensajeContacto: fecha_creacion, id, medico_destinatario,
+                           mensaje, nombre, revisado, telefono
+¿existe autorizacion_datos? -> False
+```
+
+Los tres campos son obligatorios, el de texto libre invita explícitamente a
+contar el estado de salud, y **no hay casilla de autorización, ni finalidad
+declarada, ni responsable identificado, ni política de tratamiento, ni
+retención**. El artículo 6 de la Ley 1581 de 2012 exige autorización
+**explícita** para datos sensibles, y los de salud lo son.
+
+Contrasta con el rigor del formato de consentimiento del proyecto
+(`docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md`), que cubre al paciente ya
+inscrito pero **no a quien escribe por la web**.
+
+### Decisión
+
+1. **Casilla obligatoria** de autorización, sin marcar por defecto. Sin ella el
+   formulario no se envía.
+2. **Se registra el hecho de haber autorizado**, con fecha: la autorización debe
+   poder demostrarse después, no solo recogerse.
+3. **Finalidad declarada junto a la casilla**, en lenguaje llano, y enlace a la
+   página de política de tratamiento.
+4. **El campo de texto deja de invitar a contar síntomas.** Se reformula para
+   pedir un motivo de contacto, y se advierte que no es un canal de atención
+   clínica ni de urgencias.
+
+### Lo que queda bloqueado, y por qué
+
+La **página de política de tratamiento** necesita datos que hoy no existen en el
+proyecto: responsable del tratamiento identificado, dirección, canal para
+ejercer los derechos de acceso, corrección y supresión, y plazo de retención.
+Son los mismos `[corchetes]` sin llenar que arrastra la decisión **P-12** y el
+formato de consentimiento.
+
+Se implementa el **mecanismo completo** y la página queda marcada como
+**BORRADOR**, con la misma bandera que ya usa la landing
+(`MOSTRAR_AVISO_BOCETO`). **No se inventa ningún dato de responsable.**
+
+### Por qué esta decisión y no otra
+
+**Por qué no basta la frase que ya estaba.** *«La información enviada quedará
+registrada para revisión del equipo médico»* describe un destino, no pide un
+permiso. La ley exige autorización **previa, expresa e informada**, y para datos
+sensibles además explícita.
+
+**Por qué además se cambia el campo de texto.** Recoger con permiso es legal;
+recoger menos es mejor. Un formulario público que pide «cuéntanos qué
+necesitas» a personas en postoperatorio va a recibir datos de salud aunque la
+casilla esté marcada, y ese canal no tiene ni el cifrado ni el control de acceso
+ni la retención del resto del sistema. **La minimización es la única parte de
+esto que no depende de un texto legal pendiente.**
+
 
 ## Método de trabajo acordado
 
