@@ -120,10 +120,10 @@ anotada para después.
 - **Rama de despliegue:** `produccion` — la miran los tres servicios de Railway.
   Nadie trabaja aquí; solo recibe merges desde `Desarrollo`. Ver
   `docs/railway_deploy.md` §4.1.
-- **Rama activa de trabajo:** `umbrales-frontera` (08/09/2026), con el loop de
-  umbrales terminado y pendiente de PR hacia `Desarrollo`. Las anteriores,
-  `arnes-verificable` (PR #18) y `repositorio-profesional` (PR #19), se
-  mergearon el 07/09/2026.
+- **Rama activa de trabajo:** ninguna. `umbrales-frontera` se mergeó el
+  08/09/2026 (PR #28, merge commit `21105a2`); antes, `arnes-verificable`
+  (PR #18) y `repositorio-profesional` (PR #19) el 07/09/2026. La siguiente se
+  abre desde `Desarrollo`.
 - **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **nueve
   comprobaciones** en cada PR hacia `Desarrollo` y hacia `produccion`, y en cada
   push a esas dos ramas: la suite, `check`, `makemigrations --check`,
@@ -238,7 +238,7 @@ evidencia disponible, no decisiones ya tomadas.
 | Auditoría de seis frentes | Seguridad, datos, backend clínico, frontend, calidad de pruebas y repositorio, en paralelo y ciegas entre sí | ✅ **Ejecutada** (07/09/2026). **101 hallazgos, 15 de severidad ALTA.** Cuatro reproducidos ejecutando código, incluido un sabotaje que dejó las 344 pruebas en verde con el motor clínico roto |
 | Loop del arnés · D16-D17 | Que las guardias automáticas puedan fallar, y retirar la identidad de terceros | ✅ **Completado y mergeado** (07/09/2026, PR #18, merge commit `5f51831`). CI de **siete a nueve** comprobaciones; `check --deploy` recupera la capacidad de fallar; identidad del médico fuera del árbol. **344 tests OK** |
 | Loop del repositorio · D18 | Separar producto de cuaderno de trabajo, y que el repositorio se pueda instalar | ✅ **Completado y mergeado** (07/09/2026, PR #19, merge commit `591cd7c`). `README`, `LICENSE`, `CONTRIBUTING`, `SECURITY`, `pyproject.toml` en vez de tres `requirements`, plantillas de `.github/`, `CODEOWNERS`, `.mailmap`, y el proceso movido a `proceso/`. **344 tests OK** |
-| Loop de umbrales | Anclar los umbrales clínicos con pruebas de frontera | ✅ **Completado** (08/09/2026, rama `umbrales-frontera`). **22 pruebas nuevas** —el valor que dispara y el inmediatamente inferior— y un arnés re-ejecutable de **21 sabotajes, los 21 atrapados**. Cierra TEST-01 a TEST-05. **366 tests OK** |
+| Loop de umbrales | Anclar los umbrales clínicos con pruebas de frontera | ✅ **Completado y mergeado** (08/09/2026, PR #28, merge commit `21105a2`). **22 pruebas nuevas** —el valor que dispara y el inmediatamente inferior— y un arnés re-ejecutable de **21 sabotajes, los 21 atrapados**. Cierra TEST-01 a TEST-05. **366 tests OK** |
 
 **Qué pasó (22/07/2026).** Una auditoría independiente sobre `fbf62a8` confirmó
 las cuatro cifras que se reportaban (280 tests, `check --deploy`, `pip-audit`,

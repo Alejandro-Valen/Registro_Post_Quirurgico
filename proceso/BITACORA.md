@@ -5181,7 +5181,7 @@ profesional de desarrollo:
 ## Loop de umbrales — anclar las reglas clínicas con pruebas de frontera
 **Fecha:** 08/09/2026
 **Responsable:** León (Arquitecto) con Claude Code
-**Estado:** COMPLETADO ✅ — rama `umbrales-frontera`
+**Estado:** COMPLETADO Y MERGEADO ✅ — PR #28, merge commit `21105a2`
 **Guion de la sesión:** `proceso/instrucciones/2026-09-07_instruccion_umbrales.md`
 
 ### Cómo empezó
@@ -5330,6 +5330,41 @@ murió a medias.** No dejó archivo corrupto porque escribía en el borrador, pe
 costó una vuelta. Lo que siguió se hizo con inserciones controladas desde Python,
 verificando el punto de inserción y los saltos de línea antes de escribir — los
 archivos son CRLF y `git diff --check` los mira.
+
+### La revisión del PR, y los dos lunares que encontró
+
+Antes de mergear se revisó el PR con los comandos por delante, sabiendo que lo
+revisaba quien lo había escrito. Se comprobó lo importante —**cero líneas de
+código de producción**, cero migraciones, sin rutas absolutas de la máquina— y
+se **volvió a correr el arnés entero sobre el estado ya commiteado**, no sobre
+el borrador: 21 de 21 atrapados, corrida limpia en verde, árbol restaurado.
+
+La revisión encontró dos cosas, las dos de honestidad y no de técnica:
+
+**1. La lista de los 18 sabotajes de la auditoría no existe.** El guion decía
+que estaba en el informe y el informe decía que estaba en el guion — una
+referencia circular. Solo sobrevivieron por escrito los cinco de más peso. Eso
+significa que la cifra **«14 de 18 pasarían»**, que es la premisa con la que se
+justificó este loop, **no se puede verificar desde el repositorio**, y estaba
+escrita como hecho en cinco sitios.
+
+Se corrigió en los cinco, marcándola como predicción y no como medición. **No
+invalida el loop:** lo que sí se ejecutó de verdad es el sabotaje del drenaje
+fecaloide, y ese dejó las 344 pruebas en verde. Y lo que sustituye a aquella
+lista son los 21 sabotajes del arnés, que sí quedan escritos y se vuelven a
+correr. Pero es exactamente el error que este proyecto persigue —dar por bueno
+lo no comprobado— y se arrastró una sesión entera sin que nadie lo mirara.
+
+**2. La matriz de ventanas de dolor tiene 30 casos y 26 únicos.** Las cuatro
+parejas de "fronteras entre ventanas" repiten casos de los bloques de arriba. Es
+deliberado —puestas en pareja se lee de un golpe que un día de diferencia cambia
+la severidad— pero no estaba declarado, y pesa más de lo normal porque
+`CONTRIBUTING.md` señala esa clase como **el modelo a copiar**. Declarado en el
+docstring.
+
+Las dos correcciones entraron en un tercer commit (`56f8b12`) que **no toca ni
+una aserción**: solo docstrings y prosa. La CI volvió a pasar los nueve pasos y
+se mergeó (`21105a2`).
 
 ### Qué queda pendiente
 

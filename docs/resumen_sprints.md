@@ -234,7 +234,7 @@ entre el Sprint 5 y hoy.
   `requirements*.txt`; y el cuaderno de trabajo se mudó a `proceso/`, dejando
   `docs/` solo con producto. Ficha **D18**.
 
-- **Loop de umbrales (08/09/2026, rama `umbrales-frontera`).** La auditoría de
+- **Loop de umbrales (08/09/2026, PR #28, `21105a2`).** La auditoría de
   pruebas había medido el patrón que dejó pasar el sabotaje del drenaje
   fecaloide: **la ausencia sistemática de la frontera inferior**. De las 30
   severidades del sistema solo 15 tenían el valor justo por debajo del umbral,
