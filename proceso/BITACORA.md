@@ -5037,12 +5037,119 @@ verde.**
 **Lo que NO se pudo verificar:** nada contra producción — Railway sigue caído
 desde el 07/08/2026. Y `pip-audit` no se puede correr en esta máquina.
 
+
+### Lo que siguió después del primer cierre
+
+La sesión se dio por cerrada y continuó. Queda anotado aparte porque el cierre
+formal ya estaba hecho: esto es trabajo posterior, no parte de los dos loops.
+
+**Las capturas del panel (PR #27, `ceaba8c`).** Era lo único que le faltaba al
+loop del repositorio. Tres imágenes en `docs/img/` con su propio README de cómo
+regenerarlas.
+
+Un detalle operativo que vale la pena: **con un solo paciente el tablero parece
+vacío** y la captura no explica nada. Hicieron falta tres —uno complicado, uno
+intermedio y uno tranquilo— y para eso se corrió también `seed_demo_produccion
+--confirmar --medico demo_medico`, que añade dos pacientes de ejemplo con
+evoluciones distintas. Sin eso, la mejor pantalla del proyecto se veía como una
+lista de una línea.
+
+**Reparto de roles: `CLAUDE.md` decía algo falso (`3a263ce`).** Afirmaba que
+León *"NO es el programador principal"* y que Alejandro *"implementa modelos y
+vistas"*. **Es al revés:** León es el programador y desarrollador principal, y a
+Alejandro se le consulta para funcionamiento, arquitectura, infraestructura y la
+gestión con el médico.
+
+No es un detalle de créditos. `CLAUDE.md` es lo primero que lee un agente antes
+de decidir cómo trabajar, y esa frase lo llevaba a tratar a quien escribe el
+código como si no lo escribiera. **La historia de git lo contradecía desde hacía
+meses —316 commits contra 14— y en esta misma sesión ese dato apareció al montar
+el `.mailmap` y se reportó como un detalle de identidades duplicadas, sin sacar
+la conclusión.** La misma corrección se aplicó al `CLAUDE.md` global, fuera del
+repositorio, que arrastraba la premisa.
+
+El README mantiene a los dos con el mismo rol, y **es deliberado**: de cara
+afuera no se reparten méritos. `CLAUDE.md` y el ROADMAP explican por qué dicen
+otra cosa, para que nadie lo lea como contradicción.
+
+**Tres huecos de documentación que solo aparecieron al buscarlos con comandos
+(`5d29945`).** Al revisar si todo lo decidido estaba escrito —no de memoria—
+salieron tres cosas. Una de ellas no es menor:
+
+**SEC-03 no estaba en ningún documento**, siendo severidad ALTA. El formulario
+público de la landing guarda nombre, teléfono y un campo libre que dice
+*"Cuéntanos brevemente qué necesitas…"* —donde un paciente va a escribir su
+estado de salud— y los conserva indefinidamente, sin casilla de autorización,
+sin finalidad declarada y sin política de tratamiento. Para datos sensibles el
+artículo 6 de la Ley 1581 de 2012 exige autorización explícita. El formato de
+consentimiento cubre al paciente ya inscrito, **no a quien escribe por la web**.
+Quedó en `SECURITY.md` y en la lista de pendientes de `CLAUDE.md`.
+
+Los otros dos: los siete PR que abrió Dependabot solo, y cómo regenerar las
+capturas —que vivía únicamente en el cuerpo de un PR, un sitio que nadie vuelve
+a mirar.
+
+**El informe completo de la auditoría, al repositorio (`3a58b9a`).** Los 101
+hallazgos vivían fuera. Los 15 ALTA estaban nombrados en la documentación, pero
+los otros 86 se habrían perdido con el informe. El precedente ya existía —
+`proceso/auditorias/` guarda los tres informes anteriores—, así que no ponerlo
+ahí era la incoherencia.
+
+Lo importante del documento no es la lista, son tres cosas alrededor: la
+advertencia de que **97 de los 101 están trazados pero NO reproducidos**
+(trazar no es reproducir); el estado de cada hallazgo verificado contra el código
+ese mismo día; y la instrucción de actualizar cada fila en el commit que la
+corrige, para que no se convierta en un documento que miente.
+
+**Al verificar los estados aparecieron tres hallazgos que se daban por
+corregidos y no lo estaban:** `REPO-05` sigue documentando `SET_NULL` donde el
+código usa `PROTECT`, `SEC-05` sigue reescribiendo la contraseña del
+superusuario en cada arranque —el mismo defecto que D15 corrigió para el médico
+y que aquí quedó vivo— y `SEC-10` sigue volcando el mensaje de la excepción.
+Ante la duda se marcaron **abiertos**.
+
+### Problemas de esta parte, y cómo se resolvieron
+
+**Dependabot abrió siete PR en cuanto se activó.** El `dependabot.yml` entró con
+el PR #19 y al primer ciclo abrió los PR #20 a #26. Está haciendo su trabajo,
+pero siete de golpe son ruido, y **dos no son rutinarios**: `django 6.0.8 →
+6.1.1` (menor) y `django-axes 7.0.1 → 8.3.1` (**mayor**, y es el que bloquea los
+intentos de acceso al panel).
+
+Los dos pasan las nueve comprobaciones, **y ese verde vale menos de lo que
+parece**: `django-axes` es el del hallazgo SEC-02 y no hay ninguna prueba que
+fije su comportamiento, y el salto de Django pasa una suite que este proyecto
+acaba de demostrar que no protege siete de las ocho familias de reglas clínicas.
+Se dejaron para después del loop de umbrales. **Y quedó escrito que el
+`dependabot.yml` se calibró mal:** agrupa solo los parches, por eso siete PR en
+vez de uno.
+
+**Un choque de commits sobre las mismas dos líneas.** Al subir la corrección de
+roles, el push fue rechazado: el Arquitecto había hecho el cambio del README por
+su cuenta desde GitHub (`46cc4f2`) mientras aquí se trabajaba en local. Se
+resolvió con `git pull --rebase`, que reconoció que la parte del README ya
+estaba hecha —el texto era idéntico— y la descartó sola. **Su commit quedó dueño
+del README y el de aquí solo de los documentos internos.** Sin forzar nada y sin
+pisar el trabajo de nadie.
+
+**Un error de método propio.** En el loop del repositorio se hizo `git add -A` y
+los 50 archivos entraron en un solo commit, contra la convención de separar
+código y documentación. Se deshizo con `git reset --soft` y se rehizo en tres.
+
+**Y una limitación que conviene saber para la próxima:** el agente puede
+conducir el navegador y encuadrar cada vista, pero **no puede guardar la imagen
+en disco** — la captura le llega a la conversación, no a un archivo. Tampoco
+introduce contraseñas, ni de demostración. Así que las capturas son trabajo
+compartido: el agente navega y dice qué encuadrar, la persona inicia sesión y
+dispara. Funcionó bien, pero hay que preverlo.
+
 ### Qué queda pendiente
 
-**Las capturas de pantalla del panel.** El `README.md` tiene el hueco reservado
-con las instrucciones para generarlas. No entraron porque requieren una sesión
-iniciada en el Admin. Es lo que la auditoría llamó "la ausencia más cara" para un
-proyecto que se va a enseñar a un médico y a un desarrollador externo.
+**Los siete PR de Dependabot** (#20 a #26). Los tres menores —twilio, requests,
+redis— pueden entrar cuando se quiera. **Los dos de `django` y `django-axes` se
+dejan para después del loop de umbrales**, cuando la suite proteja de verdad lo
+que hay que proteger. Y el `dependabot.yml` necesita agrupar también las
+versiones menores, para que esto sea un PR mensual en vez de siete.
 
 **Los tres loops que faltan del plan**, en este orden:
 

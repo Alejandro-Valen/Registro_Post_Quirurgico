@@ -1705,6 +1705,13 @@ automáticamente cuando un PR toca `alert_engine.py`, `bot.py`, `models.py`, las
 reglas clínicas o la evidencia. Sin protección de rama **solicita** la revisión,
 no la exige — es un recordatorio automático, como los checks.
 
+**6 · Las capturas del panel** entraron el mismo día en el PR #27 (`ceaba8c`),
+con datos ficticios y su propio `docs/img/README.md` de cómo regenerarlas. Una
+lección operativa que quedó de hacerlas: **con un solo paciente el tablero parece
+vacío** y la imagen no explica nada. Hacen falta tres —uno complicado, uno
+intermedio y uno tranquilo— y por eso el README de `docs/img/` manda correr
+también `seed_demo_produccion`.
+
 ### Lo que este loop dejó a la vista y no resolvió
 
 Mover documentación **rompió dos scripts de verificación** que calculaban la raíz
