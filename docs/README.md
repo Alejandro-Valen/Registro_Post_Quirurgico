@@ -58,6 +58,13 @@ para después.
   sus 14 hallazgos y su informe están en la entrada de `proceso/BITACORA.md` de esa
   fecha y su corrección en `docs/decisiones_correccion_auditoria.md`. No debe
   volver a ejecutarse.
+- `proceso/auditorias/2026-09-07_auditoria_seis_frentes.md` es el informe
+  completo de la tercera auditoría: **los 101 hallazgos itemizados, con el estado
+  de cada uno**. A diferencia de los dos anteriores, este se mantiene vivo —
+  cuando se corrige un hallazgo, su fila se actualiza en el mismo commit. Trae
+  además la advertencia que hay que leer antes de usarlo: **97 de los 101 están
+  trazados contra el código pero NO reproducidos ejecutando**, así que cada uno
+  es una hipótesis hasta que se compruebe.
 - `proceso/auditorias/2026-06_informe_sprint3_cierre.md` conserva el diagnóstico previo al hardening. Sus
   hallazgos no deben reportarse como actuales sin volver a reproducirlos.
 - `docs/auditoria_literatura/` conserva los análisis clínicos de junio de 2026.

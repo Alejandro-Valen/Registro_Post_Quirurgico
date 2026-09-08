@@ -376,7 +376,11 @@ decisión de **protección de rama**.
 Las dos auditorías de julio **ya se ejecutaron — no repetirlas.** A ellas se
 sumó la **auditoría de seis frentes del 07/09/2026** (seguridad, datos,
 backend clínico, frontend, calidad de pruebas y repositorio), de la que salieron
-las fichas **D16** y **D17** y el loop del arnés. Las decisiones D1-D17
+las fichas **D16**, **D17** y **D18**. **Sus 101 hallazgos están itemizados con
+su estado actual en
+`proceso/auditorias/2026-09-07_auditoria_seis_frentes.md`** — es el documento
+que hay que abrir antes de tocar cualquiera de ellos, porque dice cuáles siguen
+abiertos y cuáles solo están *trazados* y no reproducidos. Las decisiones D1-D18
 están tomadas; no se reabren salvo que el Arquitecto lo pida.
 
 **Deuda técnica y su orden de atención (29/07/2026).** La revisión de cierre del
