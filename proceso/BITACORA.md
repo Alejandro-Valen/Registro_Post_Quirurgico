@@ -4801,3 +4801,270 @@ Lo anotado como posible, sin orden impuesto:
   el `.bat` se retira.
 - La versión de PostgreSQL de Railway sigue sin documentar, en pausa mientras no
   haya producción.
+
+---
+
+## Auditoría de seis frentes, y los dos loops que salieron de ella
+**Fecha:** 07/09/2026
+**Responsable:** León (Arquitecto) con Claude Code
+**Estado:** AUDITADO, DOS LOOPS IMPLEMENTADOS Y MERGEADOS ✅ — PR #18 (`5f51831`) y PR #19 (`591cd7c`)
+
+### Cómo empezó
+
+Retomé el proyecto después de **26 días** parado, con la idea de auditarlo entero
+antes de seguir: pronto nos reunimos con el médico y posiblemente con un
+profesional de desarrollo, y quería que lo que vean esté en el mejor estado
+posible.
+
+Lo primero fue verificar el estado real con comandos. Todo coincidía con los
+documentos salvo dos cosas: el contexto tenía casi un mes, y **el entorno virtual
+seguía sin existir** — el proyecto llevaba meses corriendo con el Python global.
+
+### La auditoría: seis agentes en paralelo, ciegos entre sí
+
+Se lanzaron seis auditorías simultáneas —seguridad, datos y modelos, backend
+clínico, frontend y panel, calidad de las pruebas, y repositorio—, cada una sin
+ver a las demás y ninguna con permiso para editar nada. **101 hallazgos, 15 de
+severidad ALTA.** Cinco de los seis emitieron veredicto BLOQUEADO por su cuenta.
+
+**Lo importante no fue el número: fue que los hallazgos no estaban repartidos al
+azar.** Casi todos sobrevivieron por la misma razón, y es una que ya habíamos
+rozado el 12/08 sin ver su alcance:
+
+> **Las guardias automáticas de este proyecto estaban escritas de forma que no
+> podían fallar.**
+
+Seis casos del mismo defecto: `check --deploy` sin `--fail-level` salía 0 aunque
+reportara problemas; `gitleaks` excluía justo la carpeta con datos personales;
+las 344 pruebas no mencionan el drenaje fecaloide; 19 de 25 restricciones de base
+nunca se habían visto fallar; `pip-audit` se citaba en seis documentos sin estar
+en ninguna parte; y no hay un solo validador de rango en todo el proyecto.
+
+### Los cuatro hallazgos que reproduje ejecutando código
+
+Los agentes no podían ejecutar nada, así que los cuatro de más peso se
+comprobaron corriendo código, no leyéndolo:
+
+1. **`check --deploy` salía con código 0** ante cinco fallos de seguridad,
+   incluido `DEBUG=True` en despliegue. Con `--fail-level WARNING`, sale 1.
+2. **El parser de temperatura trunca en silencio.** Un paciente con 37,9 °C que
+   teclea `379` —sin separador, lo más natural desde un celular— queda registrado
+   en **37,0** y no dispara ninguna alerta. El bot le responde el cierre normal.
+   Ni él ni el médico pueden notarlo: 37,0 es un valor válido.
+3. **Había un número de cédula de un tercero en el repositorio**, en la única
+   carpeta que `gitleaks` tenía excluida.
+4. **El sabotaje que lo demuestra todo:** quité `fecaloide` de `DRENAJES_ALTA`
+   —contenido intestinal en el drenaje, una fuga anastomótica franca— y corrí la
+   suite completa. **344 tests OK.** El motor clínico roto y ni una prueba cayó.
+   El código quedó restaurado y el árbol comprobado limpio.
+
+### El hallazgo que no buscaba nadie: la Resolución 1644 de 2026
+
+Fuera del alcance de los seis agentes, apareció un cambio normativo que el
+proyecto no había registrado. **El 31 de julio de 2026 el Ministerio de Salud
+expidió la Resolución 1644**, que deroga la 2654 de 2019 — diecinueve días antes
+de nuestra última sesión.
+
+Dos cosas apuntan al corazón del diseño:
+
+- **El sistema es, por definición legal, telemonitoreo.** El numeral 3.35 lo
+  define como la categoría de telemedicina para el seguimiento clínico remoto
+  orientado a la generación de alertas tempranas y al apoyo a la toma de
+  decisiones. Es la descripción del proyecto casi palabra por palabra. Y el
+  telemonitoreo **exige habilitación en el REPS**.
+- **WhatsApp queda excluido** como canal para el intercambio de datos clínicos.
+  El ROADMAP tenía "pasar a la API de WhatsApp Business" como requisito del
+  piloto: ese camino está cerrado.
+
+**Honestidad sobre esta cita:** el numeral que excluye la mensajería lo verifiqué
+palabra por palabra en el PDF de consulta pública. Que la versión **final**
+conserva la restricción se apoya en dos fuentes secundarias, no en el texto
+oficial de MinSalud, que no se pudo descargar. Es alta probabilidad, no hecho
+comprobado. **Conviene que un abogado lo confirme antes de decidir la
+arquitectura del canal.**
+
+La contrapartida es buena, y también se verificó: **la habilitación en el REPS no
+tiene costo**, y el artículo 31 permite a un profesional independiente habilitar
+telemedicina **desde su domicilio**. El médico puede ser el prestador habilitado
+sin necesitar una clínica detrás.
+
+### Loop 1 — Reparar el arnés (fichas D16 y D17, PR #18)
+
+Se decidió atacar primero las guardias, antes que los bugs: arreglar código
+verificándolo contra un semáforo que no puede ponerse rojo es repetir el error
+que produjo los 101 hallazgos.
+
+**La CI pasó de siete a nueve comprobaciones.** `check --deploy` recuperó
+`--fail-level WARNING`; entraron `ruff` y `pip-audit`, los dos **bloqueando**.
+Django subió a 6.0.8. Se creó `.venv` y el `.bat` dejó de apuntar a una carpeta
+fantasma.
+
+**132 correcciones del linter**, todas mecánicas. Tres excepciones llevan su
+razón escrita en la misma línea en vez de silenciarse desde la configuración: los
+seis `except Exception` a ciegas (que son *fail-open*/*fail-closed* deliberados y
+ya documentados), la condición de hinchazón que conserva sus dos `if` anidados
+—"no sé" no es "no empeoró"—, y el import-estrella de `settings_production.py`,
+que volvió a su sitio con `# isort: skip`.
+
+**Ningún umbral, comparador ni severidad clínica cambió.**
+
+La identidad del médico salió del árbol: 45 sustituciones en seis documentos.
+
+### Loop 4 — El repositorio (ficha D18, PR #19)
+
+El número que lo resume: **de cada 100 KB de documentación, solo 12 describían el
+producto.**
+
+Entraron `README.md`, `LICENSE` (todos los derechos reservados, explícita, con
+aviso clínico), `CONTRIBUTING.md`, `SECURITY.md`, las plantillas de `.github/`
+con `CODEOWNERS`, y `.mailmap`. `pyproject.toml` reemplazó a los tres
+`requirements*.txt`. El proceso —bitácora, auditorías, guiones, verificaciones—
+se mudó a `proceso/`, y `docs/` quedó solo con producto.
+
+### Decisiones tomadas y su justificación
+
+**Por qué el arnés antes que los bugs.** Es la decisión que ordenó las dos
+sesiones. Un arreglo verificado contra una guardia que siempre sale verde no está
+verificado: está *creído*. Y con Railway caído, la CI es la única red automática
+que queda.
+
+**Por qué el conjunto amplio de reglas del linter y no el estricto.** Decisión
+mía: aprovechar que se iba a tocar el tema. El estricto daba 4 hallazgos reales y
+habría dejado fuera el orden de imports, las f-strings y las capturas a ciegas.
+
+**Por qué los 34 hallazgos de criterio se difirieron.** Casi todos están en
+`tests/`, y el loop de umbrales va a reescribir esos mismos archivos.
+Refactorizarlos hoy y reescribirlos en dos sesiones es trabajo tirado. Pesó más
+otro motivo: la auditoría acababa de demostrar que la suite no protege siete de
+las ocho familias de reglas clínicas, y un refactor masivo bajo una red
+agujereada es la forma clásica de meter una regresión silenciosa.
+
+**Por qué las excepciones del linter llevan su razón al lado y no en la
+configuración.** Silenciarlas desde `ruff.toml` las volvería invisibles. Con el
+`noqa` comentado, quien lea el código ve que la captura a ciegas es deliberada.
+
+**Por qué la licencia es "todos los derechos reservados".** El médico puede ser
+adquiriente y el núcleo del trabajo conserva valor comercial. Una licencia
+permisiva lo regalaría antes de esa conversación. Ampliarla después siempre es
+posible; al revés, no.
+
+**Por qué NO se renombra la carpeta anidada.** Tres directorios llamados igual
+confunden, pero renombrarlos rompe `DJANGO_SETTINGS_MODULE`, el `--chdir` del
+Dockerfile, el `working-directory` de la CI y 28 migraciones. Se resuelve con
+tres líneas en el README.
+
+### Problemas encontrados y cómo se resolvieron
+
+**`grep` con acentos me hizo afirmar dos cosas falsas.** Dije que la historia de
+git estaba limpia de la cédula, y antes que no había ninguna en el repositorio.
+Las dos eran falsas: el `grep` de Git Bash no casa la `é` de "cédula" por la
+codificación. Se detectó al repetir la búsqueda en Python, que sí la encontró en
+`74f3e04` (línea 17) y `fbf62a8` (línea 21). **En este proyecto ya no se usa
+`grep` para nada que lleve tilde.**
+
+**La exclusión de gitleaks no era un descuido.** El comentario del
+`.gitleaks.toml` decía que la carpeta se revisaría "a mano en el Loop G" de
+higiene de identidad. Ese loop nunca se ejecutó, y mientras tanto esa fue la
+única carpeta del repositorio sin vigilancia. La lección quedó escrita en D17:
+**una excepción que espera a un trabajo futuro deja de ser una excepción y pasa a
+ser un agujero.**
+
+**La cédula también estaba en el `tests.py` viejo, con el nombre completo.** La
+auditoría solo había mirado `docs/`. Lo encontró la propia regla nueva de
+gitleaks al correrla por primera vez: 15 fugas, no una.
+
+**`ruff --fix` dejó espacios al final de línea** al convertir `.format()` en
+f-strings, y eso habría hecho fallar el paso de higiene del diff de la CI. Se
+detectó corriendo `git diff --check` antes de commitear. Queda registrado en
+trampas conocidas: **después de cualquier `ruff --fix`, comprobar `git diff
+--check`.**
+
+**`ruff` movió el import-estrella de `settings_production.py`** detrás de los
+demás imports. Funcionalmente no rompía nada, pero ese archivo gobierna la
+seguridad de producción y su orden de carga no debe reordenarse solo. Volvió a su
+sitio con `# isort: skip`.
+
+**`pip-audit` revienta en mi máquina y no es una vulnerabilidad.** Falla con
+`UnicodeDecodeError` porque mi usuario de Windows se llama `león` y `pip_api`
+decodifica la salida de pip como UTF-8. En la CI (Linux, rutas ASCII) corre sin
+problema — se confirmó viendo su salida real: `No known vulnerabilities found`.
+El script de verificación distingue este caso a propósito y lo reporta como "no
+verificable en esta máquina" en vez de como fallo.
+
+**Mover el proceso rompió dos scripts de verificación, en silencio.** Calculaban
+la raíz del repositorio contando carpetas (`parents[3]`); al subir un nivel se
+ponían a mirar el directorio equivocado sin fallar. Ahora buscan el `.git`. Es el
+patrón de D16 apareciendo dentro de las propias verificaciones.
+
+**La sustitución automática de rutas rompió la prosa que hablaba de la mudanza**,
+dejando frases sin sentido. Corregidas a mano. Es el riesgo de reemplazar rutas
+en documentos que discuten rutas.
+
+**`pip-audit` con `--strict` falló en la CI del PR #19,** y no por una
+vulnerabilidad: tropieza con el propio proyecto instalado como editable. **La
+salida fácil habría sido quitar `--strict`, y no se hizo** — `--strict` es lo que
+hace que la guardia avise cuando una dependencia *no se pudo* auditar, y quitarlo
+para que el check pasara habría sido reintroducir el defecto de D16 por el peor
+motivo posible. Se resolvió derivando la lista de dependencias del `pyproject`.
+
+**Y un error de método mío:** hice `git add -A` y metí los 50 archivos del loop 4
+en un solo commit, contra la convención de separar código y documentación. Se
+deshizo con `git reset --soft` y se rehízo en tres commits.
+
+### Verificación
+
+**Todo lo que sigue lo vi en pantalla en esta sesión**, no heredado de la
+documentación:
+
+| Comprobación | Resultado |
+|---|---|
+| Suite completa | **344 tests OK**, exit 0 (133 s, Django 6.0.8) |
+| Suite **con el motor saboteado** | **344 tests OK** — el hallazgo |
+| `ruff check .` | `All checks passed!` |
+| `gitleaks` (historia completa) | sin fugas, 306 commits |
+| Arnés, en las dos direcciones | **7 de 7** |
+| CI del PR #18 | 9/9 en verde, 2m28s |
+| CI del PR #19 | 9/9 en verde, 2m43s |
+| `pip-audit` en la CI | `No known vulnerabilities found`, con las 12 dependencias impresas |
+| Enlaces de todos los `.md` | **cero rotos** |
+
+**Las guardias se verificaron en las dos direcciones**, con sabotajes: HSTS y
+cookies apagadas hacen caer `check --deploy`; una cédula plantada dispara
+`gitleaks`; un import muerto dispara `ruff`. Y la tercera comprobación, la que de
+verdad importa: **el mismo sabotaje sin `--fail-level WARNING` sigue saliendo en
+verde.**
+
+**Lo que NO se pudo verificar:** nada contra producción — Railway sigue caído
+desde el 07/08/2026. Y `pip-audit` no se puede correr en esta máquina.
+
+### Qué queda pendiente
+
+**Las capturas de pantalla del panel.** El `README.md` tiene el hueco reservado
+con las instrucciones para generarlas. No entraron porque requieren una sesión
+iniciada en el Admin. Es lo que la auditoría llamó "la ausencia más cara" para un
+proyecto que se va a enseñar a un médico y a un desarrollador externo.
+
+**Los tres loops que faltan del plan**, en este orden:
+
+1. **Anclar los umbrales clínicos.** ~25 pruebas de frontera —valor umbral y
+   valor inmediatamente inferior—, aplicando a las siete reglas restantes el
+   patrón que la regla de frecuencia cardíaca ya tiene. Cierra los tres hallazgos
+   ALTA de la auditoría de pruebas. **Cada prueba se verifica con su sabotaje
+   antes de darla por buena.**
+2. **Los bugs que tocan al paciente**: el parser de temperatura, los validadores
+   de rango, una palabra de auxilio que funcione en todos los estados, el turno
+   de la tarde que el bot niega, el tablero que dice "todo bajo control" con una
+   ALTA en pantalla, y que revocar el consentimiento detenga la generación de
+   datos.
+3. **Los 34 hallazgos de criterio del linter**, diferidos a después del punto 1.
+
+**Decisiones que se tomarán en grupo**, con Alejandro, el médico y el
+profesional de desarrollo:
+
+- **El canal del paciente.** WhatsApp queda excluido por la Resolución 1644. Las
+  opciones vivas son reposicionar como piloto de investigación (con comité de
+  ética), migrar a plataforma propia, o un híbrido.
+- **Repositorio público o privado**, que decide a la vez la protección de rama y
+  si hay que reescribir la historia para sacar la cédula.
+- **Avisarle al médico** que sus datos estuvieron —y siguen, en la historia— en
+  el repositorio. Es un tercero identificable que no consintió eso.

@@ -120,8 +120,9 @@ anotada para después.
 - **Rama de despliegue:** `produccion` — la miran los tres servicios de Railway.
   Nadie trabaja aquí; solo recibe merges desde `Desarrollo`. Ver
   `docs/railway_deploy.md` §4.1.
-- **Rama activa de trabajo:** ninguna. `crear-medico-no-reescribe` se mergeó el
-  12/08/2026 (PR #17); la siguiente se abre desde `Desarrollo`.
+- **Rama activa de trabajo:** ninguna. `arnes-verificable` (PR #18) y
+  `repositorio-profesional` (PR #19) se mergearon el 07/09/2026; la siguiente se
+  abre desde `Desarrollo`.
 - **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **nueve
   comprobaciones** en cada PR hacia `Desarrollo` y hacia `produccion`, y en cada
   push a esas dos ramas: la suite, `check`, `makemigrations --check`,
@@ -235,7 +236,7 @@ evidencia disponible, no decisiones ya tomadas.
 | D15 · `crear_medico` | Que el arranque deje de reescribir la cuenta del médico | ✅ **Completado y mergeado** (12/08/2026, PR #17, merge commit `1396744`). **344 tests OK**; cierra D1-D15 |
 | Auditoría de seis frentes | Seguridad, datos, backend clínico, frontend, calidad de pruebas y repositorio, en paralelo y ciegas entre sí | ✅ **Ejecutada** (07/09/2026). **101 hallazgos, 15 de severidad ALTA.** Cuatro reproducidos ejecutando código, incluido un sabotaje que dejó las 344 pruebas en verde con el motor clínico roto |
 | Loop del arnés · D16-D17 | Que las guardias automáticas puedan fallar, y retirar la identidad de terceros | ✅ **Completado y mergeado** (07/09/2026, PR #18, merge commit `5f51831`). CI de **siete a nueve** comprobaciones; `check --deploy` recupera la capacidad de fallar; identidad del médico fuera del árbol. **344 tests OK** |
-| Loop del repositorio · D18 | Separar producto de cuaderno de trabajo, y que el repositorio se pueda instalar | 🔄 **En curso** (07/09/2026). `README`, `LICENSE`, `CONTRIBUTING`, `SECURITY`, `pyproject.toml` en vez de tres `requirements`, plantillas de `.github/`, `CODEOWNERS`, `.mailmap`, y el proceso movido a `proceso/` |
+| Loop del repositorio · D18 | Separar producto de cuaderno de trabajo, y que el repositorio se pueda instalar | ✅ **Completado y mergeado** (07/09/2026, PR #19, merge commit `591cd7c`). `README`, `LICENSE`, `CONTRIBUTING`, `SECURITY`, `pyproject.toml` en vez de tres `requirements`, plantillas de `.github/`, `CODEOWNERS`, `.mailmap`, y el proceso movido a `proceso/`. **344 tests OK** |
 
 **Qué pasó (22/07/2026).** Una auditoría independiente sobre `fbf62a8` confirmó
 las cuatro cifras que se reportaban (280 tests, `check --deploy`, `pip-audit`,
@@ -291,13 +292,38 @@ La topología, las variables y los gotchas siguen en `docs/railway_deploy.md`, q
 pasó de describir el presente a ser el **guion para reconstruir el despliegue**
 cuando haya plan de pago. No se borró nada de ahí a propósito.
 
-**Próximo paso exacto (al retomar):** verificar el estado real contra `git log` y
-la suite antes de proponer nada, y **decidir en sesión qué se hace** — no hay
-guion escrito esperando, a propósito. El candidato con más peso es **auditar la
-calidad de las pruebas**: el 12/08/2026 un sabotaje de verificación demostró con
-un caso concreto que hay pruebas verdes que no protegen lo que parecen
-(`test_crea_staff_no_superusuario_sin_permisos_extra` seguía en verde con
-`user_permissions.clear()` retirado). Ver la entrada del 12/08 en `proceso/BITACORA.md`.
+**Próximo paso exacto (al retomar): anclar los umbrales clínicos.** Es el
+siguiente loop del plan acordado el 07/09/2026, y ya no es un candidato entre
+varios: la auditoría de ese día lo convirtió en el trabajo obligado.
+
+**Por qué.** Un sabotaje ejecutado —quitar `'fecaloide'` de `DRENAJES_ALTA` en
+`alert_engine.py:16`— dejó **las 344 pruebas en verde** con el motor clínico
+roto. `fecaloide` no aparece ni una vez en los once archivos de prueba, y lo
+mismo pasa con `dolor_eva=7` y con `episodios_nauseas=3`. De 18 sabotajes de una
+línea propuestos por la auditoría, **14 pasarían sin que caiga nada**.
+
+**Qué hay que hacer.** Aplicar a las siete familias de reglas restantes el patrón
+que la **Regla 8 (frecuencia cardíaca)** ya tiene en casa: para cada umbral, el
+valor que dispara **y el valor inmediatamente inferior, que no debe disparar**.
+Son unas 25 pruebas. Empezar por los cinco sabotajes de más peso: fecaloide, las
+cinco opciones del menú de drenaje en el bot, temperatura 37,8, náuseas 3, y
+EVA 7.
+
+**La regla que hace útil este loop:** cada prueba nueva se verifica aplicando su
+sabotaje **antes** de darla por buena. Una prueba de frontera escrita sin
+comprobar que cae es exactamente el error que la auditoría acaba de encontrar
+catorce veces.
+
+Después vienen, en orden: **los bugs que tocan al paciente** (parser de
+temperatura, validadores de rango, palabra de auxilio, el turno de la tarde que
+el bot niega, el tablero que miente, el consentimiento revocado), y **los 34
+hallazgos de criterio del linter**, diferidos a propósito hasta que la red
+aguante.
+
+**Lo que NO se decide en sesión técnica:** el canal del paciente, si el
+repositorio se hace público, y avisarle al médico de sus datos en la historia.
+Esas tres van a la reunión con Alejandro, el médico y el profesional de
+desarrollo.
 
 Los cinco cierres anteriores están **completos**: la rama del Sprint 5
 (`proceso/instrucciones/2026-07-28_instruccion_cierre_rama_sprint5.md`, 29/07), la CI

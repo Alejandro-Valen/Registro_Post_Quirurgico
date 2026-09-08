@@ -214,10 +214,43 @@ entre el Sprint 5 y hoy.
   `user_permissions.clear()` retirado, así que hasta esa fecha nada protegía esa
   línea.
 
+- **Auditoría de seis frentes y el loop del arnés (07/09/2026, PR #18,
+  `5f51831`).** Seis auditorías en paralelo y ciegas entre sí —seguridad, datos,
+  backend clínico, frontend, calidad de pruebas y repositorio— encontraron **101
+  hallazgos, 15 de severidad ALTA**, y el patrón que los explica: **las guardias
+  automáticas estaban escritas de forma que no podían fallar**. `check --deploy`
+  salía con código 0 ante cinco fallos de seguridad; `gitleaks` excluía la única
+  carpeta con datos personales; y un sabotaje —quitar el drenaje fecaloide de la
+  lista de severidad ALTA— **dejó las 344 pruebas en verde con el motor clínico
+  roto**. Fichas **D16** y **D17**. La CI pasó de siete a **nueve
+  comprobaciones**, con `ruff` y `pip-audit` bloqueando, y `check --deploy`
+  recuperó `--fail-level WARNING`. Se retiró del árbol la identidad del médico
+  proponente, que estaba en seis documentos.
+
+- **El repositorio, de cuaderno a producto (07/09/2026, PR #19, `591cd7c`).**
+  De cada 100 KB de documentación solo 12 describían el sistema. Entraron
+  `README.md`, `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, `CODEOWNERS` y las
+  plantillas de issue y PR; `pyproject.toml` reemplazó a los tres
+  `requirements*.txt`; y el cuaderno de trabajo se mudó a `proceso/`, dejando
+  `docs/` solo con producto. Ficha **D18**.
+
 ---
 
 ## Preguntas de arquitectura ya resueltas
 
-Ambas preguntas de arquitectura que quedaban abiertas ya se resolvieron:
-cron en **Linux** (Railway/Render, no Windows Task Scheduler) y SMTP con
-**Gmail + contraseña de aplicación**.
+Ambas preguntas de arquitectura que quedaban abiertas ya se resolvieron: cron en
+**Linux** (Railway/Render, no Windows Task Scheduler) y, para el correo, **dos
+vías seleccionables** por `EMAIL_DELIVERY_PROVIDER` — SMTP de Django, o **HTTPS
+contra la API de Resend, que es la que se usó en producción**.
+
+> **Corrección (07/09/2026).** Hasta hoy esta sección decía que la pregunta del
+> correo se había resuelto con "SMTP + Gmail y contraseña de aplicación", a
+> secas. **Eso no describe lo que se desplegó:** Railway bloquea las conexiones
+> SMTP salientes, y por eso el servicio real entregó por HTTPS contra Resend.
+>
+> Comprobado en esta sesión, no deducido: `settings_production.py:143-157`
+> define las dos ramas y `notificaciones.py` tiene las dos rutas —`send_mail`
+> para SMTP y `requests.post` para Resend—. **El valor por defecto sigue siendo
+> `django` (SMTP)**, así que la frase vieja no era del todo inventada; lo falso
+> era presentarla como la respuesta única, cuando la configuración que estuvo en
+> el aire era la otra. Lo detectó la auditoría del 07/09 (hallazgo REPO-15).

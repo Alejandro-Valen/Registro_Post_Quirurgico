@@ -66,9 +66,22 @@ código antes de aceptarlas.
 > **Se actualiza en CADA cierre de sesión, aunque quede a mitad de un loop.**
 > Es lo primero que debe leer quien retome el trabajo.
 
-**Última actualización:** 12/08/2026
-**Punto alcanzado:** **LOS CINCO LOOPS CERRADOS; D1-D14 IMPLEMENTADAS Y
-MERGEADAS.** El Loop E se verificó con un script propio
+**Última actualización:** 07/09/2026
+**Punto alcanzado:** **D1-D18 IMPLEMENTADAS Y MERGEADAS.**
+
+**Lo último (07/09/2026):** una auditoría de seis frentes en paralelo encontró
+101 hallazgos, 15 de severidad ALTA, y sobre todo el patrón que los explica —
+**las guardias automáticas del proyecto estaban escritas de forma que no podían
+fallar**. De ahí salieron **D16** (toda guardia debe poder ponerse en rojo),
+**D17** (datos personales de un tercero en la historia) y **D18** (separar el
+producto del cuaderno de trabajo), implementadas en los PR #18 (`5f51831`) y #19
+(`591cd7c`). La CI pasó de siete a **nueve comprobaciones**.
+
+**El siguiente trabajo no es una ficha D: es anclar los umbrales clínicos.** Un
+sabotaje ejecutado dejó las 344 pruebas en verde con el motor clínico roto.
+
+**Contexto anterior (12/08/2026):** los cinco loops cerrados, D1-D15
+implementadas y mergeadas. El Loop E se verificó con un script propio
 (`proceso/verificaciones/2026-08-06_verificacion_loop_e.py`) y entró a
 `Desarrollo` el 07/08/2026 (PR #10, `4fc690d`). Los Loops A, B, C y D estaban
 cerrados y verificados desde el 27/07; el Sprint 5 se mergeó el 29/07 y la CI el
