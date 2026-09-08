@@ -31,9 +31,12 @@ médico a través de un dashboard en Django Admin.
 **Ruta del proyecto en máquina de León:**
 `C:\Users\león\Documents\ProyectoLeonAlejo\Registro_Post_Quirurgico`
 
-**Equipo:**
-- León (Arquitecto IA) — define lógica clínica, trabaja con Claude Code
-- Alejandro (Dev Full-Stack) — implementa código, trabaja con Codex CLI
+**Equipo** (reparto real del trabajo; el README los presenta con el mismo rol a
+propósito, ver `CLAUDE.md` → "Roles del Equipo"):
+- León — **programador y desarrollador principal**; define la lógica clínica y
+  firma las decisiones clínicas. Trabaja con Claude Code
+- Alejandro — se consulta para funcionamiento, arquitectura, infraestructura y la
+  gestión con el médico. Trabaja con Codex CLI
 
 **Ramas Git:**
 - `Desarrollo` — rama principal estable ✅ actualizada (incluye Sprint 2 + fix 01b8a47)

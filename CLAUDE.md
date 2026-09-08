@@ -436,11 +436,27 @@ completa en `ROADMAP_MONITOREO_POSQUIRURGICO.md`, FASE 5.
 
 ## Roles del Equipo
 
-- **León (Arquitecto IA):** define lógica clínica, valida reglas médicas,
-  aprueba cada decisión de diseño antes de que se escriba código, trabaja con
-  Claude Code. NO es el programador principal.
-- **Alejandro (Dev Full-Stack):** implementa modelos y vistas, configura
-  infraestructura, trabaja con Codex CLI.
+> **Corregido el 07/09/2026.** Hasta esta fecha esta sección decía que León
+> *"NO es el programador principal"* y que Alejandro *"implementa modelos y
+> vistas"*. **Era falso**, y no es un detalle: es lo primero que lee un agente
+> antes de decidir cómo trabajar, y lo estuvo llevando a tratar a quien escribe
+> el código como si no lo escribiera. La historia de git ya lo contradecía —316
+> commits contra 14— sin que nadie sacara la conclusión.
+
+- **León (`@arboledaLeon`):** **programador y desarrollador principal.** Escribe
+  el código, define la lógica clínica, valida las reglas médicas y aprueba cada
+  decisión de diseño. Trabaja con Claude Code. Es quien firma lo clínico: cuando
+  el resto de esta documentación dice "el Arquitecto", se refiere a él.
+- **Alejandro (`@Alejandro-Valen`):** se consulta para las decisiones de
+  **funcionamiento, arquitectura, infraestructura y la gestión con el médico**.
+  Trabaja con Codex CLI.
+
+**Nota sobre el README.** Ahí los dos aparecen con el mismo rol —"lógica
+clínica, arquitectura, desarrollo e infraestructura"— y es **deliberado**: de
+cara afuera no se reparten méritos, porque cada aporte es necesario. Esta
+sección describe el reparto real del trabajo, que es lo que un agente necesita
+saber; aquella describe al equipo, que es lo que un visitante necesita saber. No
+se contradicen: responden preguntas distintas.
 
 ---
 
@@ -455,8 +471,8 @@ tenga que pedirlo, Claude Code debe ejecutar estos 3 procesos en orden:**
 Agregar una nueva entrada de sesión siguiendo el formato ya usado en el archivo
 (Sprint, Fecha, Responsable, Estado, Qué se hizo, Decisiones tomadas, Problemas
 encontrados y resueltos). Debe incluir:
-- Qué se construyó, en lenguaje claro — el Arquitecto define la lógica clínica
-  pero no es el programador principal.
+- Qué se construyó, en lenguaje claro. La bitácora la lee quien retoma meses
+  después y quien nunca vio esta sesión: tiene que entenderse sin abrir el diff.
 - Decisiones clínicas tomadas y su justificación médica.
 - Errores, bugs o conflictos de merge que aparecieron y cómo se resolvieron —
   esto es lo más valioso, nunca omitir un problema solo porque ya se arregló.
