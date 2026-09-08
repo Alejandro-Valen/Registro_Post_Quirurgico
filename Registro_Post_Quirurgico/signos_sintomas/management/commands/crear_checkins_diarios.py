@@ -22,13 +22,35 @@ HORA_TARDE  = 14  # 2:00 PM → el segundo prompt
 
 
 class Command(BaseCommand):
-    help = "Crea los check-ins programados del día para todos los pacientes activos."
+    help = (
+        "Crea los check-ins del día para los pacientes activos CON "
+        "consentimiento, y detiene los turnos de quien lo retiró."
+    )
 
     def handle(self, *args, **options):
         hoy = timezone.localdate()
         tz  = timezone.get_current_timezone()
 
-        pacientes = Paciente.objects.filter(activo=True)
+        # D22 — el consentimiento retirado detiene la generación de datos.
+        #
+        # Hasta el 08/09/2026 este comando filtraba solo por `activo=True`. El
+        # bot sí frenaba al paciente sin consentimiento, pero el cron le seguía
+        # creando turnos: `cerrar_checkins_vencidos` los marcaba NO_RESPONDIDO
+        # y generaba alertas SILENCIO. Es decir, el sistema producía datos
+        # clínicos y alarmas sobre una persona que retiró su permiso, y le
+        # reprochaba un silencio que él mismo le había impuesto.
+        pacientes = Paciente.objects.filter(activo=True, consentimiento_informado=True)
+
+        # Los turnos que ya estaban abiertos cuando se retiró el consentimiento
+        # se cierran con estado propio. NO se marcan NO_RESPONDIDO: esa etiqueta
+        # significa "el paciente no contestó", y aquí no contestó porque el
+        # sistema se lo impidió. Afirmarlo sería falsear su conducta.
+        detenidos = CheckInProgramado.objects.filter(
+            estado=CheckInProgramado.ESTADO_PENDIENTE,
+        ).exclude(
+            paciente__in=pacientes,
+        ).update(estado=CheckInProgramado.ESTADO_SIN_CONSENTIMIENTO)
+
         creados = 0
         omitidos = 0
 
@@ -57,8 +79,9 @@ class Command(BaseCommand):
 
         resumen = (
             f"crear_checkins_diarios {hoy}: "
-            f"{creados} creados, {omitidos} ya existían "
-            f"({pacientes.count()} pacientes activos)."
+            f"{creados} creados, {omitidos} ya existían, "
+            f"{detenidos} detenidos por falta de consentimiento "
+            f"({pacientes.count()} pacientes activos con consentimiento)."
         )
         logger.info(resumen)
         self.stdout.write(self.style.SUCCESS(resumen))

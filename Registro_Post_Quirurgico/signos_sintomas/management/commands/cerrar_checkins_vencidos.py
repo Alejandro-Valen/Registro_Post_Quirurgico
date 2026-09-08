@@ -113,6 +113,7 @@ class Command(BaseCommand):
         cerrados = 0
         detecciones_silencio = 0
         conversaciones_activas = 0
+        detenidos_sin_consentimiento = 0
 
         for checkin_pk in vencidos:
             with transaction.atomic():
@@ -140,6 +141,22 @@ class Command(BaseCommand):
                 ).exists()
                 if conversacion_activa:
                     conversaciones_activas += 1
+                    continue
+
+                # D22 - el paciente retiro su consentimiento: se cierra el
+                # turno pero NO se genera SILENCIO. La alerta SILENCIO
+                # afirma "el paciente no responde", y aqui no responde
+                # porque el bot se lo impide desde su propia guarda.
+                #
+                # La comprobacion se repite aqui aunque
+                # `crear_checkins_diarios` ya detenga estos turnos, porque
+                # los dos comandos corren en crones distintos y este puede
+                # ejecutarse primero. La guarda tiene que estar donde se
+                # produce el dano, no solo donde suele venir.
+                if not checkin.paciente.consentimiento_informado:
+                    checkin.estado = CheckInProgramado.ESTADO_SIN_CONSENTIMIENTO
+                    checkin.save(update_fields=['estado'])
+                    detenidos_sin_consentimiento += 1
                     continue
 
                 checkin.estado = CheckInProgramado.ESTADO_NO_RESPONDIDO
@@ -170,7 +187,8 @@ class Command(BaseCommand):
         resumen = (
             f"cerrar_checkins_vencidos {timezone.localdate()}: "
             f"{cerrados} check-ins cerrados, {detecciones_silencio} detecciones "
-            f"SILENCIO, {conversaciones_activas} conversaciones activas omitidas."
+            f"SILENCIO, {conversaciones_activas} conversaciones activas omitidas, "
+            f"{detenidos_sin_consentimiento} detenidos sin consentimiento."
         )
         logger.info(resumen)
         self.stdout.write(self.style.SUCCESS(resumen))

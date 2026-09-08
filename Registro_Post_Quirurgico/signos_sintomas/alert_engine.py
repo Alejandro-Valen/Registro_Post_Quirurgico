@@ -278,6 +278,48 @@ def registrar_alerta_silencio(checkin, severidad, mensaje):
     return abierta
 
 
+def registrar_alerta_auxilio(paciente, mensaje):
+    """Registra la petición de auxilio de un paciente como alerta ALTA (D21).
+
+    **No la produce el motor de reglas.** Las otras siete alertas son
+    conclusiones sobre telemetría; esta es una petición de socorro de la
+    persona, sin clasificación clínica detrás. Por eso tiene tipo propio: si se
+    metiera en SEPSIS o en DOLOR_AGUDO, el sistema estaría diagnosticando —lo
+    que este proyecto promete no hacer— y además ensuciaría las estadísticas de
+    esos tipos.
+
+    **Sin `DeteccionAlerta`, a diferencia de las demás.** Una detección exige
+    exactamente una fuente —un `RegistroDiario` o un `CheckInProgramado`— y aquí
+    no hay ninguna de las dos: el paciente escribió una palabra, en cualquier
+    momento, fuera del cuestionario o a mitad de él. Inventarle una fuente sería
+    falsear la evidencia. El contador `veces` sí se lleva, para que dos gritos
+    de auxilio no se vean como uno.
+
+    Severidad siempre ALTA: no hay grados en pedir socorro.
+    """
+    fecha_deteccion = timezone.now()
+    alerta, creada = _obtener_o_crear_alerta_abierta(
+        paciente,
+        'AUXILIO',
+        'ALTA',
+        mensaje,
+        fecha_deteccion=fecha_deteccion,
+    )
+    if creada:
+        alerta._escalo_a_alta = False   # ya nació ALTA: el post_save la notifica
+        return alerta
+
+    alerta.veces += 1
+    alerta.fecha_ultima_deteccion = fecha_deteccion
+    alerta.mensaje = mensaje
+    # Una alerta de auxilio ya abierta sigue siendo ALTA; no re-escala, así que
+    # no se vuelve a notificar por correo. La cuenta de `veces` es lo que le
+    # dice al médico que el paciente insistió.
+    alerta._escalo_a_alta = False
+    alerta.save()
+    return alerta
+
+
 def _severidad_dolor_por_ventana(dia_postoperatorio, dolor_eva):
     """Devuelve 'ALTA', 'MEDIA', 'BAJA' o None según la ventana de
     dia_postoperatorio y el valor de dolor_eva."""
@@ -313,7 +355,17 @@ def _evaluar_temperatura(registro, fecha_referencia):
     """Regla 1: Temperatura — escalera por días calendario.
     Decisión Arquitecto, jun 2026. Base: Outersterp 2025 (>37.9°C umbral
     de notificación en monitoreo domiciliario, no solo criterio de alta
-    hospitalaria como en otros estudios)."""
+    hospitalaria como en otros estudios).
+
+    Sin dato no se evalua (decision D20): desde el 08/09/2026 el paciente
+    que no tiene termometro puede saltar la pregunta y reportar las otras
+    nueve variables. Un dia sin temperatura es un desconocido genuino,
+    igual que un dia sin reporte para las reglas de dias consecutivos (D8),
+    y el tratamiento es el mismo que la Regla 8 le da a una frecuencia
+    cardiaca ausente: no alertar en vez de inventar un hecho clinico."""
+    if registro.temperatura is None:
+        return []
+
     if registro.temperatura >= TEMPERATURA_ALTA:
         return [_registrar_alerta(
             registro, 'SEPSIS', 'ALTA',

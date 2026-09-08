@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import DataError, IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -576,3 +576,104 @@ class PacienteActivoExigeMedicoTests(TestCase):
         self.assertFalse(
             Paciente.objects.filter(cedula__startswith='DEMO-').exists()
         )
+
+
+class RangosClinicosEnLaBaseTests(TestCase):
+    """DB-01 — los rangos clínicos se defienden en la BASE, no solo en el bot.
+
+    Hasta el 08/09/2026 el proyecto **no tenía ni un validador de rango**.
+    `episodios_nauseas` tampoco tenía techo en el bot, así que `"si, 99999"`
+    llegaba tal cual: reventaba el `PositiveSmallIntegerField`, el webhook
+    devolvía 500 y el paciente **no recibía ninguna respuesta** — no podía
+    saber si su reporte había entrado.
+
+    Por qué en la base y no solo con `validators`: los validadores del campo
+    corren en `full_clean()`, que el Admin llama y `objects.create()` **no**.
+    El bot crea registros con `objects.create()`, así que sin restricción de
+    base el rango seguiría sin defensa justo en la puerta por la que entran
+    todos los datos de pacientes reales.
+    """
+
+    def setUp(self):
+        self.paciente = Paciente.objects.create(
+            medico_responsable=medico_de_pruebas(),
+            nombre_completo='Paciente Rangos',
+            telefono_whatsapp='+573009990003',
+            fecha_cirugia=timezone.localdate() - timedelta(days=3),
+        )
+
+    def _crear(self, **campos):
+        valores = {
+            'temperatura': Decimal('37.0'),
+            'dolor_eva': 3,
+            'tiene_drenaje': False,
+            'presencia_gases': True,
+            'episodios_nauseas': 0,
+        }
+        valores.update(campos)
+        return RegistroDiario.objects.create(paciente=self.paciente, **valores)
+
+    def test_la_base_rechaza_valores_fuera_de_rango(self):
+        fuera_de_rango = [
+            ('dolor_eva', 11),
+            ('episodios_nauseas', 21),
+            ('temperatura', Decimal('29.9')),
+            ('temperatura', Decimal('45.1')),
+            ('frecuencia_cardiaca', 29),
+            ('frecuencia_cardiaca', 251),
+            ('frecuencia_respiratoria', 4),
+            ('frecuencia_respiratoria', 61),
+            ('volumen_drenaje_ml', 5001),
+        ]
+        for campo, valor in fuera_de_rango:
+            with self.subTest(campo=campo, valor=valor), \
+                    self.assertRaises((IntegrityError, DataError)), \
+                    transaction.atomic():
+                self._crear(**{campo: valor})
+
+    def test_la_base_acepta_los_bordes_validos(self):
+        """La otra dirección, y la que importa: una restricción demasiado
+        estrecha rechazaría datos clínicos legítimos, que es peor que no
+        tenerla — el paciente recibiría un error por decir la verdad."""
+        en_rango = [
+            ('dolor_eva', 0),
+            ('dolor_eva', 10),
+            ('episodios_nauseas', 20),
+            ('temperatura', Decimal('30.0')),
+            ('temperatura', Decimal('45.0')),
+            ('temperatura', None),          # el paciente saltó la pregunta (D20)
+            ('frecuencia_cardiaca', 30),
+            ('frecuencia_cardiaca', 250),
+            ('frecuencia_respiratoria', 5),
+            ('frecuencia_respiratoria', 60),
+            ('volumen_drenaje_ml', 5000),
+        ]
+        for campo, valor in en_rango:
+            with self.subTest(campo=campo, valor=valor), transaction.atomic():
+                registro = self._crear(**{campo: valor})
+                self.assertEqual(getattr(registro, campo), valor)
+
+    def test_el_estado_sin_consentimiento_es_valido_para_la_base(self):
+        """D22 — el estado nuevo tiene que caber en la restricción existente."""
+        checkin = CheckInProgramado.objects.create(
+            paciente=self.paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now(),
+            estado=CheckInProgramado.ESTADO_SIN_CONSENTIMIENTO,
+        )
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.estado, 'SIN_CONSENTIMIENTO')
+
+    def test_un_estado_inventado_lo_sigue_rechazando_la_base(self):
+        """La otra dirección: añadir un estado no abre la puerta a cualquiera."""
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CheckInProgramado.objects.create(
+                paciente=self.paciente,
+                fecha_dia=timezone.localdate(),
+                orden=2,
+                etiqueta=CheckInProgramado.ETIQUETA_TARDE,
+                hora_programada=timezone.now(),
+                estado='LO_QUE_SEA',
+            )

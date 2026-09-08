@@ -8,6 +8,7 @@ from django.core.cache import cache
 from django.db import connection
 from django.http import HttpResponse
 from django.shortcuts import render
+from django.utils import timezone
 
 from .models import MensajeContacto
 
@@ -80,6 +81,25 @@ def _medico_destinatario_contacto():
 MOSTRAR_AVISO_BOCETO = True
 
 
+def politica_datos(request):
+    """Politica de tratamiento de datos personales (Ley 1581/2012).
+
+    BORRADOR. Existe porque la casilla de autorizacion del formulario tiene
+    que enlazar a algun sitio: pedir permiso sin decir para que ni ante quien
+    no es autorizacion informada.
+
+    Lo que le falta para ser valida son datos que el proyecto todavia no
+    tiene: responsable del tratamiento identificado, direccion, canal para
+    ejercer los derechos y plazo maximo de retencion. Son los mismos
+    corchetes sin llenar de la decision P-12 y del formato de
+    consentimiento. NO se inventan: la plantilla los muestra como pendientes
+    y el aviso de boceto lo deja claro.
+    """
+    return render(request, "home/politica_datos.html", {
+        "seccion": "politica",
+        "mostrar_aviso_boceto": MOSTRAR_AVISO_BOCETO,
+    })
+
 def salud(request):
     """Health check para monitoreo externo (D2, punto 5).
 
@@ -110,6 +130,7 @@ def index(request):
 def contacto(request):
     mensaje_enviado = False
     error_rate_limit = False
+    error_autorizacion = False
 
     if request.method == "POST":
         ip = _get_client_ip(request)
@@ -119,12 +140,26 @@ def contacto(request):
             nombre  = request.POST.get("nombre",  "").strip()[:_MAX_NOMBRE]
             telefono = request.POST.get("telefono", "").strip()[:_MAX_TELEFONO]
             mensaje = request.POST.get("mensaje",  "").strip()[:_MAX_MENSAJE]
+            # SEC-03 / decisión D23 — el artículo 6 de la Ley 1581/2012 exige
+            # autorización EXPLÍCITA para datos sensibles, y este formulario
+            # recibe datos de salud por más que se pida no enviarlos.
+            #
+            # La casilla se comprueba en el SERVIDOR y no solo con `required`
+            # en el HTML: un `required` se salta con un POST directo, que es
+            # exactamente como se reprodujo el hallazgo el 08/09/2026.
+            autorizo = request.POST.get("autorizacion_datos") in ("1", "on", "true")
 
-            if nombre and telefono and mensaje:
+            if not autorizo:
+                error_autorizacion = True
+            elif nombre and telefono and mensaje:
                 MensajeContacto.objects.create(
                     nombre=nombre,
                     telefono=telefono,
                     mensaje=mensaje,
+                    autorizacion_datos=True,
+                    # La autorización hay que poder demostrarla después, no
+                    # solo recogerla: se guarda cuándo se dio.
+                    fecha_autorizacion=timezone.now(),
                     medico_destinatario=_medico_destinatario_contacto(),
                 )
                 mensaje_enviado = True
@@ -135,6 +170,7 @@ def contacto(request):
         {
             "mensaje_enviado": mensaje_enviado,
             "error_rate_limit": error_rate_limit,
+            "error_autorizacion": error_autorizacion,
             "seccion": "contacto",
             "mostrar_aviso_boceto": MOSTRAR_AVISO_BOCETO,
         },

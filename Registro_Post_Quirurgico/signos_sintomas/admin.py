@@ -156,7 +156,7 @@ def _historial_paciente(paciente, dias=DIAS_HISTORIAL_DEFAULT):
             f'<tr>'
             f'<td>{fecha}</td>'
             f'<td>POD {r.dia_postoperatorio}</td>'
-            f'<td>{r.temperatura} °C</td>'
+            f'<td>{f"{r.temperatura} °C" if r.temperatura is not None else "—"}</td>'
             f'<td>{r.dolor_eva}/10</td>'
             f'<td>{"Sí" if r.presencia_gases else "No"}</td>'
             f'<td>{r.episodios_nauseas}</td>'
@@ -209,7 +209,9 @@ def _datos_grafica(paciente, dias):
     labels, temps, evas, fcs, alertas_idx = [], [], [], [], []
     for i, r in enumerate(registros):
         labels.append(timezone.localtime(r.fecha_registro).strftime('%d/%m') + f' {turnos[r.pk]}')
-        temps.append(float(r.temperatura))
+        # None se serializa como null: Chart.js abre un hueco en la línea en
+        # vez de dibujar un 0, que se leería como hipotermia (D20).
+        temps.append(float(r.temperatura) if r.temperatura is not None else None)
         evas.append(r.dolor_eva)
         fcs.append(r.frecuencia_cardiaca)  # None se serializa como null — Chart.js abre un hueco, no cae a 0
         if r.pk in ids_con_alerta_alta:
