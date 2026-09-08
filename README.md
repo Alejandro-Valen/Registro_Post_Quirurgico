@@ -218,9 +218,9 @@ no supimos ver. Los scripts que reproducen cada verificación están en
 ## Equipo
 
 - **León Arboleda** ([@arboledaLeon](https://github.com/arboledaLeon)) —
-  arquitectura y lógica clínica.
+  lógica clínica, arquitectura, desarrollo e infraestructura.
 - **Alejandro Valencia** ([@Alejandro-Valen](https://github.com/Alejandro-Valen)) —
-  desarrollo e infraestructura.
+  lógica clínica, arquitectura, desarrollo e infraestructura.
 
 El proyecto no tiene afiliación institucional formal a la fecha.
 
