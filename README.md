@@ -47,22 +47,49 @@ mensaje: solo un enlace al panel.
 su propia alerta, que escala con los turnos perdidos. La ausencia de datos es
 información clínica, no un hueco.
 
-<!--
-CAPTURAS PENDIENTES. Van aquí, y son lo que convierte "un proyecto Django" en
-"esto hace algo y se ve así" para quien lo evalúe. Tres bastan:
+---
 
-  1. El tablero de triaje del panel (lo primero que ve el médico al entrar).
-  2. El detalle de una alerta con su historial de detecciones.
-  3. La ficha de un paciente con las gráficas de evolución.
+## Cómo se ve
 
-Cómo generarlas, con datos ficticios y en cinco minutos:
+> Las tres capturas salen de datos **ficticios** generados con `seed_demo` y
+> `seed_demo_produccion`. Los pacientes llevan el prefijo `DEMO —`, cédulas
+> `DEMO-000X` y teléfonos reservados. Ningún dato de una persona real ha
+> entrado nunca en este repositorio.
 
-    cd Registro_Post_Quirurgico
-    python manage.py seed_demo      # imprime las credenciales al terminar
-    python manage.py runserver
+### El tablero de triaje
 
-Guardarlas en docs/img/ y enlazarlas aquí.
--->
+Es lo primero que ve el médico al entrar, y no hay que hacer ningún clic para
+saber a quién llamar: nombre, el problema en lenguaje clínico, día
+postoperatorio y **teléfono**, ordenado por severidad. El `×8` y el `×7` no son
+ocho y siete alertas: son **una sola alerta detectada esas veces** mientras
+sigue abierta.
+
+![Tablero de triaje del panel del médico: cuatro indicadores arriba —6 alertas ALTA sin resolver, 0 silencios, 0 de 3 check-ins pendientes, 3 pacientes en seguimiento— y debajo la lista de alertas ordenada por severidad, cada una con el nombre del paciente, el diagnóstico, el día postoperatorio y el teléfono](docs/img/panel-triaje.png)
+
+### El detalle de una alerta
+
+La misma alerta de fuga anastomótica, por dentro. La tabla de detecciones es la
+evolución real del drenaje: **seroso → turbio → purulento → seroso**, con la
+severidad subiendo a ALTA el 2 de septiembre y bajando después.
+
+Siete filas, **una sola alerta**. Si el sistema creara una por check-in, el
+médico vería siete avisos del mismo problema y perdería justo lo que importa:
+que empeoró y luego cedió.
+
+![Tabla de detecciones de una alerta de fuga anastomótica: siete filas con fecha, severidad detectada, registro de origen y mensaje. Las severidades van de Baja a Media, alcanzan Alta con drenaje purulento el 2 de septiembre, y vuelven a Baja](docs/img/detalle-alerta.png)
+
+### La evolución del paciente
+
+Temperatura, dolor y frecuencia cardíaca sobre los diez días de seguimiento, con
+los umbrales clínicos dibujados como líneas punteadas. Los tres suben juntos
+hasta el día 3 y ceden a la vez.
+
+Dos detalles que no son estéticos: **los puntos grandes marcan los registros con
+alerta ALTA sin resolver**, y **un hueco en la línea significa que el paciente no
+midió ese dato ese día — no un cero**. Confundir "no sé" con "cero" en una
+gráfica clínica es cómo se inventa un hecho.
+
+![Tres gráficas apiladas de la ficha de un paciente: temperatura con la línea punteada del umbral de fiebre en 37,9 °C, dolor EVA de 1 a 10, y frecuencia cardíaca con líneas punteadas en 101 y 110 lpm. Las tres curvas alcanzan su pico el 31 de agosto y descienden después](docs/img/ficha-paciente.png)
 
 
 ## Estado
