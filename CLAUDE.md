@@ -316,7 +316,9 @@ catorce veces.
 
 Después vienen, en orden: **los bugs que tocan al paciente** (parser de
 temperatura, validadores de rango, palabra de auxilio, el turno de la tarde que
-el bot niega, el tablero que miente, el consentimiento revocado), y **los 34
+el bot niega, el tablero que miente, el consentimiento revocado, y el
+**formulario público que recoge datos de salud sin autorización de habeas
+data** — SEC-03, detallado en `SECURITY.md`), y **los 34
 hallazgos de criterio del linter**, diferidos a propósito hasta que la red
 aguante.
 

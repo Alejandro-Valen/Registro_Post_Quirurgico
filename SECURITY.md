@@ -56,6 +56,25 @@ Para que un reporte no repita lo conocido:
 
 Se dice aquí en vez de esperar a que alguien lo "descubra":
 
+- **El formulario público recoge datos de salud sin autorización de tratamiento**
+  (hallazgo SEC-03 de la auditoría del 07/09/2026, **severidad ALTA**, todavía
+  sin corregir). `home/views.py` guarda en `MensajeContacto` el nombre, el
+  teléfono y un campo libre que dice *"Cuéntanos brevemente qué necesitas…"* —
+  donde un paciente va a escribir su estado de salud— y los conserva
+  indefinidamente. Los tres campos son obligatorios.
+
+  **No hay casilla de autorización, ni finalidad declarada, ni responsable
+  identificado, ni enlace a una política de tratamiento.** La única frase es
+  *"La información enviada quedará registrada para revisión del equipo médico"*,
+  que no es autorización previa, expresa e informada; y para datos sensibles el
+  artículo 6 de la Ley 1581 de 2012 exige autorización **explícita**.
+
+  Contrasta con el rigor del formato de consentimiento
+  (`docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md`), que cubre al paciente ya
+  inscrito pero **no a quien escribe por la web**. Lo que falta: casilla
+  obligatoria, página de política de tratamiento, y una retención definida para
+  `MensajeContacto`.
+
 - **No hay registro de accesos de lectura.** Django registra las escrituras del
   Admin, no las consultas. Hoy no se puede saber qué médico consultó qué ficha.
   Con un solo médico el impacto es teórico; con dos deja de serlo.

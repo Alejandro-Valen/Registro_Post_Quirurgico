@@ -145,13 +145,38 @@ correcto en vez de denunciar un defecto—, **decirlo en su docstring**.
 
 ## Lo que quedó pendiente y no es de este loop
 
-- **Las capturas de pantalla del panel.** El `README.md` tiene el hueco con las
-  instrucciones. Requieren una sesión iniciada en el Admin, así que las genera el
-  Arquitecto o alguien con la sesión abierta. Es lo que la auditoría llamó "la
-  ausencia más cara" para un proyecto que se va a enseñar.
+- **Siete PR de Dependabot abiertos** (#20 a #26). Se abrieron solos en cuanto el
+  `dependabot.yml` entró con el PR #19 — está haciendo su trabajo, pero siete PR
+  de golpe son ruido, y **dos no son rutinarios**:
+
+  | PR | Salto | Por qué esperar |
+  |---|---|---|
+  | **#23** | `django 6.0.8 → 6.1.1` | Versión **menor**: puede traer deprecaciones |
+  | **#26** | `django-axes 7.0.1 → 8.3.1` | Versión **MAYOR**, y es el que bloquea los intentos de acceso al panel del médico |
+  | #20, #21 | `actions/checkout 5→7`, `setup-python 6→7` | Mayores, pero solo de la CI |
+  | #22, #24, #25 | twilio, requests, redis | Menores rutinarias, sin prisa |
+
+  **Los dos primeros pasan las nueve comprobaciones, y ese verde vale menos de
+  lo que parece.** `django-axes` es el del hallazgo SEC-02 —bloquea por IP, y
+  detrás del edge de Railway esa IP es una sola—; un salto mayor puede cambiar
+  ese comportamiento en cualquier dirección y **no hay una prueba que lo fije**.
+  Y el salto de Django pasa una suite que este mismo loop viene a arreglar
+  precisamente porque no protege siete de las ocho familias de reglas.
+
+  **Recomendación: mergear los tres menores cuando se quiera, y dejar #23 y #26
+  para después de este loop**, cuando la red aguante.
+
+  **Y afinar el `dependabot.yml`:** se configuró agrupando solo los parches, por
+  eso cada versión menor abrió su propio PR. Agrupando también las menores esto
+  sería **un PR mensual en vez de siete**. Fue un error de calibración al
+  escribirlo el 07/09.
+
 - **La cédula del médico sigue en la historia de git.** Fuera del árbol, pero
   recuperable con `git show`. Registrada en `.gitleaksignore` con lo que falta
   decidir.
+
+- **Las capturas del panel: hechas** (PR #27, 07/09/2026). Están en `docs/img/`
+  con su propio README explicando cómo regenerarlas.
 
 ---
 
