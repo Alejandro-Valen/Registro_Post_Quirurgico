@@ -5175,3 +5175,185 @@ profesional de desarrollo:
   si hay que reescribir la historia para sacar la cédula.
 - **Avisarle al médico** que sus datos estuvieron —y siguen, en la historia— en
   el repositorio. Es un tercero identificable que no consintió eso.
+
+---
+
+## Loop de umbrales — anclar las reglas clínicas con pruebas de frontera
+**Fecha:** 08/09/2026
+**Responsable:** León (Arquitecto) con Claude Code
+**Estado:** COMPLETADO ✅ — rama `umbrales-frontera`
+**Guion de la sesión:** `proceso/instrucciones/2026-09-07_instruccion_umbrales.md`
+
+### Cómo empezó
+
+Retomé desde `Desarrollo` con el objetivo ya decidido por el guion del día
+anterior: **anclar los umbrales clínicos con pruebas de frontera**. No era un
+candidato entre varios; la auditoría de seis frentes lo había convertido en el
+trabajo obligado con una demostración ejecutada.
+
+Antes de tocar nada, verifiqué el estado real con comandos. Todo coincidía con
+los documentos —árbol limpio, `Desarrollo` sincronizado en `30351d9`, **344 tests
+OK**, `ruff` sin hallazgos—, pero el arranque costó dos intentos fallidos por dos
+cosas que no estaban escritas en ninguna parte, y que quedaron corregidas en esta
+misma sesión (ver "Problemas encontrados").
+
+### El problema que venía a resolver
+
+El 07/09/2026 se había ejecutado este sabotaje sobre `alert_engine.py:16`:
+
+```diff
+- DRENAJES_ALTA  = ('purulento', 'fecaloide')
++ DRENAJES_ALTA  = ('purulento',)
+```
+
+Las 344 pruebas quedaron **en verde** con el motor clínico roto. Con esa línea
+así, un paciente puede reportar contenido intestinal saliendo por el drenaje —una
+fuga anastomótica franca, el peor signo que captura el sistema— y no se genera
+ninguna alerta. `fecaloide` no aparecía ni una vez en los once archivos de
+prueba; tampoco `dolor_eva=7` ni `episodios_nauseas=3`. La auditoría propuso 18
+sabotajes de una línea y **predijo que 14 pasarían sin que cayera nada** — una
+predicción, no una medición, y de la que solo sobrevivieron por escrito los cinco
+de más peso (ver "Problemas encontrados").
+
+La causa no eran pruebas descuidadas sueltas, sino un patrón: **la ausencia
+sistemática de la frontera inferior**. De las 30 severidades del sistema, 24
+estaban fijadas por alguna prueba, pero solo 15 tenían el caso frontera —el valor
+justo por debajo, que es el que de verdad ancla la constante. Sin esa mitad, una
+prueba describe el código en vez de fijar la regla, y mover el umbral no rompe
+nada.
+
+Las dos únicas zonas con frontera completa eran la Regla 8 (frecuencia cardíaca)
+y la escalera SILENCIO. No por casualidad: son las dos que ya habían pasado por
+una auditoría previa.
+
+### Qué se hizo
+
+**22 pruebas de frontera nuevas**, aplicando a las demás familias de reglas el
+patrón que la Regla 8 ya tenía en casa: por cada umbral, el valor que dispara y
+el inmediatamente inferior que no debe disparar.
+
+**16 en el motor** — clase `FronterasDeUmbralTests` en
+`tests/test_alert_engine.py`:
+
+| Regla | Frontera anclada |
+|---|---|
+| 2 · Drenaje | `fecaloide` → FUGA/ALTA (el sabotaje del 07/09) |
+| 1a · Fiebre | 37,8 no alerta; 37,9 sí (ya existía) |
+| 1b · Subfebrícula | 37,5 con dos días → MEDIA; 37,4 no; hueco de un día no cuenta |
+| 3 · Gases | hueco de un día corta el conteo: MEDIA, no ALTA |
+| 4 · Náuseas | 2 → BAJA, 3 → MEDIA; 3 días seguidos no escalan a ALTA; el hueco corta la persistencia |
+| 5 · Dolor | POD 1-2 con EVA 7 → MEDIA y con EVA 4 → nada; matriz de las tres ventanas con las fronteras entre ellas |
+| 5b · Tendencia | Δ=2 no escala (Δ=3 sí, ya existía) |
+| 6 · Líquidos | hueco de un día corta el conteo: MEDIA, no ALTA |
+| 7c · Hinchazón | tres días en "mucho" no escalan a ALTA |
+
+**6 en el bot** — dentro de `BotWhatsAppTests` en `tests/test_bot.py`: un flujo
+completo por cada opción 1-5 del menú de aspecto del drenaje, más uno que sigue
+la cadena entera del peor caso (el paciente marca "5" → el bot registra
+`fecaloide` → el motor genera FUGA/ALTA → el paciente recibe el cierre de
+severidad ALTA sin que se le diga por qué). Antes solo se recorrían la "1" y
+la "3": las dos opciones que significan urgencia no se probaban nunca.
+
+**Un arnés de sabotajes re-ejecutable**,
+`proceso/verificaciones/2026-09-08_verificacion_umbrales.py`. No repite la suite:
+rompe el motor a propósito, una constante a la vez, y exige que la prueba
+correspondiente **caiga**. Al final restaura el código y corre las dos clases
+limpias para comprobar la otra dirección.
+
+### Verificación
+
+**21 sabotajes aplicados, los 21 atrapados**, y la corrida limpia en verde. Los
+sabotajes cubren las ocho familias de reglas, las tres ventanas de dolor, las
+cuatro guardas de la decisión D8 y las cinco opciones del menú del bot. Entre
+ellos está, textualmente, el que dejó las 344 pruebas en verde el día anterior.
+
+Dos de los sabotajes no son un cambio de constante sino de lógica —borrar la
+guarda `if not existe_registro: break` de las Reglas 3 y 6, y hacer que la
+persistencia de náuseas salte los días sin reporte en vez de cortar en ellos—
+porque la decisión D8 no vive en ninguna constante y no se puede sabotear
+cambiando un número.
+
+El arnés comprueba además su propia integridad: si el texto que va a sustituir no
+aparece exactamente una vez en el archivo, no aplica el sabotaje y lo reporta
+como escapado. Sin eso, un `replace` que no encuentra nada daría "atrapado" por
+la razón equivocada — que es exactamente el defecto que este loop viene a
+eliminar.
+
+**Suite completa: 344 → 366 tests OK.** `ruff check .` sin hallazgos.
+
+### Decisiones tomadas y su justificación
+
+**No se cambió ningún umbral, y era lo esperado.** Este loop fija lo que ya
+estaba decidido; revisarlo es una conversación con el médico, no una sesión
+técnica. Ninguna prueba obligó a mover nada: las ocho familias se comportan como
+las describe `docs/reglas_clinicas.md`.
+
+**Las pruebas van en los archivos por tema, no en un archivo de fronteras
+aparte.** La convención del proyecto es un archivo por tema, y separar las
+pruebas por *clase de prueba* obligaría a quien cambie la Regla 4 a acordarse de
+dos sitios. Dentro de `test_alert_engine.py` sí van en su propia clase, para que
+se lean juntas.
+
+**La matriz de ventanas de dolor ejercita `_severidad_dolor_por_ventana`
+directamente, no `evaluar_registro`.** Esa función *es* la tabla clínica; el
+cableado hacia el motor ya lo fijan las dos pruebas end-to-end de la misma clase.
+Va escrito en el docstring para que no parezca un atajo.
+
+**No se abre una ficha D19.** No hay decisión nueva: este loop es la ficha **D16**
+—toda guardia automática debe poder ponerse en rojo— aplicada a las pruebas
+clínicas. Se anotó como extensión dentro de D16 y la regla operativa que sale de
+ahí ("ningún umbral entra ni se mueve sin su par de pruebas de frontera") se
+escribió en `CONTRIBUTING.md`, que es donde la va a leer quien contribuya.
+
+### Problemas encontrados y cómo se resolvieron
+
+**El `cd` de `CLAUDE.md` no funcionaba desde la raíz del repositorio.** El primer
+comando de la sesión falló con `can't open file manage.py`. La línea decía
+`cd Registro_Post_Quirurgico/Registro_Post_Quirurgico`, que solo es correcta si se
+ejecuta desde la carpeta *padre* del repositorio; desde la raíz sobra un nivel.
+Era el hallazgo **REPO-14** de la auditoría, trazado pero no reproducido — y se
+reprodujo solo, en el primer minuto. Corregido, con la explicación de por qué
+estaba mal.
+
+**El `python` del PATH no es el del proyecto.** El segundo intento falló con
+`No module named ruff`: el `python` global de la máquina es un 3.10 sin Django ni
+`ruff`, y el del proyecto es el 3.13 de `.venv/`. No estaba escrito en ningún
+sitio, y el síntoma —módulos que faltan— parece un problema del proyecto cuando
+no lo es. Añadido a `CLAUDE.md`, al lado de los comandos.
+
+**El índice de `decisiones_correccion_auditoria.md` se había quedado en D15.** El
+cuerpo del documento tiene D16, D17 y D18 desde el 07/09/2026, pero la tabla de
+arriba —que es lo primero que se lee— no las listaba. Añadidas.
+
+**El primer intento de escribir las pruebas se hizo con un heredoc del shell y
+murió a medias.** No dejó archivo corrupto porque escribía en el borrador, pero
+costó una vuelta. Lo que siguió se hizo con inserciones controladas desde Python,
+verificando el punto de inserción y los saltos de línea antes de escribir — los
+archivos son CRLF y `git diff --check` los mira.
+
+### Qué queda pendiente
+
+**Este loop está cerrado.** Lo siguiente del plan acordado el 07/09/2026, en
+orden:
+
+1. **Los bugs que tocan al paciente:** el parser de temperatura que trunca
+   (`379` → 37,0, sin alerta), los validadores de rango, una palabra de auxilio
+   que funcione en todos los estados, el turno de la tarde que el bot niega, el
+   tablero que dice "todo bajo control" con una ALTA en pantalla, el
+   consentimiento revocado que no detiene la generación de datos, y el formulario
+   público que recoge datos de salud sin autorización de habeas data (SEC-03).
+2. **Los 34 hallazgos de criterio del linter**, diferidos a propósito hasta que
+   la red aguantara. **Ya aguanta**, y además casi todos están en `tests/`, que es
+   lo que este loop acaba de reescribir.
+3. **Los dos PR de Dependabot que se dejaron esperando** (#23 `django` menor y
+   #26 `django-axes` mayor). La razón para esperar era que la suite no protegía
+   siete de las ocho familias de reglas; esa razón ya no aplica para el salto de
+   Django. Para `django-axes` sigue en pie: **el que lo bloquea es SEC-02**, y no
+   hay una prueba que fije ese comportamiento.
+
+**Sigue sin haber producción** (venció Railway el 07/08/2026): la verificación de
+cualquier cambio es la suite local más la CI.
+
+**Las tres decisiones de grupo siguen fuera de la mesa técnica:** el canal del
+paciente, repositorio público o privado, y avisarle al médico de sus datos en la
+historia.

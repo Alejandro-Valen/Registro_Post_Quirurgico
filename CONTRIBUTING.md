@@ -103,6 +103,13 @@ trabajo, no una formalidad.
 - **Excepciones a un linter:** con su razón escrita al lado, en la misma línea,
   no silenciadas desde la configuración. Una lista de excepciones sin razones es
   una lista que crece hasta que no protege nada.
+- **Umbrales clínicos: siempre en pareja.** Un umbral se prueba con el valor que
+  dispara **y con el inmediatamente inferior, que no debe disparar**. Sin la
+  mitad de abajo, mover el umbral no rompe nada y la prueba solo describe el
+  código en vez de fijar la regla. El modelo a copiar es
+  `FronterasDeUmbralTests` en `tests/test_alert_engine.py`, y el arnés que
+  comprueba que esas pruebas pueden caer es
+  `proceso/verificaciones/2026-09-08_verificacion_umbrales.py`.
 
 ## Si trabajas con un agente de código
 

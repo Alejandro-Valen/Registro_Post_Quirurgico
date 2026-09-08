@@ -120,9 +120,10 @@ anotada para después.
 - **Rama de despliegue:** `produccion` — la miran los tres servicios de Railway.
   Nadie trabaja aquí; solo recibe merges desde `Desarrollo`. Ver
   `docs/railway_deploy.md` §4.1.
-- **Rama activa de trabajo:** ninguna. `arnes-verificable` (PR #18) y
-  `repositorio-profesional` (PR #19) se mergearon el 07/09/2026; la siguiente se
-  abre desde `Desarrollo`.
+- **Rama activa de trabajo:** `umbrales-frontera` (08/09/2026), con el loop de
+  umbrales terminado y pendiente de PR hacia `Desarrollo`. Las anteriores,
+  `arnes-verificable` (PR #18) y `repositorio-profesional` (PR #19), se
+  mergearon el 07/09/2026.
 - **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **nueve
   comprobaciones** en cada PR hacia `Desarrollo` y hacia `produccion`, y en cada
   push a esas dos ramas: la suite, `check`, `makemigrations --check`,
@@ -237,6 +238,7 @@ evidencia disponible, no decisiones ya tomadas.
 | Auditoría de seis frentes | Seguridad, datos, backend clínico, frontend, calidad de pruebas y repositorio, en paralelo y ciegas entre sí | ✅ **Ejecutada** (07/09/2026). **101 hallazgos, 15 de severidad ALTA.** Cuatro reproducidos ejecutando código, incluido un sabotaje que dejó las 344 pruebas en verde con el motor clínico roto |
 | Loop del arnés · D16-D17 | Que las guardias automáticas puedan fallar, y retirar la identidad de terceros | ✅ **Completado y mergeado** (07/09/2026, PR #18, merge commit `5f51831`). CI de **siete a nueve** comprobaciones; `check --deploy` recupera la capacidad de fallar; identidad del médico fuera del árbol. **344 tests OK** |
 | Loop del repositorio · D18 | Separar producto de cuaderno de trabajo, y que el repositorio se pueda instalar | ✅ **Completado y mergeado** (07/09/2026, PR #19, merge commit `591cd7c`). `README`, `LICENSE`, `CONTRIBUTING`, `SECURITY`, `pyproject.toml` en vez de tres `requirements`, plantillas de `.github/`, `CODEOWNERS`, `.mailmap`, y el proceso movido a `proceso/`. **344 tests OK** |
+| Loop de umbrales | Anclar los umbrales clínicos con pruebas de frontera | ✅ **Completado** (08/09/2026, rama `umbrales-frontera`). **22 pruebas nuevas** —el valor que dispara y el inmediatamente inferior— y un arnés re-ejecutable de **21 sabotajes, los 21 atrapados**. Cierra TEST-01 a TEST-05. **366 tests OK** |
 
 **Qué pasó (22/07/2026).** Una auditoría independiente sobre `fbf62a8` confirmó
 las cuatro cifras que se reportaban (280 tests, `check --deploy`, `pip-audit`,
@@ -292,35 +294,35 @@ La topología, las variables y los gotchas siguen en `docs/railway_deploy.md`, q
 pasó de describir el presente a ser el **guion para reconstruir el despliegue**
 cuando haya plan de pago. No se borró nada de ahí a propósito.
 
-**Próximo paso exacto (al retomar): anclar los umbrales clínicos.** Es el
-siguiente loop del plan acordado el 07/09/2026, y ya no es un candidato entre
-varios: la auditoría de ese día lo convirtió en el trabajo obligado.
+**Los umbrales clínicos ya están anclados** (08/09/2026, rama
+`umbrales-frontera`). El loop añadió **22 pruebas de frontera** —por cada umbral,
+el valor que dispara y el inmediatamente inferior que no— y un arnés
+re-ejecutable, `proceso/verificaciones/2026-09-08_verificacion_umbrales.py`, que
+rompe el motor a propósito una constante a la vez: **21 sabotajes, los 21
+atrapados**, incluido el del drenaje fecaloide que el día anterior había dejado
+las 344 pruebas en verde con el motor roto. Suite en **366 tests OK**. Cierra los
+hallazgos **TEST-01 a TEST-05**.
 
-**Por qué.** Un sabotaje ejecutado —quitar `'fecaloide'` de `DRENAJES_ALTA` en
-`alert_engine.py:16`— dejó **las 344 pruebas en verde** con el motor clínico
-roto. `fecaloide` no aparece ni una vez en los once archivos de prueba, y lo
-mismo pasa con `dolor_eva=7` y con `episodios_nauseas=3`. De 18 sabotajes de una
-línea propuestos por la auditoría, **14 pasarían sin que caiga nada**.
+De ahí sale una regla que hereda `CONTRIBUTING.md` y que conviene no olvidar:
+**ningún umbral clínico entra ni se mueve sin su par de pruebas de frontera**, y
+el par no vale hasta que se ha visto caer.
 
-**Qué hay que hacer.** Aplicar a las siete familias de reglas restantes el patrón
-que la **Regla 8 (frecuencia cardíaca)** ya tiene en casa: para cada umbral, el
-valor que dispara **y el valor inmediatamente inferior, que no debe disparar**.
-Son unas 25 pruebas. Empezar por los cinco sabotajes de más peso: fecaloide, las
-cinco opciones del menú de drenaje en el bot, temperatura 37,8, náuseas 3, y
-EVA 7.
+**Próximo paso exacto (al retomar): los bugs que tocan al paciente.** Es el
+siguiente loop del plan acordado el 07/09/2026, y ahora sí hay red debajo para
+hacerlo. Son, en el orden en que los listó la auditoría: el **parser de
+temperatura** que trunca en silencio (`379` → 37,0, sin alerta — DB-02), los
+**validadores de rango** que no existen en todo el proyecto (DB-01), una
+**palabra de auxilio** que funcione en todos los estados del bot (UX-B01), el
+**turno de la tarde que el bot niega** (BE-01), el **tablero que dice "todo bajo
+control"** con una ALTA sin resolver en pantalla (UX-P01), el **consentimiento
+revocado** que no detiene la generación de datos, y el **formulario público que
+recoge datos de salud sin autorización de habeas data** (SEC-03, detallado en
+`SECURITY.md`).
 
-**La regla que hace útil este loop:** cada prueba nueva se verifica aplicando su
-sabotaje **antes** de darla por buena. Una prueba de frontera escrita sin
-comprobar que cae es exactamente el error que la auditoría acaba de encontrar
-catorce veces.
-
-Después vienen, en orden: **los bugs que tocan al paciente** (parser de
-temperatura, validadores de rango, palabra de auxilio, el turno de la tarde que
-el bot niega, el tablero que miente, el consentimiento revocado, y el
-**formulario público que recoge datos de salud sin autorización de habeas
-data** — SEC-03, detallado en `SECURITY.md`), y **los 34
-hallazgos de criterio del linter**, diferidos a propósito hasta que la red
-aguante.
+Después, **los 34 hallazgos de criterio del linter**. Estaban diferidos a
+propósito «hasta que la red aguante»: **ya aguanta**. Y pesa otra razón para no
+dejarlos más: casi todos están en `tests/`, que es lo que este loop acaba de
+reescribir.
 
 **Lo que NO se decide en sesión técnica:** el canal del paciente, si el
 repositorio se hace público, y avisarle al médico de sus datos en la historia.
@@ -564,8 +566,13 @@ con información clínica real, inventada o supuesta, ni cambiar reglas del
 ## Comandos Esenciales
 
 ```bash
-# Posición correcta para todos los comandos manage.py
-cd Registro_Post_Quirurgico/Registro_Post_Quirurgico
+# Posición correcta para todos los comandos manage.py: la carpeta que
+# contiene manage.py, un nivel por debajo de la raíz del repositorio.
+# La ruta se escribe DESDE LA RAÍZ del repositorio — hasta el 08/09/2026
+# esta línea decía `Registro_Post_Quirurgico/Registro_Post_Quirurgico`,
+# que solo funciona si se ejecuta desde la carpeta padre del repositorio y
+# falla desde la raíz. Era el hallazgo REPO-14 de la auditoría del 07/09.
+cd Registro_Post_Quirurgico          # desde la raíz del repositorio
 
 python manage.py check                 # verificar sin errores
 python manage.py makemigrations        # después de cambiar models.py
@@ -581,6 +588,13 @@ python manage.py test signos_sintomas.tests.test_bot.BotWhatsAppTests --noinput
 
 `--noinput` evita quedarse esperando el prompt de borrado si una corrida
 anterior murió y dejó la base de pruebas a medio crear.
+
+**El intérprete es el del entorno virtual, `.venv/`, no el `python` del
+PATH.** En la máquina del Arquitecto el `python` global es un 3.10 sin
+Django ni `ruff` instalados, así que un comando lanzado sin activar el
+entorno falla con `No module named ...` o `can't open file manage.py` y
+parece un problema del proyecto cuando no lo es. Activarlo, o invocar
+`.venv/Scripts/python.exe` por ruta.
 
 **Antes de abrir un PR, la suite completa igual** — correr solo un tema es para
 iterar rápido, no para dar algo por bueno. La CI corre la completa de todos

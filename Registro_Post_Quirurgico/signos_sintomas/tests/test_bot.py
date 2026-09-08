@@ -314,6 +314,53 @@ class BotWhatsAppTests(TestCase):
         self.assertEqual(segundo.estado, CheckInProgramado.ESTADO_PENDIENTE)
         self.assertIsNone(segundo.registro_id)
 
+    # --- Menu de aspecto del drenaje: las cinco opciones, una por una ---
+    #
+    # Hasta el 08/09/2026 solo se recorrian la "1" (seroso) y la "3" (turbio).
+    # El sabotaje `'4': 'purulento'` -> `'seroso'` en `_parse_aspecto` pasaba
+    # sin que cayera nada: el paciente marcaba purulento, el sistema guardaba
+    # "dentro de lo esperado" y el medico no veia ninguna alerta ALTA.
+    #
+    # Se prueba el flujo completo y no `_parse_aspecto` por separado: lo que
+    # importa clinicamente no es que la funcion traduzca, sino que lo traducido
+    # llegue hasta `RegistroDiario`.
+
+    def _aspecto_registrado(self, opcion):
+        self._crear_paciente()
+        self._completar_flujo(aspecto=opcion)
+        return RegistroDiario.objects.get().aspecto_drenaje
+
+    def test_menu_drenaje_opcion_1_registra_seroso(self):
+        self.assertEqual(self._aspecto_registrado("1"), "seroso")
+
+    def test_menu_drenaje_opcion_2_registra_hematico(self):
+        self.assertEqual(self._aspecto_registrado("2"), "hematico")
+
+    def test_menu_drenaje_opcion_3_registra_turbio(self):
+        self.assertEqual(self._aspecto_registrado("3"), "turbio")
+
+    def test_menu_drenaje_opcion_4_registra_purulento(self):
+        self.assertEqual(self._aspecto_registrado("4"), "purulento")
+
+    def test_menu_drenaje_opcion_5_registra_fecaloide(self):
+        self.assertEqual(self._aspecto_registrado("5"), "fecaloide")
+
+    def test_menu_drenaje_fecaloide_llega_hasta_la_alerta_alta(self):
+        """Cierra la cadena completa del peor signo que captura el sistema.
+
+        El paciente marca "5" en el menu; el bot debe traducirlo a fecaloide,
+        el motor generar FUGA_ANASTOMOTICA/ALTA, y el paciente recibir el
+        cierre de severidad ALTA sin que se le diga por que. Las pruebas del
+        motor fijan la regla y las de arriba la traduccion: esta fija que las
+        dos esten conectadas.
+        """
+        self._crear_paciente()
+        respuesta = self._completar_flujo(aspecto="5")
+        alerta = Alerta.objects.get(tipo="FUGA_ANASTOMOTICA")
+        self.assertEqual(alerta.severidad, "ALTA")
+        self.assertEqual(respuesta, bot.MSG_CIERRE_ALERTA_ALTA)
+
+
 @freeze_time(ANCLA_MEDIANOCHE)
 class BotMensajeCierreAlertaTests(TestCase):
     """Bloque B — mensaje de cierre del bot según severidad de las alertas

@@ -37,6 +37,9 @@ la entrada de `proceso/BITACORA.md` del 22/07/2026 (informe y hallazgos).
 | [D13](#d13) | La autenticidad del webhook no depende del entorno | cierre 3 | D | Aceptada |
 | [D14](#d14) | Aislamiento entre las tareas de un mismo cron | cierre (d) | E | **Implementada** (06/08/2026) |
 | [D15](#d15) | Qué reescribe `crear_medico` en cada arranque | revisión PR 8 | — | **Implementada** (12/08/2026) |
+| [D16](#d16) | Toda guardia automática debe poder ponerse en rojo | SEC-01 | Arnés | **Implementada** (07/09/2026) |
+| [D17](#d17) | Qué hacer con los datos personales que ya están en la historia | REPO-01 | Arnés | Aceptada — **historia pendiente** |
+| [D18](#d18) | Qué es producto y qué es cuaderno de trabajo | REPO-02/03 | Repositorio | **Implementada** (07/09/2026) |
 
 Los hallazgos 2, 6, 7, 8, 9, 11 y 14 son correcciones técnicas sin decisión de
 producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
@@ -1578,6 +1581,27 @@ fuera el orden de imports, las f-strings y las capturas a ciegas.
 **Por qué se escribe el porqué de cada regla ignorada.** Una lista de excepciones
 sin razones es una lista que crece hasta que no protege nada. El precedente está
 en `.gitleaksignore`, cuya única entrada lleva cuatro razones comprobables.
+
+### Extensión del 08/09/2026 — la suite clínica también es una guardia
+
+El loop de umbrales aplicó esta misma decisión al sitio donde más dolía: las
+pruebas del motor clínico. Se añadieron **22 pruebas de frontera** —por cada
+umbral, el valor que dispara y el inmediatamente inferior que no— y ninguna se
+dio por buena sin verla caer con su sabotaje aplicado. El arnés que lo
+comprueba, y que se puede volver a correr, es
+`proceso/verificaciones/2026-09-08_verificacion_umbrales.py`: **21 sabotajes,
+los 21 atrapados.**
+
+De aquí sale la regla operativa que hereda `CONTRIBUTING.md`: **ningún umbral
+clínico entra ni se mueve sin su par de pruebas de frontera**, y el par no vale
+hasta que se ha visto caer.
+
+Sobre la cifra que se citaba antes —«14 de los 18 sabotajes de la auditoría
+habrían pasado»—: era una **predicción de la auditoría, no una medición**, y la
+lista de esos 18 nunca se escribió (referencia circular entre el guion y el
+informe, detectada el 08/09/2026). Lo comprobado, y reproducible, es otra cosa y
+es suficiente: **el sabotaje del drenaje fecaloide se ejecutó de verdad y dejó
+las 344 pruebas en verde**, y hoy los 21 sabotajes del arnés caen todos.
 
 ---
 

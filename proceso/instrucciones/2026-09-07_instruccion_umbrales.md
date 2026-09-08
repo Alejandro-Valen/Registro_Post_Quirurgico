@@ -103,8 +103,15 @@ Después, el resto de las fronteras: 4e y 7c con 3 días, 5b con Δ=2, la ventan
 POD 3-5 completa, y el corte de conteo de D8 (día-1 / hueco / día+1) para las
 reglas 1b, 3, 4 y 6.
 
-Son unas **25 pruebas**. La lista completa de los 18 sabotajes está en el informe
-de la auditoría de pruebas.
+Son unas **25 pruebas**.
+
+> **Nota del 08/09/2026, al cerrar el loop.** Esta línea decía que «la lista
+> completa de los 18 sabotajes está en el informe de la auditoría de pruebas», y
+> el informe decía que estaba aquí. **No estaba en ninguno de los dos:** los trece
+> que no son la tabla de arriba se perdieron con la sesión que los propuso. El
+> loop se ejecutó con **21 sabotajes de diseño propio**, que sí quedan escritos y
+> se pueden volver a correr:
+> `proceso/verificaciones/2026-09-08_verificacion_umbrales.py`.
 
 ## La regla que hace útil este loop
 
