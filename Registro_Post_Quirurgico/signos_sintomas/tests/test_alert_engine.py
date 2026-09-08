@@ -1440,7 +1440,11 @@ class FronterasDeUmbralTests(TestCase):
 
         Las dos ultimas parejas son las fronteras ENTRE ventanas: el mismo EVA
         cambia de severidad al cruzar de POD 2 a POD 3 y de POD 5 a POD 6, que
-        es lo que hace util tener tres ventanas en vez de una.
+        es lo que hace util tener tres ventanas en vez de una. **Esos cuatro
+        casos repiten a proposito** otros ya presentes en los bloques de arriba
+        (30 casos, 26 unicos): puestos en pareja se lee de un golpe que un dia
+        de diferencia cambia la severidad, y separados no se ve. No anaden
+        cobertura; anaden el contraste.
         """
         casos = [
             # POD 0-2 -> BAJA 5 / MEDIA 7 / ALTA 9

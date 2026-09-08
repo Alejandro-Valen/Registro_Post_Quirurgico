@@ -293,9 +293,18 @@ justo las dos que pasaron por una auditoría previa.
 | TEST-11 | Escenarios multidía fuera del ancla de reloj (PLAUSIBLE, no confirmado) | ⬜ |
 | TEST-12 | La prueba de "no re-notificar en recurrencia" pasa por un motivo colateral | ⬜ |
 
-**Los 18 sabotajes propuestos**, con la predicción de si la suite los atraparía,
-están en el guion `proceso/instrucciones/2026-09-07_instruccion_umbrales.md`.
-**14 de 18 pasarían.**
+**Los 18 sabotajes propuestos nunca se escribieron.** Esta línea decía que
+estaban en el guion `proceso/instrucciones/2026-09-07_instruccion_umbrales.md`,
+y el guion decía que estaban aquí: **una referencia circular**, detectada el
+08/09/2026 al revisar el PR del loop de umbrales. El guion sí conserva los
+**cinco de más peso**, con su prueba correspondiente; los otros trece se
+perdieron con la sesión de la auditoría.
+
+Consecuencia que conviene decir clara: la cifra **"14 de 18 pasarían"** es una
+predicción **no verificable desde el repositorio**. Lo que sí se puede
+reproducir, y sustituye a esa lista, son los **21 sabotajes ejecutables** del
+arnés `proceso/verificaciones/2026-09-08_verificacion_umbrales.py` — los 21
+atrapados el 08/09/2026, incluido el del drenaje fecaloide que originó todo.
 
 ---
 

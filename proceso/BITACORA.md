@@ -5210,8 +5210,10 @@ Las 344 pruebas quedaron **en verde** con el motor clínico roto. Con esa línea
 así, un paciente puede reportar contenido intestinal saliendo por el drenaje —una
 fuga anastomótica franca, el peor signo que captura el sistema— y no se genera
 ninguna alerta. `fecaloide` no aparecía ni una vez en los once archivos de
-prueba; tampoco `dolor_eva=7` ni `episodios_nauseas=3`. De 18 sabotajes de una
-línea que propuso la auditoría, **14 pasarían sin que cayera nada**.
+prueba; tampoco `dolor_eva=7` ni `episodios_nauseas=3`. La auditoría propuso 18
+sabotajes de una línea y **predijo que 14 pasarían sin que cayera nada** — una
+predicción, no una medición, y de la que solo sobrevivieron por escrito los cinco
+de más peso (ver "Problemas encontrados").
 
 La causa no eran pruebas descuidadas sueltas, sino un patrón: **la ausencia
 sistemática de la frontera inferior**. De las 30 severidades del sistema, 24

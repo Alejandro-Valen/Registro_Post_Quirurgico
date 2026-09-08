@@ -19,9 +19,15 @@ El 07/09/2026 se ejecuto este sabotaje sobre `alert_engine.py`:
 y las 344 pruebas de entonces quedaron **en verde** con el motor roto: un
 paciente podia reportar contenido intestinal saliendo por el drenaje —una fuga
 anastomotica franca— sin que se generara ninguna alerta. La auditoria de calidad
-de pruebas propuso 18 sabotajes de una linea y predijo que **14 pasarian**.
+de pruebas propuso 18 sabotajes de una linea y predijo que **14 pasarian**. De
+esos 18 solo se conservaron por escrito los cinco de mas peso: la lista completa
+se perdio con la sesion que la produjo (el guion y el informe se citaban el uno
+al otro sin que estuviera en ninguno; detectado el 08/09/2026).
 
-Este script convierte esa prediccion en una comprobacion ejecutable.
+Por eso este script no "comprueba la prediccion" de la auditoria: la SUSTITUYE.
+Los 21 sabotajes de abajo son de diseno propio, cubren las ocho familias de
+reglas, e --a diferencia de aquella lista-- quedan escritos y se pueden volver a
+correr.
 
 COMO SE USA
 ===========

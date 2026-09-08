@@ -1594,8 +1594,14 @@ los 21 atrapados.**
 
 De aquí sale la regla operativa que hereda `CONTRIBUTING.md`: **ningún umbral
 clínico entra ni se mueve sin su par de pruebas de frontera**, y el par no vale
-hasta que se ha visto caer. Antes de este loop, 14 de los 18 sabotajes que
-propuso la auditoría habrían pasado con la suite en verde.
+hasta que se ha visto caer.
+
+Sobre la cifra que se citaba antes —«14 de los 18 sabotajes de la auditoría
+habrían pasado»—: era una **predicción de la auditoría, no una medición**, y la
+lista de esos 18 nunca se escribió (referencia circular entre el guion y el
+informe, detectada el 08/09/2026). Lo comprobado, y reproducible, es otra cosa y
+es suficiente: **el sabotaje del drenaje fecaloide se ejecutó de verdad y dejó
+las 344 pruebas en verde**, y hoy los 21 sabotajes del arnés caen todos.
 
 ---
 
