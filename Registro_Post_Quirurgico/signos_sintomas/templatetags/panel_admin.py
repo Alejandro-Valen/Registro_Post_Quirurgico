@@ -135,6 +135,34 @@ def panel_triage(context):
             'veces':       a.veces,
         })
 
+    # UX-P01 — el tablero decía "Sin alertas pendientes. Todo bajo control."
+    # mientras su propio KPI mostraba una ALTA sin resolver. Ocurría SIEMPRE que
+    # la única ALTA era de tipo SILENCIO, es decir con el paciente que lleva dos
+    # días sin dar señales: exactamente cuando menos se puede decir que todo
+    # está bajo control.
+    #
+    # La causa es que la lista excluye `tipo='SILENCIO'` (es ausencia de datos,
+    # no un síntoma — ficha D1) y el KPI no. La exclusión se mantiene, porque el
+    # criterio clínico sigue siendo correcto; lo que cambia es que el estado
+    # vacío deja de mentir: ahora sabe cuántas alertas quedan fuera de la lista
+    # y lo dice en vez de tranquilizar.
+    silencios_pendientes = pendientes.filter(tipo='SILENCIO').count()
+
+    # D22 — pacientes cuyo seguimiento se detuvo porque retiraron el
+    # consentimiento. Se muestran a propósito: cumplir habeas data no puede
+    # producir un punto ciego. Un paciente que desaparece del panel sin dejar
+    # rastro es el mismo fallo que la ficha D12 combatió.
+    detenidos = pacientes.filter(activo=True, consentimiento_informado=False)
+    seguimiento_detenido = [
+        {
+            'nombre':      p.nombre_completo,
+            'paciente_id': p.id,
+            'pod':         _pod(p, hoy),
+        }
+        for p in detenidos[:8]
+    ]
+    total_detenidos = detenidos.count()
+
     # Silencios de hoy.
     silencios = [
         {
@@ -184,6 +212,9 @@ def panel_triage(context):
         'atencion': atencion,
         'total_atencion': len(pend),
         'silencios': silencios,
+        'silencios_pendientes': silencios_pendientes,
+        'seguimiento_detenido': seguimiento_detenido,
+        'total_detenidos': total_detenidos,
         'contactos': contactos,
         'total_mensajes_contacto': total_mensajes_contacto,
         'notificaciones_fallidas': fallidas.count(),

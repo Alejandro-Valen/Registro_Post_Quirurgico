@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
@@ -118,7 +119,8 @@ class ContactoTests(TestCase):
     def test_contacto_post_valido_crea_mensaje(self):
         resp = self.client.post(
             reverse("contacto"),
-            {"nombre": "Ana Prueba", "telefono": "+57 300 000 0000", "mensaje": "Hola"},
+            {"nombre": "Ana Prueba", "telefono": "+57 300 000 0000", "mensaje": "Hola",
+             "autorizacion_datos": "1"},
         )
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp.context["mensaje_enviado"])
@@ -135,7 +137,8 @@ class ContactoTests(TestCase):
 
         self.client.post(
             reverse('contacto'),
-            {'nombre': 'Ana', 'telefono': '+573000000001', 'mensaje': 'Hola'},
+            {'nombre': 'Ana', 'telefono': '+573000000001', 'mensaje': 'Hola',
+             'autorizacion_datos': '1'},
         )
 
         self.assertEqual(
@@ -147,7 +150,8 @@ class ContactoTests(TestCase):
     def test_contacto_configuracion_invalida_falla_cerrado(self):
         self.client.post(
             reverse('contacto'),
-            {'nombre': 'Ana', 'telefono': '+573000000001', 'mensaje': 'Hola'},
+            {'nombre': 'Ana', 'telefono': '+573000000001', 'mensaje': 'Hola',
+             'autorizacion_datos': '1'},
         )
 
         self.assertIsNone(MensajeContacto.objects.get().medico_destinatario)
@@ -303,3 +307,86 @@ class MensajeContactoAdminTests(TestCase):
 
         url = f'/admin/home/mensajecontacto/{sin_asignar.pk}/change/'
         self.assertEqual(self.client.get(url).status_code, 200)
+
+
+class AutorizacionHabeasDataTests(TestCase):
+    """SEC-03 / D23 — el formulario público no guarda nada sin autorización.
+
+    Reproducido el 08/09/2026: un POST anónimo guardaba *"Tengo fiebre de 39 y
+    el drenaje salió con pus desde ayer"* sin casilla de autorización, sin
+    finalidad declarada, sin responsable identificado y sin retención. El
+    artículo 6 de la Ley 1581/2012 exige autorización **explícita** para datos
+    sensibles, y los de salud lo son.
+
+    La comprobación es de SERVIDOR y no solo `required` en el HTML: un
+    `required` se salta con un POST directo, que es exactamente como se
+    reprodujo el hallazgo.
+    """
+
+    DATOS = {
+        'nombre': 'Persona Anónima',
+        'telefono': '+573001110000',
+        'mensaje': 'Quiero información sobre el programa de seguimiento.',
+    }
+
+    def setUp(self):
+        # El rate limit del formulario vive en el cache, y el cache NO se
+        # limpia entre pruebas: sin esto, los POST de esta clase se comen el
+        # cupo por hora de la IP de pruebas y hacen caer a `ContactoTests`,
+        # que corre después. Pasó de verdad al añadir estas pruebas.
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def test_sin_la_casilla_no_se_guarda_nada(self):
+        respuesta = self.client.post(reverse('contacto'), self.DATOS)
+        self.assertEqual(MensajeContacto.objects.count(), 0)
+        self.assertTrue(respuesta.context['error_autorizacion'])
+        self.assertFalse(respuesta.context['mensaje_enviado'])
+
+    def test_con_la_casilla_se_guarda_y_queda_la_prueba(self):
+        """La otra dirección. Y la autorización hay que poder DEMOSTRARLA
+        después, no solo recogerla: por eso se guarda su fecha."""
+        respuesta = self.client.post(
+            reverse('contacto'), {**self.DATOS, 'autorizacion_datos': '1'})
+        self.assertTrue(respuesta.context['mensaje_enviado'])
+        mensaje = MensajeContacto.objects.get()
+        self.assertTrue(mensaje.autorizacion_datos)
+        self.assertIsNotNone(mensaje.fecha_autorizacion)
+
+    def test_la_casilla_no_viene_marcada_por_defecto(self):
+        """Una casilla premarcada no es autorización: es un descuido del
+        usuario. El Decreto 1377/2013 lo dice sin rodeos."""
+        html = self.client.get(reverse('contacto')).content.decode()
+        self.assertIn('name="autorizacion_datos"', html)
+        marca = html.split('name="autorizacion_datos"')[1].split('>')[0]
+        self.assertNotIn('checked', marca)
+
+    def test_el_formulario_enlaza_la_politica_de_tratamiento(self):
+        """Pedir permiso sin decir para qué ni ante quién no es autorización
+        informada."""
+        html = self.client.get(reverse('contacto')).content.decode()
+        self.assertIn(reverse('politica_datos'), html)
+
+    def test_el_formulario_ya_no_invita_a_contar_sintomas(self):
+        """Recoger con permiso es legal; recoger menos es mejor.
+
+        El marcador decía "Cuéntanos brevemente qué necesitas…", que en una web
+        de seguimiento postoperatorio es una invitación directa a escribir el
+        estado de salud — y este canal no tiene ni el control de acceso ni la
+        retención del resto del sistema.
+        """
+        html = self.client.get(reverse('contacto')).content.decode()
+        self.assertNotIn('Cuéntanos brevemente qué necesitas', html)
+        plano = ' '.join(html.split())
+        self.assertIn('no es un canal de atención médica', plano)
+
+    def test_la_politica_de_tratamiento_responde(self):
+        respuesta = self.client.get(reverse('politica_datos'))
+        self.assertEqual(respuesta.status_code, 200)
+
+    def test_la_politica_no_inventa_al_responsable(self):
+        """Identificar mal al responsable del tratamiento es peor que declararlo
+        pendiente. Los datos que faltan son los mismos corchetes de P-12."""
+        html = self.client.get(reverse('politica_datos')).content.decode()
+        self.assertIn('[por definir]', html)
+        self.assertIn('Documento en preparación', html)

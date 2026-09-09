@@ -5,7 +5,9 @@ Extraido de signos_sintomas/tests.py sin cambiar una sola prueba
 
 from datetime import timedelta
 from decimal import Decimal
+from io import StringIO
 
+from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 from freezegun import freeze_time
@@ -118,7 +120,7 @@ class BotWhatsAppTests(TestCase):
     def test_temperatura_invalida_reintenta(self):
         self._crear_paciente()
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
-        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "no sé")
+        respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "creo que tengo fiebre")
         self.assertEqual(respuesta, bot.MSG_REINTENTO_TEMPERATURA)
         conv = ConversacionWhatsApp.objects.get()
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_TEMPERATURA)
@@ -593,7 +595,10 @@ class BotAbandonoConversacionTests(TestCase):
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")  # recibe aviso
         respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "37.2")  # temperatura
 
-        self.assertEqual(respuesta, bot.MSG_PREGUNTA_DOLOR)
+        # Desde el 08/09/2026 (D19) la pregunta 2 va precedida del eco de la
+        # temperatura anotada, para que el paciente pueda detectar un dedazo.
+        self.assertIn("37.2", respuesta)
+        self.assertTrue(respuesta.endswith(bot.MSG_PREGUNTA_DOLOR))
         conv.refresh_from_db()
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_DOLOR)
         self.assertEqual(conv.temp_temperatura, Decimal("37.2"))
@@ -696,3 +701,294 @@ class BotEstadoEvaluacionMotorTests(TestCase):
             RegistroDiario.EVALUACION_COMPLETADA,
         )
         self.assertEqual(registro.ultimo_error_evaluacion_alertas, '')
+
+
+@freeze_time(ANCLA_MEDIANOCHE)
+class BugsDelPacienteTests(TestCase):
+    """Regresión de los bugs del bot que tocaban al paciente (loop 08/09/2026).
+
+    Los ocho hallazgos se **reprodujeron ejecutando código** antes de tocar
+    nada (`proceso/verificaciones/2026-09-08_reproduccion_bugs_paciente.py`), y
+    cada prueba de aquí se verificó revirtiendo su arreglo y viéndola caer
+    (`proceso/verificaciones/2026-09-08_verificacion_bugs_paciente.py`).
+
+    Fichas: **D19** (temperatura ambigua), **D20** (el dato que el paciente no
+    puede dar), **D21** (palabra de auxilio). Más BE-01 y DB-01.
+    """
+
+    TELEFONO = '+573009990001'
+    WA = 'whatsapp:+573009990001'
+
+    def setUp(self):
+        self.paciente = Paciente.objects.create(
+            medico_responsable=medico_de_pruebas(),
+            nombre_completo='Paciente Bugs',
+            telefono_whatsapp=self.TELEFONO,
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),
+            consentimiento_informado=True,
+        )
+
+    def _checkin(self, orden=1, etiqueta=None, horas_atras=0):
+        return CheckInProgramado.objects.create(
+            paciente=self.paciente,
+            fecha_dia=timezone.localdate(),
+            orden=orden,
+            etiqueta=etiqueta or CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now() - timedelta(hours=horas_atras),
+        )
+
+    def _flujo(self, temperatura='37.0', dolor='3'):
+        """Recorre el cuestionario entero y devuelve la respuesta final."""
+        def env(t):
+            return bot.procesar_mensaje(self.WA, t)
+        env('hola')
+        env(temperatura)
+        env(dolor)
+        env('no')          # sin drenaje
+        env('si, 0')       # gases / náuseas
+        env('nada')        # hinchazón
+        env('78')          # frecuencia cardíaca
+        env('16')          # frecuencia respiratoria
+        return env('si')   # tolerancia a líquidos
+
+    # --- D19: temperatura ambigua ---
+
+    def test_temperatura_sin_separador_se_rechaza(self):
+        """`379` no puede volver a entrar como 37,0 (DB-02).
+
+        Era el bug más silencioso del sistema: el paciente con 37,9 de fiebre
+        quedaba registrado en 37,0, sin alerta y con el mensaje de cierre
+        normal. Ni él ni el médico podían notarlo, porque 37,0 es un valor
+        perfectamente creíble en un postoperatorio.
+        """
+        for ambigua in ('379', '37 9', '375', '3790'):
+            with self.subTest(entrada=ambigua):
+                self.assertIsNone(bot._parse_temperatura(ambigua))
+
+    def test_temperatura_bien_escrita_se_acepta(self):
+        """La otra dirección: endurecer el parser no puede rechazar lo válido."""
+        casos = {
+            '37.9': Decimal('37.9'),
+            '37,9': Decimal('37.9'),
+            '38': Decimal('38'),
+            'tengo 37.5 grados': Decimal('37.5'),
+            '  36.6  ': Decimal('36.6'),
+        }
+        for entrada, esperada in casos.items():
+            with self.subTest(entrada=entrada):
+                self.assertEqual(bot._parse_temperatura(entrada), esperada)
+
+    def test_temperatura_ambigua_pide_de_nuevo_y_no_crea_registro(self):
+        self._checkin()
+        bot.procesar_mensaje(self.WA, 'hola')
+        respuesta = bot.procesar_mensaje(self.WA, '379')
+        self.assertEqual(respuesta, bot.MSG_REINTENTO_TEMPERATURA)
+        self.assertEqual(RegistroDiario.objects.count(), 0)
+
+    def test_el_bot_devuelve_la_temperatura_que_anoto(self):
+        """UX-B05: el bot nunca decía lo que había entendido.
+
+        Protege contra lo que el rechazo no cubre: el **dedazo válido**. Quien
+        quiso escribir 37.5 y escribió 38.5 pasa todos los filtros, porque es
+        una temperatura perfectamente posible, y hasta el 08/09/2026 no tenía
+        forma de enterarse. El médico tampoco.
+        """
+        self._checkin()
+        bot.procesar_mensaje(self.WA, 'hola')
+        respuesta = bot.procesar_mensaje(self.WA, '37.5')
+        self.assertIn('37.5', respuesta)
+        self.assertIn('anoté', respuesta.lower())
+
+    def test_el_eco_va_antes_de_que_exista_ninguna_alerta(self):
+        """Y por eso no puede revelar ninguna clasificación clínica.
+
+        El primer sitio donde se puso el eco fue el mensaje de cierre, y ahí
+        chocaba con la decisión del Bloque B (02/07/2026): el paciente ve la
+        recomendación de severidad, **nunca** los valores que la dispararon. Lo
+        destapó `test_alerta_no_se_muestra_al_paciente`, que llevaba dos meses
+        protegiendo esa regla. En el paso de la temperatura no hay conflicto
+        posible: todavía no se ha evaluado nada.
+        """
+        self._checkin()
+        bot.procesar_mensaje(self.WA, 'hola')
+        respuesta = bot.procesar_mensaje(self.WA, '38.5')   # luego dará SEPSIS/ALTA
+
+        self.assertIn('38.5', respuesta)
+        self.assertEqual(Alerta.objects.count(), 0)
+        for prohibida in ('sepsis', 'fiebre', 'alerta', 'urgencias', 'riesgo'):
+            self.assertNotIn(prohibida, respuesta.lower())
+
+    def test_el_cierre_no_repite_los_valores_que_dispararon_la_alerta(self):
+        """La regla del Bloque B, fijada también desde este loop."""
+        self._checkin()
+        respuesta = self._flujo(temperatura='38.5')
+        self.assertEqual(respuesta, bot.MSG_CIERRE_ALERTA_ALTA)
+        self.assertNotIn('38.5', respuesta)
+
+    # --- D20: el dato que el paciente no puede dar ---
+
+    def test_saltar_temperatura_deja_reportar_todo_lo_demas(self):
+        """Sin termómetro ya no se pierde el turno entero (UX-B04 / BE-07)."""
+        self._checkin()
+        bot.procesar_mensaje(self.WA, 'hola')
+        eco = bot.procesar_mensaje(self.WA, 'saltar')
+        self.assertIn('sin medir', eco)
+
+        bot.procesar_mensaje(self.WA, '3')
+        bot.procesar_mensaje(self.WA, 'no')
+        bot.procesar_mensaje(self.WA, 'si, 0')
+        bot.procesar_mensaje(self.WA, 'nada')
+        bot.procesar_mensaje(self.WA, '78')
+        bot.procesar_mensaje(self.WA, '16')
+        respuesta = bot.procesar_mensaje(self.WA, 'si')
+
+        self.assertEqual(respuesta, bot.MSG_CONFIRMACION)
+        registro = RegistroDiario.objects.get()
+        self.assertIsNone(registro.temperatura)
+        self.assertEqual(registro.dolor_eva, 3)
+        self.assertEqual(registro.frecuencia_cardiaca, 78)
+
+    def test_la_frase_natural_del_paciente_tambien_salta(self):
+        """«no tengo termómetro» es la respuesta real, no «saltar».
+
+        El primer arreglo exigía coincidencia exacta, así que la frase más
+        natural seguía dejando al paciente atascado en la pregunta 1 — el
+        mismo caso que D20 venía a resolver. Lo destapó volver a ejecutar la
+        reproducción después de darlo por arreglado.
+        """
+        for frase in ('saltar', 'no tengo termometro', 'no tengo termómetro',
+                      'no puedo medirla ahora', 'no se'):
+            with self.subTest(frase=frase):
+                self.assertTrue(bot._es_salto(frase))
+
+    def test_una_temperatura_no_se_confunde_con_un_salto(self):
+        """La otra dirección: aflojar el salto no puede tragarse un dato."""
+        for frase in ('37.5', 'no', 'mucho', 'nada', '0', 'si'):
+            with self.subTest(frase=frase):
+                self.assertFalse(bot._es_salto(frase))
+
+    def test_sin_temperatura_no_se_evalua_la_regla_de_fiebre(self):
+        """Un día sin dato es un desconocido, no una temperatura baja (D20)."""
+        self._checkin()
+        self._flujo(temperatura='saltar')
+        self.assertEqual(Alerta.objects.filter(tipo='SEPSIS').count(), 0)
+
+    def test_dolor_cero_es_valido_y_no_alerta(self):
+        self._checkin()
+        self._flujo(dolor='0')
+        self.assertEqual(RegistroDiario.objects.get().dolor_eva, 0)
+        self.assertEqual(Alerta.objects.filter(tipo='DOLOR_AGUDO').count(), 0)
+
+    def test_dolor_fuera_de_rango_sigue_rechazado(self):
+        """La otra dirección: abrir el 0 no puede abrir el 11."""
+        self._checkin()
+        bot.procesar_mensaje(self.WA, 'hola')
+        bot.procesar_mensaje(self.WA, '37.0')
+        self.assertEqual(bot.procesar_mensaje(self.WA, '11'), bot.MSG_REINTENTO_DOLOR)
+
+    # --- DB-01: el techo de náuseas ---
+
+    def test_nauseas_desmesuradas_se_rechazan_en_el_bot(self):
+        """`"si, 99999"` reventaba la base y el webhook devolvía 500.
+
+        El paciente escribía y **no recibía ninguna respuesta**: no podía saber
+        si su reporte había entrado.
+        """
+        self.assertEqual(bot._parse_gases_nauseas('si, 99999'), (None, None))
+        self.assertEqual(bot._parse_gases_nauseas('si, 21'), (None, None))
+
+    def test_nauseas_dentro_de_rango_siguen_pasando(self):
+        """La otra dirección: el techo no puede comerse los valores reales."""
+        self.assertEqual(bot._parse_gases_nauseas('si, 0'), (True, 0))
+        self.assertEqual(bot._parse_gases_nauseas('no, 20'), (False, 20))
+
+    # --- D21: palabra de auxilio ---
+
+    def test_auxilio_a_mitad_del_cuestionario_corta_y_alerta(self):
+        """El caso reproducido: se guardaba como hinchazón y el bot seguía."""
+        self._checkin()
+        bot.procesar_mensaje(self.WA, 'hola')
+        bot.procesar_mensaje(self.WA, '37.0')
+        bot.procesar_mensaje(self.WA, '3')
+        bot.procesar_mensaje(self.WA, 'no')
+        bot.procesar_mensaje(self.WA, 'si, 0')
+        respuesta = bot.procesar_mensaje(
+            self.WA, 'estoy sangrando mucho, necesito ayuda')
+
+        self.assertEqual(respuesta, bot.MSG_AUXILIO)
+        alerta = Alerta.objects.get(tipo='AUXILIO')
+        self.assertEqual(alerta.severidad, 'ALTA')
+        self.assertFalse(alerta.resuelta)
+        conv = ConversacionWhatsApp.objects.get()
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_INICIO)
+        self.assertIsNone(conv.temp_hinchazon_abdominal)
+
+    def test_auxilio_fuera_del_cuestionario_tambien_alerta(self):
+        respuesta = bot.procesar_mensaje(self.WA, 'AYUDA')
+        self.assertEqual(respuesta, bot.MSG_AUXILIO)
+        self.assertEqual(Alerta.objects.filter(tipo='AUXILIO').count(), 1)
+
+    def test_las_respuestas_normales_no_disparan_auxilio(self):
+        """La otra dirección, y la que decide si esto sirve de algo.
+
+        Una palabra de auxilio que salta con las respuestas del cuestionario
+        llena el panel de ruido y acaba ignorada. `ayudar` no cuenta, y
+        `urgencias` tampoco: aparece en preguntas normales del paciente.
+        """
+        for normal in ('no', 'si', 'mucho', 'nada', '37.5', 'si, 0', 'saltar',
+                       'me puedes ayudar con la app', 'debo ir a urgencias?'):
+            with self.subTest(texto=normal):
+                self.assertFalse(bot._es_auxilio(normal))
+
+    def test_el_saludo_le_anuncia_la_palabra_al_paciente(self):
+        """Una palabra de auxilio que nadie sabe que existe no sirve de nada."""
+        self.assertIn('AYUDA', bot.MSG_PREGUNTA_TEMPERATURA)
+
+    def test_el_mensaje_de_auxilio_manda_a_buscar_atencion(self):
+        """La única vez que el bot da una indicación, y es deliberado."""
+        texto = bot.MSG_AUXILIO.lower()
+        self.assertIn('urgencias', texto)
+        self.assertIn('123', texto)
+
+    # --- BE-01: el turno de la tarde ---
+
+    def _abandonar_la_manana_y_dejar_que_venza(self, manana):
+        bot.procesar_mensaje(self.WA, 'hola')
+        bot.procesar_mensaje(self.WA, '37.0')
+        conv = ConversacionWhatsApp.objects.get()
+        # El cron no cierra un turno con conversación viva y reciente (guarda
+        # deliberada), así que se envejece la conversación: el paciente dejó el
+        # móvil por la mañana y vuelve por la tarde.
+        ConversacionWhatsApp.objects.filter(pk=conv.pk).update(
+            fecha_actualizacion=timezone.now() - timedelta(hours=11))
+        call_command('cerrar_checkins_vencidos', stdout=StringIO(), stderr=StringIO())
+        manana.refresh_from_db()
+        self.assertEqual(manana.estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
+        return conv
+
+    def test_el_turno_de_la_tarde_no_se_niega(self):
+        """El bot decía "no tienes un reporte pendiente" teniéndolo (BE-01).
+
+        Y solo lo recuperaba si el paciente insistía con un segundo mensaje,
+        justo cuando había vuelto a colaborar.
+        """
+        manana = self._checkin(orden=1, horas_atras=11)
+        self._checkin(orden=2, etiqueta=CheckInProgramado.ETIQUETA_TARDE,
+                      horas_atras=1)
+        conv = self._abandonar_la_manana_y_dejar_que_venza(manana)
+
+        respuesta = bot.procesar_mensaje(self.WA, 'hola')
+
+        self.assertNotEqual(respuesta, bot.MSG_SIN_CHECKIN)
+        self.assertEqual(respuesta, bot.MSG_TURNO_SIGUIENTE)
+        conv.refresh_from_db()
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_TEMPERATURA)
+        self.assertEqual(conv.checkin_actual.etiqueta,
+                         CheckInProgramado.ETIQUETA_TARDE)
+
+    def test_sin_turnos_pendientes_si_se_dice_que_no_hay(self):
+        """La otra dirección: la corrección no puede inventar turnos."""
+        manana = self._checkin(orden=1, horas_atras=11)
+        self._abandonar_la_manana_y_dejar_que_venza(manana)
+
+        self.assertEqual(bot.procesar_mensaje(self.WA, 'hola'), bot.MSG_SIN_CHECKIN)

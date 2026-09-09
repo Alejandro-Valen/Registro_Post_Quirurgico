@@ -73,8 +73,20 @@
       </div>
       {% empty %}
       <div class="pt-empty">
+        {% if silencios_pendientes %}
+        {# UX-P01: si quedan alertas SILENCIO sin resolver, esta lista está #}
+        {# vacía pero el médico NO puede irse tranquilo. Decir "todo bajo    #}
+        {# control" aquí contradecía al KPI de arriba, que sí las contaba.   #}
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg>
+        <p>Sin signos clínicos por revisar, pero hay
+           <b>{{ silencios_pendientes }}</b> alerta{{ silencios_pendientes|pluralize }}
+           de <b>paciente sin responder</b> sin resolver.<br>
+           No aparecen aquí porque el silencio es ausencia de datos, no un
+           síntoma. Revísalas en el listado de alertas.</p>
+        {% else %}
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
         <p>Sin alertas pendientes. Todo bajo control.</p>
+        {% endif %}
       </div>
       {% endfor %}
     </div>
@@ -88,6 +100,20 @@
           <div class="pt-legend"><span><b>{{ kpi.pendientes }}</b> pendientes</span><span><b>{{ kpi.silencios }}</b> silencios</span></div>
         </div>
       </div>
+
+      {% if total_detenidos %}
+      {# D22: el seguimiento se detuvo porque el paciente retiró su         #}
+      {# consentimiento. Se muestra para que el médico no confunda "está    #}
+      {# bien" con "dejé de saber de él porque el sistema paró".            #}
+      <div class="pt-card pt-side">
+        <div class="pt-hd"><h2>Seguimiento detenido</h2><span class="pt-count">Sin consentimiento</span></div>
+        {% for d in seguimiento_detenido %}
+        <a class="pt-srow" href="{% url 'admin:signos_sintomas_paciente_change' d.paciente_id %}">
+          <span class="pt-srow-main"><span class="pt-nm">{{ d.nombre }}</span><span class="pt-mt">Día {{ d.pod }} · no se le piden reportes</span></span>
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
 
       <div class="pt-card pt-side">
         <div class="pt-hd"><h2>Silencios</h2><span class="pt-count">Sin respuesta hoy</span></div>

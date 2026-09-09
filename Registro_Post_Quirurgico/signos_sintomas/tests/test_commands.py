@@ -7,6 +7,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.db import close_old_connections
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
@@ -146,11 +147,18 @@ class SchedulerTests(TestCase):
     """Bloque 4 — Management commands del scheduler y alerta SILENCIO."""
 
     def _paciente(self, tel="+573009990001"):
+        # `consentimiento_informado=True` es obligatorio desde la ficha D22
+        # (08/09/2026): sin consentimiento el scheduler ya no crea turnos y
+        # `cerrar_checkins_vencidos` los detiene sin generar SILENCIO. Estas
+        # pruebas ejercitan la escalera de silencio de un paciente que SÍ
+        # consintió, así que el fixture tiene que decirlo. El caso contrario
+        # lo cubre `ConsentimientoRevocadoTests`.
         return Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Scheduler",
             telefono_whatsapp=tel,
             fecha_cirugia=timezone.localdate() - timedelta(days=5),
             activo=True,
+            consentimiento_informado=True,
         )
 
     def _checkin(self, paciente, orden=1, etiqueta=None, dias_atras=0,
@@ -1231,3 +1239,88 @@ class SalidaOperativaSinIdentidadTests(TestCase):
 
         self.assertNotIn(self.NOMBRE, escrito)
         self.assertNotIn(self.TELEFONO, escrito)
+
+
+@freeze_time(ANCLA_MEDIANOCHE)
+class ConsentimientoRevocadoTests(TestCase):
+    """D22 — revocar el consentimiento detiene la generación de datos.
+
+    Reproducido el 08/09/2026: el guard del bot existía y funcionaba, pero
+    `crear_checkins_diarios` filtraba solo por `activo=True`. Con el
+    consentimiento revocado se creaban igual **2 turnos**, se marcaban
+    NO_RESPONDIDO y se generaba **1 alerta SILENCIO** — el sistema le
+    reprochaba al paciente un silencio que él mismo le había impuesto.
+
+    Cada prueba tiene su contraria: parar la generación no puede dejar de
+    vigilar a quien sí consintió, ni tapar un silencio real.
+    """
+
+    def setUp(self):
+        self.paciente = Paciente.objects.create(
+            medico_responsable=medico_de_pruebas(),
+            nombre_completo='Paciente Consentimiento',
+            telefono_whatsapp='+573009990002',
+            fecha_cirugia=timezone.localdate() - timedelta(days=4),
+            consentimiento_informado=True,
+        )
+
+    def _revocar(self):
+        self.paciente.consentimiento_informado = False
+        self.paciente.save(update_fields=['consentimiento_informado'])
+
+    def _turno_vencido(self):
+        return CheckInProgramado.objects.create(
+            paciente=self.paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now() - timedelta(hours=11),
+        )
+
+    def _correr(self, comando):
+        import io as _io
+        call_command(comando, stdout=_io.StringIO(), stderr=_io.StringIO())
+
+    def test_sin_consentimiento_no_se_crean_turnos(self):
+        self._revocar()
+        self._correr('crear_checkins_diarios')
+        self.assertEqual(
+            CheckInProgramado.objects.filter(paciente=self.paciente).count(), 0)
+
+    def test_con_consentimiento_los_turnos_se_siguen_creando(self):
+        """La otra dirección: el filtro no puede dejar a nadie sin seguimiento."""
+        self._correr('crear_checkins_diarios')
+        self.assertEqual(
+            CheckInProgramado.objects.filter(paciente=self.paciente).count(), 2)
+
+    def test_los_turnos_abiertos_se_detienen_al_revocar(self):
+        self._turno_vencido()
+        self._revocar()
+        self._correr('crear_checkins_diarios')
+        turno = CheckInProgramado.objects.get(paciente=self.paciente)
+        self.assertEqual(turno.estado, CheckInProgramado.ESTADO_SIN_CONSENTIMIENTO)
+
+    def test_revocar_no_genera_alertas_de_silencio(self):
+        """SILENCIO afirma "el paciente no responde", y aquí no le dejamos.
+
+        La guarda vive también en `cerrar_checkins_vencidos` —y no solo en
+        `crear_checkins_diarios`— porque los dos comandos corren en crones
+        distintos y este puede ejecutarse primero. Una guarda tiene que estar
+        donde se produce el daño, no solo donde suele venir.
+        """
+        self._turno_vencido()
+        self._revocar()
+        self._correr('cerrar_checkins_vencidos')
+
+        turno = CheckInProgramado.objects.get(paciente=self.paciente)
+        self.assertEqual(turno.estado, CheckInProgramado.ESTADO_SIN_CONSENTIMIENTO)
+        self.assertEqual(Alerta.objects.filter(tipo='SILENCIO').count(), 0)
+
+    def test_el_silencio_de_verdad_sigue_generando_alerta(self):
+        """La otra dirección: la guarda no puede tapar un silencio real."""
+        self._turno_vencido()
+        self._correr('cerrar_checkins_vencidos')
+
+        turno = CheckInProgramado.objects.get(paciente=self.paciente)
+        self.assertEqual(turno.estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
+        self.assertEqual(Alerta.objects.filter(tipo='SILENCIO').count(), 1)

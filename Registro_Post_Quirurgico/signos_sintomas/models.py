@@ -1,5 +1,8 @@
+from decimal import Decimal
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import CheckConstraint, Q
 from django.utils import timezone
@@ -130,6 +133,32 @@ class Paciente(models.Model):
         return f"{self.nombre_completo} — Dr. {medico}"
 
 
+# Rangos clínicos admisibles. Fuente única: la usan los validadores del
+# modelo, las restricciones de la base y los parsers del bot, para que un
+# valor no pueda entrar por una puerta y ser rechazado por otra.
+#
+# Existen por el hallazgo DB-01 (auditoría del 07/09/2026): el proyecto no
+# tenía NI UN validador de rango. `episodios_nauseas` no tenía techo tampoco
+# en el bot, así que `"si, 99999"` llegaba a la base, reventaba el
+# `PositiveSmallIntegerField` con un DataError, el webhook devolvía 500 y el
+# paciente se quedaba sin ninguna respuesta.
+RANGOS_CLINICOS = {
+    'temperatura':            (Decimal('30.0'), Decimal('45.0')),
+    'dolor_eva':              (0, 10),    # 0 = sin dolor (decisión D20)
+    'episodios_nauseas':      (0, 20),    # techo muy por encima de lo
+                                          # plausible: el objetivo es no
+                                          # reventar, no clasificar
+    'frecuencia_cardiaca':    (30, 250),
+    'frecuencia_respiratoria': (5, 60),
+    'volumen_drenaje_ml':     (0, 5000),
+}
+
+
+def _validadores(campo):
+    minimo, maximo = RANGOS_CLINICOS[campo]
+    return [MinValueValidator(minimo), MaxValueValidator(maximo)]
+
+
 class RegistroDiario(models.Model):
     """
     Captura la telemetría clínica diaria del paciente en seguimiento
@@ -143,14 +172,23 @@ class RegistroDiario(models.Model):
     temperatura = models.DecimalField(
         max_digits=4,
         decimal_places=1,
-        help_text="Temperatura corporal en °C. Ej: 37.5"
+        null=True,
+        blank=True,
+        validators=_validadores('temperatura'),
+        help_text=(
+            "Temperatura corporal en °C. Ej: 37.5. "
+            "null = el paciente no pudo medirla y saltó la pregunta "
+            "(decisión D20); la Regla 1 no se evalúa en ese caso."
+        ),
     )
     dolor_eva = models.PositiveSmallIntegerField(
-        help_text="Escala visual análoga del 1 al 10"
+        validators=_validadores('dolor_eva'),
+        help_text="Escala visual análoga del 0 al 10. 0 = sin dolor (D20)",
     )
     volumen_drenaje_ml = models.PositiveIntegerField(
         null=True,
         blank=True,
+        validators=_validadores('volumen_drenaje_ml'),
         help_text="Volumen en ml — OPCIONAL, solo si el paciente lo midió"
     )
     ASPECTO_CHOICES = [
@@ -194,6 +232,7 @@ class RegistroDiario(models.Model):
     )
     episodios_nauseas = models.PositiveSmallIntegerField(
         default=0,
+        validators=_validadores('episodios_nauseas'),
         help_text="Número de episodios de náuseas o vómito en 24h"
     )
     tolero_liquidos = models.BooleanField(
@@ -223,6 +262,7 @@ class RegistroDiario(models.Model):
     frecuencia_cardiaca = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
+        validators=_validadores('frecuencia_cardiaca'),
         help_text=(
             "Frecuencia cardíaca en lpm. null = no capturado. "
             "Solo se vigila taquicardia (FC alta), no bradicardia."
@@ -231,6 +271,7 @@ class RegistroDiario(models.Model):
     frecuencia_respiratoria = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
+        validators=_validadores('frecuencia_respiratoria'),
         help_text=(
             "Frecuencia respiratoria en rpm. null = no capturado. "
             "SOLO DASHBOARD — no genera alerta (Outersterp 2025: 77% de "
@@ -311,6 +352,51 @@ class RegistroDiario(models.Model):
                 ]),
                 name='registro_estado_evaluacion_valido',
             ),
+            # --- Rangos clínicos (DB-01, decisión del 08/09/2026) ---
+            #
+            # Los `validators` del campo solo corren en `full_clean()`, que el
+            # Admin llama y `objects.create()` NO. El bot crea registros con
+            # `objects.create()`, así que sin estas restricciones el rango
+            # seguiría sin defensa justo en la puerta por la que entran todos
+            # los datos de pacientes reales.
+            CheckConstraint(
+                condition=(
+                    Q(temperatura__isnull=True)
+                    | Q(temperatura__gte=Decimal('30.0'),
+                        temperatura__lte=Decimal('45.0'))
+                ),
+                name='registro_temperatura_en_rango',
+            ),
+            CheckConstraint(
+                condition=Q(dolor_eva__gte=0, dolor_eva__lte=10),
+                name='registro_dolor_eva_en_rango',
+            ),
+            CheckConstraint(
+                condition=Q(episodios_nauseas__gte=0, episodios_nauseas__lte=20),
+                name='registro_episodios_nauseas_en_rango',
+            ),
+            CheckConstraint(
+                condition=(
+                    Q(frecuencia_cardiaca__isnull=True)
+                    | Q(frecuencia_cardiaca__gte=30, frecuencia_cardiaca__lte=250)
+                ),
+                name='registro_frecuencia_cardiaca_en_rango',
+            ),
+            CheckConstraint(
+                condition=(
+                    Q(frecuencia_respiratoria__isnull=True)
+                    | Q(frecuencia_respiratoria__gte=5,
+                        frecuencia_respiratoria__lte=60)
+                ),
+                name='registro_frecuencia_respiratoria_en_rango',
+            ),
+            CheckConstraint(
+                condition=(
+                    Q(volumen_drenaje_ml__isnull=True)
+                    | Q(volumen_drenaje_ml__lte=5000)
+                ),
+                name='registro_volumen_drenaje_en_rango',
+            ),
         ]
 
     def save(self, *args, **kwargs):
@@ -341,6 +427,10 @@ class Alerta(models.Model):
         ('INTOLERANCIA_ORAL', 'Intolerancia a Líquidos — Riesgo de Deshidratación'),
         ('TAQUICARDIA',       'Frecuencia Cardíaca Elevada — Taquicardia'),
         ('SILENCIO',          'Paciente Sin Respuesta — Check-in No Completado'),
+        # AUXILIO no lo produce el motor de reglas: lo pide la persona (D21).
+        # Tiene tipo propio a propósito — no es una conclusión clínica, y
+        # meterlo en SEPSIS o DOLOR_AGUDO sería hacer que la IA diagnostique.
+        ('AUXILIO',           'Petición de Auxilio del Paciente'),
     ]
     SEVERIDAD_CHOICES = [
         ('ALTA',  'Alta — Ir a urgencias'),
@@ -459,6 +549,7 @@ class Alerta(models.Model):
                 condition=Q(tipo__in=[
                     'SEPSIS', 'FUGA_ANASTOMOTICA', 'ILEO_PARALITICO',
                     'DOLOR_AGUDO', 'INTOLERANCIA_ORAL', 'TAQUICARDIA', 'SILENCIO',
+                    'AUXILIO',
                 ]),
                 name='alerta_tipo_valido',
             ),
@@ -810,10 +901,16 @@ class CheckInProgramado(models.Model):
     ESTADO_PENDIENTE     = 'PENDIENTE'
     ESTADO_COMPLETADO    = 'COMPLETADO'
     ESTADO_NO_RESPONDIDO = 'NO_RESPONDIDO'
+    # D22: el turno se cerró porque el paciente retiró su consentimiento, no
+    # porque ignorara el mensaje. Estado propio para no llamar "silencio" a lo
+    # que el propio sistema impidió: emitir SILENCIO aquí sería afirmar algo
+    # falso sobre la conducta del paciente.
+    ESTADO_SIN_CONSENTIMIENTO = 'SIN_CONSENTIMIENTO'
     ESTADO_CHOICES = [
         (ESTADO_PENDIENTE,     'Pendiente'),
         (ESTADO_COMPLETADO,    'Completado'),
         (ESTADO_NO_RESPONDIDO, 'No respondido'),
+        (ESTADO_SIN_CONSENTIMIENTO, 'Detenido — sin consentimiento'),
     ]
 
     ETIQUETA_MANANA = 'MAÑANA'
@@ -871,7 +968,9 @@ class CheckInProgramado(models.Model):
                 name='unique_checkin_paciente_dia_orden',
             ),
             CheckConstraint(
-                condition=Q(estado__in=['PENDIENTE', 'COMPLETADO', 'NO_RESPONDIDO']),
+                condition=Q(estado__in=[
+                    'PENDIENTE', 'COMPLETADO', 'NO_RESPONDIDO', 'SIN_CONSENTIMIENTO',
+                ]),
                 name='checkin_estado_valido',
             ),
             CheckConstraint(

@@ -249,6 +249,22 @@ entre el Sprint 5 y hoy.
   umbral**: el loop fija lo decidido, no lo revisa. Es la ficha **D16** —toda
   guardia debe poder ponerse en rojo— aplicada a las pruebas clínicas.
 
+- **Loop de los bugs del paciente (08/09/2026, rama `bugs-del-paciente`).** Los
+  ocho fallos que llegan a la persona, **reproducidos ejecutando código** antes
+  de tocar nada. El más grave era invisible por los dos lados: quien tecleaba
+  `379` desde el celular quedaba registrado en **37,0 °C**, sin alerta y con el
+  mensaje de cierre normal. El más injusto, que un paciente sin termómetro no
+  podía reportar **nada** —sin pasar la pregunta 1 no llegaba a las otras nueve—
+  y el sistema le generaba una alerta SILENCIO por no responder. Fichas
+  **D19-D23**: rechazar la temperatura ambigua y devolver lo entendido, permitir
+  saltar y aceptar dolor 0, palabra de auxilio con tipo de alerta propio,
+  consentimiento revocado que detiene la generación de datos, y autorización de
+  habeas data en el formulario público (SEC-03). Suite: 366 → **409 tests**, con
+  un arnés de **17 reversiones, las 17 atrapadas**. Dos errores de
+  implementación se destaparon **volviendo a ejecutar la reproducción**, no
+  leyendo el código: la palabra de auxilio no atrapaba el caso que la originó, y
+  «no tengo termómetro» seguía atascando al paciente.
+
 ---
 
 ## Preguntas de arquitectura ya resueltas

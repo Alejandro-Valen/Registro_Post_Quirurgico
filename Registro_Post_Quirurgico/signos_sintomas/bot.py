@@ -11,9 +11,17 @@ Diseño:
   ejecuta el motor con estado persistente y responde una confirmación neutra.
 
 Máquina de estados (10 preguntas):
+    [AUXILIO — se mira ANTES que el estado, decisión D21]
+      Si el mensaje trae ayuda / auxilio / socorro / emergencia como palabra
+      suelta, en CUALQUIER estado incluido a mitad del cuestionario: se
+      descarta el flujo en curso, se responde MSG_AUXILIO y se crea una
+      alerta AUXILIO / ALTA. Va primero a propósito: el caso que originó la
+      decisión ocurre a mitad del cuestionario, y mirarlo después dejaría
+      "necesito ayuda" guardado como hinchazón.
     INICIO
-      -> ESPERANDO_TEMPERATURA
-      -> ESPERANDO_DOLOR
+      -> ESPERANDO_TEMPERATURA      admite "saltar" (D20) -> temperatura=None
+                                    y responde con el eco: "Anoté: 37.5 °C."
+      -> ESPERANDO_DOLOR            0-10, donde 0 = sin dolor (D20)
       -> ESPERANDO_TIENE_DRENAJE
       -> ESPERANDO_ASPECTO_DRENAJE    (se omite si tiene_drenaje=False)
       -> ESPERANDO_CANTIDAD_DRENAJE   (se omite si tiene_drenaje=False)
@@ -33,8 +41,15 @@ from decimal import Decimal, InvalidOperation
 from django.db import transaction
 from django.utils import timezone
 
+from .alert_engine import registrar_alerta_auxilio
 from .evaluacion_alertas import evaluar_registro_con_estado, registrar_fallo_evaluacion
-from .models import CheckInProgramado, ConversacionWhatsApp, Paciente, RegistroDiario
+from .models import (
+    RANGOS_CLINICOS,
+    CheckInProgramado,
+    ConversacionWhatsApp,
+    Paciente,
+    RegistroDiario,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +102,24 @@ MSG_CIERRE_ALERTA_ALTA = (
     "te has sentido estos dias.\n\n"
     "Te escribiremos en tu proximo turno."
 )
+# --- Palabra de auxilio (decisión D21, 08/09/2026) ---
+#
+# Hasta hoy no existía ninguna forma de que el paciente saliera del
+# cuestionario. "estoy sangrando mucho, necesito ayuda" escrito en la pregunta
+# 7 se guardaba como `hinchazon='mucho'` y el bot pasaba a la pregunta 8.
+#
+# El mensaje NO diagnostica ni tranquiliza: manda a buscar atención. Es la única
+# situación en la que el bot rompe su propia regla de no dar indicaciones, y es
+# deliberado — aquí el silencio es peor que la indicación.
+MSG_AUXILIO = (
+    "Entiendo que necesitas ayuda. Detengo el reporte de hoy.\n\n"
+    "*Si sientes que es una emergencia, llama al 123 o ve al servicio de "
+    "urgencias más cercano ahora mismo.*\n\n"
+    "También te recomiendo llamar a tu médico y contarle lo que está pasando. "
+    "Ya avisé a tu equipo médico de que pediste ayuda.\n\n"
+    "Cuando estés en un lugar seguro, escríbeme y retomamos tu reporte."
+)
+
 MSG_ABANDONO_REINICIO = (
     "Hola, parece que ayer no pudimos terminar tu reporte. "
     "Esos datos quedaron sin registrar.\n\n"
@@ -96,18 +129,24 @@ MSG_ABANDONO_REINICIO = (
 
 MSG_PREGUNTA_TEMPERATURA = (
     "¡Hola! Vamos con tu reporte de hoy.\n\n"
-    "1. ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5"
+    "Si en algún momento te sientes en peligro, escribe *AYUDA*.\n\n"
+    "1. ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5\n"
+    "(si hoy no tienes termómetro, responde *saltar*)"
 )
 MSG_REINTENTO_TEMPERATURA = (
-    "No logré entender la temperatura. Envíame solo el número en °C, por ejemplo: 37.5"
+    "No logré entender la temperatura.\n\n"
+    "Escríbela con punto y un decimal, así: *37.5*\n"
+    "(si escribes 375 o 37 5 no puedo saber si son 37.5 o 39)\n\n"
+    "Si hoy no tienes termómetro, responde *saltar* y seguimos con el resto."
 )
 
 MSG_PREGUNTA_DOLOR = (
-    "2. Del 1 al 10, ¿cuánto dolor sientes hoy?\n"
-    "(1 es casi nada, 10 es insoportable)"
+    "2. Del 0 al 10, ¿cuánto dolor sientes hoy?\n"
+    "(0 es ninguno, 10 es insoportable)"
 )
 MSG_REINTENTO_DOLOR = (
-    "Por favor envíame un número del 1 al 10 para indicar tu dolor."
+    "Por favor envíame un número del 0 al 10 para indicar tu dolor. "
+    "Si hoy no tienes dolor, responde 0."
 )
 
 MSG_PREGUNTA_TIENE_DRENAJE = (
@@ -150,6 +189,12 @@ MSG_PREGUNTA_GASES_NAUSEAS = (
 MSG_REINTENTO_GASES_NAUSEAS = (
     "Por favor dime si pasaste gases (sí/no) y cuántas veces tuviste náuseas. "
     "Ejemplo: 'sí, 0' o 'no, 2'."
+)
+MSG_TURNO_SIGUIENTE = (
+    "El reporte anterior se cerró, pero todavía tienes uno pendiente de hoy. "
+    "¡Vamos con ese!\n\n"
+    "1. ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5\n"
+    "(si hoy no tienes termómetro, responde *saltar*)"
 )
 
 MSG_PREGUNTA_HINCHAZON = (
@@ -251,6 +296,24 @@ def procesar_mensaje(telefono, texto):
 
 
 def _procesar_con_conv(conv, paciente, texto, hoy):
+    # D21 — el auxilio se atiende ANTES que el estado de la conversación.
+    #
+    # Va aquí arriba, y no dentro del despacho de cada pregunta, precisamente
+    # porque el caso reproducido ocurre a mitad del cuestionario: si se mirara
+    # después, "AYUDA" escrito en la pregunta 7 se seguiría guardando como
+    # hinchazón. El flujo en curso se descarta: los datos parciales de un
+    # paciente que está pidiendo socorro no valen nada frente a atenderlo.
+    if _es_auxilio(texto):
+        _limpiar_temporales(conv)
+        _reiniciar(conv)
+        registrar_alerta_auxilio(
+            paciente,
+            'El paciente pidió ayuda por WhatsApp durante el seguimiento. '
+            'Se detuvo el cuestionario y se le indicó buscar atención '
+            'inmediata. Contactar cuanto antes.',
+        )
+        return MSG_AUXILIO
+
     en_flujo = conv.estado not in (
         ConversacionWhatsApp.ESTADO_INICIO,
         ConversacionWhatsApp.ESTADO_COMPLETADO,
@@ -297,8 +360,29 @@ def _procesar_con_conv(conv, paciente, texto, hoy):
                 conv.save(update_fields=['checkin_actual', 'fecha_actualizacion'])
 
         if checkin is None:
-            _reiniciar(conv)
-            return MSG_SIN_CHECKIN
+            # BE-01 — el turno guardado en la conversación ya no está
+            # PENDIENTE (lo cerró el cron por vencido), pero eso NO significa
+            # que el paciente no tenga nada que reportar: puede tener el turno
+            # de la tarde esperando.
+            #
+            # Hasta el 08/09/2026 se respondía "Por ahora no tienes un reporte
+            # pendiente" —falso— justo al paciente que vuelve a colaborar
+            # después de haber abandonado por la mañana. Solo lo recuperaba si
+            # insistía con un segundo mensaje. Reproducido en
+            # `proceso/verificaciones/2026-09-08_reproduccion_bugs_paciente.py`.
+            otro = CheckInProgramado.objects.select_for_update().filter(
+                paciente=paciente,
+                fecha_dia=hoy,
+                estado=CheckInProgramado.ESTADO_PENDIENTE,
+            ).order_by('orden').first()
+            _limpiar_temporales(conv)
+            if otro is None:
+                _reiniciar(conv)
+                return MSG_SIN_CHECKIN
+            conv.checkin_actual = otro
+            conv.estado = ConversacionWhatsApp.ESTADO_TEMPERATURA
+            conv.save()
+            return MSG_TURNO_SIGUIENTE
         return _procesar_respuesta_flujo(conv, paciente, texto, checkin)
 
     # Fuera del flujo (INICIO o COMPLETADO): FAQ disponible siempre.
@@ -337,16 +421,24 @@ def _procesar_respuesta_flujo(conv, paciente, texto, checkin):
     estado = conv.estado
 
     if estado == ConversacionWhatsApp.ESTADO_TEMPERATURA:
-        valor = _parse_temperatura(texto)
-        if valor is None:
-            return MSG_REINTENTO_TEMPERATURA
-        conv.temp_temperatura = valor
+        # D20 — sin termómetro no se pierde el turno entero. `saltar` funciona
+        # aquí igual que en pulso y respiración; la Regla 1 no evalúa sin dato.
+        if _es_salto(texto):
+            conv.temp_temperatura = None
+        else:
+            valor = _parse_temperatura(texto)
+            if valor is None:
+                return MSG_REINTENTO_TEMPERATURA
+            conv.temp_temperatura = valor
         conv.estado = ConversacionWhatsApp.ESTADO_DOLOR
         conv.save()
-        return MSG_PREGUNTA_DOLOR
+        # D19, segunda mitad: el bot dice lo que entendió, aquí y no al cerrar.
+        return _eco_temperatura(conv.temp_temperatura) + MSG_PREGUNTA_DOLOR
 
     if estado == ConversacionWhatsApp.ESTADO_DOLOR:
-        valor = _parse_entero_rango(texto, 1, 10)
+        # D20 — 0 pasa a ser válido: "hoy no tengo dolor". No dispara ninguna
+        # regla porque queda por debajo del piso de las tres ventanas.
+        valor = _parse_entero_rango(texto, *RANGOS_CLINICOS['dolor_eva'])
         if valor is None:
             return MSG_REINTENTO_DOLOR
         conv.temp_dolor_eva = valor
@@ -419,7 +511,7 @@ def _procesar_respuesta_flujo(conv, paciente, texto, checkin):
         if _es_salto(texto):
             conv.temp_frecuencia_cardiaca = None
         else:
-            valor = _parse_entero_rango(texto, 30, 250)
+            valor = _parse_entero_rango(texto, *RANGOS_CLINICOS['frecuencia_cardiaca'])
             if valor is None:
                 return MSG_REINTENTO_FRECUENCIA_CARDIACA
             conv.temp_frecuencia_cardiaca = valor
@@ -431,7 +523,7 @@ def _procesar_respuesta_flujo(conv, paciente, texto, checkin):
         if _es_salto(texto):
             conv.temp_frecuencia_respiratoria = None
         else:
-            valor = _parse_entero_rango(texto, 5, 60)
+            valor = _parse_entero_rango(texto, *RANGOS_CLINICOS['frecuencia_respiratoria'])
             if valor is None:
                 return MSG_REINTENTO_FRECUENCIA_RESPIRATORIA
             conv.temp_frecuencia_respiratoria = valor
@@ -459,7 +551,15 @@ def _procesar_respuesta_flujo(conv, paciente, texto, checkin):
 def _mensaje_cierre(alertas_nuevas):
     """Elige el mensaje de cierre según la severidad máxima de las alertas
     generadas por este check-in (Bloque B). BAJA y sin alertas → cierre neutro.
-    ALTA tiene prioridad sobre MEDIA."""
+    ALTA tiene prioridad sobre MEDIA.
+
+    **No lleva el eco de lo anotado, y es deliberado.** El eco vive en el paso
+    de la temperatura (D19). Ponerlo aquí revelaría el valor que disparó la
+    alerta junto al mensaje de severidad, que es justo lo que la decisión del
+    Bloque B (02/07/2026) prohíbe: el paciente ve la recomendación, nunca los
+    valores que la produjeron. Lo destapó `test_alerta_no_se_muestra_al_paciente`
+    cuando el eco se probó aquí.
+    """
     severidades = {a.severidad for a in alertas_nuevas}
     if 'ALTA' in severidades:
         return MSG_CIERRE_ALERTA_ALTA
@@ -574,22 +674,115 @@ _PALABRAS_SALTO = frozenset({
 
 
 def _es_salto(texto):
-    """Devuelve True si el paciente indicó que no puede proporcionar el dato."""
-    return _sin_acentos(texto.strip().lower()) in _PALABRAS_SALTO
+    """True si el paciente indicó que no puede proporcionar el dato.
+
+    Acepta la frase suelta ("saltar", "no puedo") y también la frase
+    **completada**: "no tengo termómetro", "no puedo medirla ahora". Antes
+    exigía coincidencia exacta, y la respuesta más natural de un paciente
+    sin termómetro —"no tengo termómetro"— lo dejaba atascado en la
+    pregunta 1, que es justo el caso que la ficha D20 viene a resolver. Lo
+    destapó volver a ejecutar la reproducción después de arreglarlo.
+
+    El prefijo se exige al PRINCIPIO del mensaje y seguido de un espacio, no
+    en cualquier posicion.
+
+    Aun asi, "no tengo dolor" SI cuenta como salto para esta funcion. No es un
+    problema, y conviene decir por que en vez de fingir que el prefijo lo
+    resuelve: esta funcion solo se consulta en las tres preguntas que admiten
+    saltarse —temperatura, frecuencia cardiaca y respiratoria—, y la del dolor
+    no es una de ellas. Alli el 0 es la respuesta valida (D20), asi que esa
+    frase nunca llega hasta aqui.
+    """
+    limpio = _sin_acentos(texto.strip().lower())
+    if limpio in _PALABRAS_SALTO:
+        return True
+    return any(limpio.startswith(frase + ' ') for frase in _PALABRAS_SALTO)
+
+# Palabras que sacan al paciente del cuestionario y avisan al médico (D21).
+#
+# Lista corta y explícita a propósito. NO se detectan síntomas ("sangrando",
+# "me duele"): eso convertiría al bot en un clasificador clínico, que es justo
+# lo que el proyecto promete no hacer, y llenaría el panel de falsos positivos
+# con las respuestas normales del cuestionario. Se reconoce una palabra que se
+# le anuncia al paciente en el saludo — una palabra de auxilio que nadie sabe
+# que existe no sirve de nada.
+# Se buscan como PALABRA SUELTA en cualquier parte del mensaje, no como
+# mensaje completo. El caso que originó la decisión es literalmente
+# "estoy sangrando mucho, necesito ayuda": exigir que el mensaje fuera
+# exactamente `ayuda` dejaba ese caso sin arreglar — y así estaba escrito
+# en el primer intento, hasta que volver a ejecutar la reproducción lo
+# destapó. Es la razón por la que la reproducción se re-ejecuta.
+_PALABRAS_AUXILIO = ('ayuda', 'auxilio', 'socorro', 'emergencia')
+
+# `urgencia` y `urgencias` NO están en la lista, aunque suenen igual de
+# graves: aparecen en preguntas normales del paciente ("¿debo ir a
+# urgencias?") y en los propios mensajes del bot. Dispararían una alerta
+# ALTA por una duda, y una lista de auxilio que cría ruido termina
+# ignorada, que es la peor forma de fallar para esto.
+_RE_AUXILIO = re.compile(r'\b(?:' + '|'.join(_PALABRAS_AUXILIO) + r')\b')
+
+
+def _es_auxilio(texto):
+    """True si el paciente pidió ayuda explícitamente, en cualquier estado.
+
+    El límite de palabra distingue "necesito ayuda" de "¿me puedes ayudar
+    con la app?": `ayudar` no dispara.
+    """
+    return bool(_RE_AUXILIO.search(_sin_acentos(texto.lower())))
 
 
 def _parse_temperatura(texto):
-    """Extrae una temperatura plausible (30.0–45.0 °C). Acepta coma o punto."""
-    match = re.search(r'\d{2}(?:[.,]\d)?', texto)
+    r"""Extrae una temperatura escrita de forma INEQUÍVOCA (30.0–45.0 °C).
+
+    Decisión D19 (08/09/2026). El regex anterior era `\d{2}(?:[.,]\d)?`, que
+    tomaba los dos primeros dígitos y **descartaba el resto en silencio**:
+
+        "379"   ->  37.0   ->  ninguna alerta, y mensaje de cierre normal
+        "37 9"  ->  37.0   ->  ídem
+        "375"   ->  37.0   ->  ídem
+
+    Escribir sin separador es lo más natural desde el teclado de un celular, así
+    que un paciente con 37,9 de fiebre quedaba registrado en 37,0 sin que ni él
+    ni el médico pudieran notarlo: 37,0 es un valor perfectamente creíble en un
+    postoperatorio.
+
+    Ahora se exige que el número esté **completo y solo**. Se tolera lo que la
+    gente escribe alrededor ("tengo 37.5 grados"), pero no dígitos pegados a
+    otros dígitos. Lo ambiguo se rechaza y el bot vuelve a preguntar con un
+    ejemplo.
+
+    **No se interpreta `379` como 37,9 a propósito:** sería adivinar el valor
+    que dispara la alerta más grave del sistema, y un acierto y un error se
+    verían idénticos en la ficha.
+    """
+    limpio = texto.strip().replace(',', '.')
+    match = re.fullmatch(r'[^\d]*(\d{2}(?:\.\d{1,2})?)[^\d]*', limpio)
     if not match:
         return None
     try:
-        valor = Decimal(match.group(0).replace(',', '.'))
+        valor = Decimal(match.group(1))
     except InvalidOperation:
         return None
-    if Decimal('30.0') <= valor <= Decimal('45.0'):
+    minimo, maximo = RANGOS_CLINICOS['temperatura']
+    if minimo <= valor <= maximo:
         return valor
     return None
+
+
+def _eco_temperatura(valor):
+    """Le devuelve al paciente la temperatura que quedó anotada (D19).
+
+    Es la otra mitad de la corrección del parser, y cubre lo que el rechazo no
+    puede cubrir: el **dedazo válido**. Quien quiso escribir 37.5 y escribió
+    38.5 pasa todos los filtros —es una temperatura perfectamente posible— y
+    hasta el 08/09/2026 no tenía ninguna forma de enterarse. El médico tampoco.
+
+    Va pegado a la respuesta del paciente, antes de que exista ninguna alerta,
+    así que no revela ningún juicio clínico: es el número que él mismo acaba de
+    teclear.
+    """
+    anotado = f'{valor} °C' if valor is not None else 'sin medir (la saltaste)'
+    return f'Anoté: {anotado}.\n\n'
 
 
 def _parse_entero_rango(texto, minimo, maximo):
@@ -676,6 +869,14 @@ def _parse_gases_nauseas(texto):
     if match is None:
         return None, None
     nauseas = int(match.group(0))
+
+    # DB-01 — techo. Sin esto, "si, 99999" llegaba tal cual a la base, reventaba
+    # el PositiveSmallIntegerField con un DataError, el webhook devolvía 500 y
+    # el paciente NO recibía ninguna respuesta: no podía saber si su reporte
+    # había entrado. Reproducido el 08/09/2026.
+    minimo, maximo = RANGOS_CLINICOS['episodios_nauseas']
+    if not (minimo <= nauseas <= maximo):
+        return None, None
 
     gases = None
     if re.search(r'\bno\b', t):

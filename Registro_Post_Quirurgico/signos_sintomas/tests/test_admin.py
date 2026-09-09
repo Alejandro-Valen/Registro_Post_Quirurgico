@@ -9,7 +9,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -1146,3 +1146,95 @@ class AdminFiltrosNoExponenOtrasCuentasTests(TestCase):
 # Loop D — D-1: pruebas en rojo de la auditoría de cierre (27/07/2026)
 # Fichas D11, D12 y D13 en docs/decisiones_correccion_auditoria.md
 # ===========================================================================
+
+
+class TableroQueNoSeContradiceTests(TestCase):
+    """UX-P01 — el tablero decía "Todo bajo control" con una ALTA sin resolver.
+
+    Reproducido el 08/09/2026: con una única alerta ALTA de tipo SILENCIO, el
+    KPI de arriba mostraba **1** y la lista de justo debajo imprimía *"Sin
+    alertas pendientes. Todo bajo control."*. Ocurría **siempre** que la única
+    ALTA era un SILENCIO — es decir, con el paciente que lleva dos días sin dar
+    señales: exactamente cuando menos se puede decir que todo está bajo
+    control.
+
+    La causa: la lista de triage excluye `tipo='SILENCIO'` (es ausencia de
+    datos, no un síntoma — ficha D1) y el KPI no. La exclusión se mantiene
+    porque el criterio clínico sigue siendo correcto; lo que se corrige es que
+    el estado vacío deje de tranquilizar cuando no debe.
+    """
+
+    def setUp(self):
+        self.medico = medico_de_pruebas('medico_tablero')
+        self.paciente = Paciente.objects.create(
+            medico_responsable=self.medico,
+            nombre_completo='Paciente Tablero',
+            telefono_whatsapp='+573009990004',
+            fecha_cirugia=timezone.localdate() - timedelta(days=6),
+            # Explícito: `consentimiento_informado` es `default=False`, y desde
+            # la ficha D22 eso significa "seguimiento detenido". El fixture de
+            # esta clase representa a un paciente en seguimiento normal.
+            consentimiento_informado=True,
+        )
+
+    def _contexto(self):
+        from ..templatetags.panel_admin import panel_triage
+        peticion = RequestFactory().get('/admin/')
+        peticion.user = self.medico
+        return panel_triage({'request': peticion})
+
+    def _alerta(self, tipo, severidad='ALTA'):
+        return Alerta.objects.create(
+            paciente=self.paciente, tipo=tipo, severidad=severidad,
+            mensaje='Detalle de prueba.', veces=1,
+            fecha_ultima_deteccion=timezone.now(),
+        )
+
+    def test_una_alta_de_silencio_se_cuenta_aunque_no_este_en_la_lista(self):
+        self._alerta('SILENCIO')
+        ctx = self._contexto()
+        self.assertEqual(ctx['kpi']['alta'], 1)
+        self.assertEqual(len(ctx['atencion']), 0)
+        # Lo que faltaba: el tablero ahora SABE que quedan alertas fuera.
+        self.assertEqual(ctx['silencios_pendientes'], 1)
+
+    def test_sin_ninguna_alerta_el_tablero_puede_tranquilizar(self):
+        """La otra dirección: cuando de verdad no hay nada, se dice."""
+        ctx = self._contexto()
+        self.assertEqual(ctx['kpi']['alta'], 0)
+        self.assertEqual(ctx['silencios_pendientes'], 0)
+
+    def test_una_alerta_clinica_si_aparece_en_la_lista(self):
+        """La otra dirección: excluir SILENCIO no puede esconder lo clínico."""
+        self._alerta('SEPSIS')
+        ctx = self._contexto()
+        self.assertEqual(len(ctx['atencion']), 1)
+        self.assertEqual(ctx['silencios_pendientes'], 0)
+
+    def test_una_silencio_resuelta_ya_no_cuenta(self):
+        alerta = self._alerta('SILENCIO')
+        # Resolver exige cierre completo: la restricción `alerta_resuelta_con_cierre`
+        # no deja marcar `resuelta` sin fecha ni motivo (ficha D3).
+        alerta.resuelta = True
+        alerta.fecha_resolucion = timezone.now()
+        alerta.motivo_resolucion = Alerta.MOTIVO_CONTACTO
+        alerta.save(update_fields=['resuelta', 'fecha_resolucion', 'motivo_resolucion'])
+        self.assertEqual(self._contexto()['silencios_pendientes'], 0)
+
+    def test_el_paciente_con_seguimiento_detenido_no_desaparece(self):
+        """D22 — cumplir habeas data no puede producir un punto ciego.
+
+        Un paciente que se esfuma del panel sin dejar rastro es el mismo fallo
+        que la ficha D12 combatió: nadie lo mira, y nadie sabe que nadie lo
+        mira.
+        """
+        self.paciente.consentimiento_informado = False
+        self.paciente.save(update_fields=['consentimiento_informado'])
+        ctx = self._contexto()
+        self.assertEqual(ctx['total_detenidos'], 1)
+        self.assertEqual(ctx['seguimiento_detenido'][0]['nombre'], 'Paciente Tablero')
+
+    def test_el_paciente_que_si_consintio_no_aparece_como_detenido(self):
+        """La otra dirección."""
+        ctx = self._contexto()
+        self.assertEqual(ctx['total_detenidos'], 0)

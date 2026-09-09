@@ -84,14 +84,44 @@
                     <input type="tel" id="telefono" name="telefono" placeholder="+57 300 000 0000" autocomplete="tel" inputmode="tel" required>
                 </div>
 
+                {% if error_autorizacion %}
+                    <p class="notice-err" role="alert">
+                        Para poder enviarte una respuesta necesitamos tu autorización
+                        para tratar tus datos. Marca la casilla y vuelve a intentarlo.
+                    </p>
+                {% endif %}
+
                 <div class="field">
-                    <label for="mensaje">Mensaje</label>
-                    <textarea id="mensaje" name="mensaje" placeholder="Cuéntanos brevemente qué necesitas…" required></textarea>
+                    <label for="mensaje">Motivo de tu contacto</label>
+                    {# D23 — el marcador de posición decía "Cuéntanos brevemente  #}
+                    {# qué necesitas…", que en una web de seguimiento             #}
+                    {# postoperatorio es una invitación directa a escribir el     #}
+                    {# estado de salud. Recoger con permiso es legal; recoger     #}
+                    {# menos es mejor, y este canal no tiene ni el control de     #}
+                    {# acceso ni la retención del resto del sistema.              #}
+                    <textarea id="mensaje" name="mensaje" placeholder="Por ejemplo: quiero información sobre el programa de seguimiento" required></textarea>
+                    <p class="ayuda-campo">
+                        No escribas aquí síntomas ni datos clínicos: este no es un
+                        canal de atención médica. Si tienes una urgencia, acude a
+                        urgencias o llama al 123.
+                    </p>
+                </div>
+
+                <div class="field field-check">
+                    <label for="autorizacion_datos">
+                        <input type="checkbox" id="autorizacion_datos" name="autorizacion_datos" value="1" required>
+                        Autorizo el tratamiento de mis datos personales
+                    </label>
+                    <p class="ayuda-campo">
+                        Tu nombre y tu teléfono se usarán <b>únicamente</b> para que el
+                        equipo médico responda a este mensaje. No se comparten con
+                        terceros. Puedes pedir en cualquier momento que se consulten,
+                        corrijan o eliminen. Ver la
+                        <a href="{% url 'politica_datos' %}">política de tratamiento de datos</a>.
+                    </p>
                 </div>
 
                 <button type="submit" class="btn btn-primary">Enviar solicitud</button>
-
-                <p class="nota">La información enviada quedará registrada para revisión del equipo médico.</p>
             </form>
         </div>
     </section>

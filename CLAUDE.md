@@ -120,10 +120,11 @@ anotada para después.
 - **Rama de despliegue:** `produccion` — la miran los tres servicios de Railway.
   Nadie trabaja aquí; solo recibe merges desde `Desarrollo`. Ver
   `docs/railway_deploy.md` §4.1.
-- **Rama activa de trabajo:** ninguna. `umbrales-frontera` se mergeó el
-  08/09/2026 (PR #28, merge commit `21105a2`); antes, `arnes-verificable`
-  (PR #18) y `repositorio-profesional` (PR #19) el 07/09/2026. La siguiente se
-  abre desde `Desarrollo`.
+- **Rama activa de trabajo:** `bugs-del-paciente` — **PR #29 ABIERTO**, con las
+  nueve comprobaciones en verde, esperando la compuerta humana. **Es lo primero
+  que hay que resolver al retomar.** Antes: `umbrales-frontera` (PR #28,
+  `21105a2`), `arnes-verificable` (PR #18) y `repositorio-profesional`
+  (PR #19), los tres mergeados.
 - **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **nueve
   comprobaciones** en cada PR hacia `Desarrollo` y hacia `produccion`, y en cada
   push a esas dos ramas: la suite, `check`, `makemigrations --check`,
@@ -238,6 +239,7 @@ evidencia disponible, no decisiones ya tomadas.
 | Auditoría de seis frentes | Seguridad, datos, backend clínico, frontend, calidad de pruebas y repositorio, en paralelo y ciegas entre sí | ✅ **Ejecutada** (07/09/2026). **101 hallazgos, 15 de severidad ALTA.** Cuatro reproducidos ejecutando código, incluido un sabotaje que dejó las 344 pruebas en verde con el motor clínico roto |
 | Loop del arnés · D16-D17 | Que las guardias automáticas puedan fallar, y retirar la identidad de terceros | ✅ **Completado y mergeado** (07/09/2026, PR #18, merge commit `5f51831`). CI de **siete a nueve** comprobaciones; `check --deploy` recupera la capacidad de fallar; identidad del médico fuera del árbol. **344 tests OK** |
 | Loop del repositorio · D18 | Separar producto de cuaderno de trabajo, y que el repositorio se pueda instalar | ✅ **Completado y mergeado** (07/09/2026, PR #19, merge commit `591cd7c`). `README`, `LICENSE`, `CONTRIBUTING`, `SECURITY`, `pyproject.toml` en vez de tres `requirements`, plantillas de `.github/`, `CODEOWNERS`, `.mailmap`, y el proceso movido a `proceso/`. **344 tests OK** |
+| Loop de bugs del paciente | Los ocho fallos que llegan a la persona: parser de temperatura, rangos, salto, palabra de auxilio, turno de la tarde, tablero que miente, consentimiento revocado y habeas data del formulario | ✅ **Completado** (08/09/2026, rama `bugs-del-paciente`). Fichas **D19-D23**, 3 migraciones, **43 pruebas nuevas** y un arnés de **17 reversiones, las 17 atrapadas**. **409 tests OK** |
 | Loop de umbrales | Anclar los umbrales clínicos con pruebas de frontera | ✅ **Completado y mergeado** (08/09/2026, PR #28, merge commit `21105a2`). **22 pruebas nuevas** —el valor que dispara y el inmediatamente inferior— y un arnés re-ejecutable de **21 sabotajes, los 21 atrapados**. Cierra TEST-01 a TEST-05. **366 tests OK** |
 
 **Qué pasó (22/07/2026).** Una auditoría independiente sobre `fbf62a8` confirmó
@@ -307,22 +309,41 @@ De ahí sale una regla que hereda `CONTRIBUTING.md` y que conviene no olvidar:
 **ningún umbral clínico entra ni se mueve sin su par de pruebas de frontera**, y
 el par no vale hasta que se ha visto caer.
 
-**Próximo paso exacto (al retomar): los bugs que tocan al paciente.** Es el
-siguiente loop del plan acordado el 07/09/2026, y ahora sí hay red debajo para
-hacerlo. Son, en el orden en que los listó la auditoría: el **parser de
-temperatura** que trunca en silencio (`379` → 37,0, sin alerta — DB-02), los
-**validadores de rango** que no existen en todo el proyecto (DB-01), una
-**palabra de auxilio** que funcione en todos los estados del bot (UX-B01), el
-**turno de la tarde que el bot niega** (BE-01), el **tablero que dice "todo bajo
-control"** con una ALTA sin resolver en pantalla (UX-P01), el **consentimiento
-revocado** que no detiene la generación de datos, y el **formulario público que
-recoge datos de salud sin autorización de habeas data** (SEC-03, detallado en
-`SECURITY.md`).
+**Los ocho bugs que tocan al paciente están corregidos** (08/09/2026, fichas
+**D19-D23**). Los ocho se **reprodujeron ejecutando código** antes de tocar
+nada —`proceso/verificaciones/2026-09-08_reproduccion_bugs_paciente.py`— y cada
+corrección tiene su prueba de regresión, verificada revirtiendo el arreglo y
+viéndola caer: **17 reversiones, las 17 atrapadas**.
 
-Después, **los 34 hallazgos de criterio del linter**. Estaban diferidos a
-propósito «hasta que la red aguante»: **ya aguanta**. Y pesa otra razón para no
-dejarlos más: casi todos están en `tests/`, que es lo que este loop acaba de
-reescribir.
+Lo que cambió para el paciente: una temperatura ambigua ya no se guarda
+truncada y el bot le dice lo que anotó; sin termómetro puede responder
+*saltar* en vez de perder el turno entero; `0` es un dolor válido; **AYUDA**
+detiene el cuestionario y avisa al médico desde cualquier punto; y el turno de
+la tarde ya no se le niega. Para el médico: el tablero dejó de decir «todo bajo
+control» con una ALTA sin resolver, y ve a quien tiene el seguimiento detenido.
+
+**Antes que nada, al retomar: decidir sobre el PR #29** (`bugs-del-paciente`).
+Está abierto con la CI en verde y con el arnés de reversiones corrido sobre el
+estado commiteado. Nada más de la lista de abajo se empieza hasta que ese PR
+esté mergeado o explícitamente aparcado: trabajar sobre `Desarrollo` con 43
+pruebas y tres migraciones esperando en una rama es la forma clásica de crear
+un conflicto que nadie quiere resolver.
+
+**Próximo paso exacto (después del #29): los 34 hallazgos de criterio del linter.**
+Estaban diferidos a propósito «hasta que la red aguante», y **ya aguanta**: la
+suite pasó de 344 a 409 pruebas en un día, con dos arneses que comprueban que
+esas pruebas pueden ponerse en rojo. Pesa además que casi todos están en
+`tests/`, que es justo lo que los dos loops de hoy acaban de reescribir:
+refactorizarlos ahora evita hacerlo dos veces.
+
+Después, y sin urgencia: los hallazgos de calidad de pruebas que no son de
+frontera (**TEST-06 a TEST-12**), el resto de la UX del panel y del bot
+(**UX-P02 a UX-P11**, **UX-B06 a UX-B11**), y **BE-02 a BE-13**.
+
+**Lo que este loop dejó abierto a propósito, y necesita datos tuyos:** la
+página `/politica-datos/` está publicada como **BORRADOR**. Le faltan
+responsable del tratamiento, dirección, canal para ejercer los derechos y plazo
+de retención — los mismos `[corchetes]` de P-12. No se inventó ninguno.
 
 **Lo que NO se decide en sesión técnica:** el canal del paciente, si el
 repositorio se hace público, y avisarle al médico de sus datos en la historia.

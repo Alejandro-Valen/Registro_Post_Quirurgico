@@ -23,11 +23,18 @@ Esto permite testear el bot completo sin mockear peticiones web.
 
 **Máquina de estados (10 preguntas):**
 ```
+[Palabra de auxilio — D21, se mira ANTES que el estado]
+  Si el mensaje contiene ayuda / auxilio / socorro / emergencia (palabra suelta,
+  en cualquier estado, incluido a mitad del cuestionario):
+    → se descarta el flujo en curso, se responde MSG_AUXILIO y se crea una
+      alerta AUXILIO / ALTA para el médico.
 [Guard de consentimiento informado — Bloque 7]
   Si paciente.consentimiento_informado es False: mensaje neutro, no entra a INICIO.
 INICIO
   → ESPERANDO_TEMPERATURA       "¿Cuál es tu temperatura? ej: 37.5"
-  → ESPERANDO_DOLOR             "Del 1 al 10, ¿cuánto dolor sientes?"
+                                admite "saltar" (D20) → temperatura = null
+                                responde con el ECO: "Anoté: 37.5 °C." (D19)
+  → ESPERANDO_DOLOR             "Del 0 al 10, ¿cuánto dolor sientes?"  (0 = sin dolor, D20)
   → ESPERANDO_TIENE_DRENAJE     "¿Tienes drenaje activo? sí/no"
   → ESPERANDO_ASPECTO_DRENAJE   menú 1-5 en lenguaje no médico — se OMITE si tiene_drenaje=False
   → ESPERANDO_CANTIDAD_DRENAJE  poco/normal/mucho (+ ml opcional) — se OMITE si tiene_drenaje=False
@@ -39,6 +46,13 @@ INICIO
   → COMPLETADO                  crea RegistroDiario, evalúa alertas (síncrono),
                                 cierra con mensaje según severidad (neutro / MEDIA / ALTA)
 ```
+
+**El bot devuelve lo que entendió (D19, 08/09/2026).** Tras la pregunta 1
+responde «Anoté: 37.5 °C.» —o «Anoté: sin medir (la saltaste).»— antes de la
+pregunta 2. No es cosmético: el parser rechaza lo ambiguo (`379`, `37 9`,
+`375`), pero **no puede detectar un dedazo válido**. Quien quiso escribir 37.5
+y escribió 38.5 pasa todos los filtros, porque es una temperatura posible. El
+eco es lo único que se lo enseña.
 
 **Reglas de diseño no negociables:**
 1. **El paciente nunca ve el tipo de alerta ni los valores que la
@@ -53,6 +67,19 @@ INICIO
    Implementación: `evaluar_registro` corre de forma síncrona dentro de
    `_crear_registro` (en un savepoint defensivo) para conocer la severidad
    antes de responder; ver `_mensaje_cierre`.
+
+   **El eco de la temperatura (D19) NO va en el mensaje de cierre, y esta
+   regla es la razón.** Se probó ahí primero y
+   `test_alerta_no_se_muestra_al_paciente` lo puso en rojo: mostrar «38.5 °C»
+   junto a «ve a urgencias» es exactamente revelar el valor que disparó la
+   alerta. El eco vive en el paso de la temperatura, donde todavía no se ha
+   evaluado nada y por tanto no hay ninguna clasificación que filtrar.
+
+   **La única excepción a esta regla es `MSG_AUXILIO`** (D21), que sí da una
+   indicación explícita —llamar al 123 o ir a urgencias—. Es deliberado: ahí
+   el paciente ya dijo que está en peligro, y el silencio es peor que la
+   indicación. No es una clasificación del sistema: es la respuesta a lo que
+   él pidió.
 2. **Identificación por `telefono_whatsapp` + `activo=True`.** Si el número no
    está registrado, el bot responde amablemente sin crear nada — nunca crea
    pacientes desde el chat.
