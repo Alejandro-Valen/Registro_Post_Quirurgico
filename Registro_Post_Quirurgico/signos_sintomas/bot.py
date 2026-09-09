@@ -11,9 +11,17 @@ Diseño:
   ejecuta el motor con estado persistente y responde una confirmación neutra.
 
 Máquina de estados (10 preguntas):
+    [AUXILIO — se mira ANTES que el estado, decisión D21]
+      Si el mensaje trae ayuda / auxilio / socorro / emergencia como palabra
+      suelta, en CUALQUIER estado incluido a mitad del cuestionario: se
+      descarta el flujo en curso, se responde MSG_AUXILIO y se crea una
+      alerta AUXILIO / ALTA. Va primero a propósito: el caso que originó la
+      decisión ocurre a mitad del cuestionario, y mirarlo después dejaría
+      "necesito ayuda" guardado como hinchazón.
     INICIO
-      -> ESPERANDO_TEMPERATURA
-      -> ESPERANDO_DOLOR
+      -> ESPERANDO_TEMPERATURA      admite "saltar" (D20) -> temperatura=None
+                                    y responde con el eco: "Anoté: 37.5 °C."
+      -> ESPERANDO_DOLOR            0-10, donde 0 = sin dolor (D20)
       -> ESPERANDO_TIENE_DRENAJE
       -> ESPERANDO_ASPECTO_DRENAJE    (se omite si tiene_drenaje=False)
       -> ESPERANDO_CANTIDAD_DRENAJE   (se omite si tiene_drenaje=False)
