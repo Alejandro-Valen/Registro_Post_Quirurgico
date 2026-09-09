@@ -120,11 +120,10 @@ anotada para después.
 - **Rama de despliegue:** `produccion` — la miran los tres servicios de Railway.
   Nadie trabaja aquí; solo recibe merges desde `Desarrollo`. Ver
   `docs/railway_deploy.md` §4.1.
-- **Rama activa de trabajo:** `bugs-del-paciente` — **PR #29 ABIERTO**, con las
-  nueve comprobaciones en verde, esperando la compuerta humana. **Es lo primero
-  que hay que resolver al retomar.** Antes: `umbrales-frontera` (PR #28,
-  `21105a2`), `arnes-verificable` (PR #18) y `repositorio-profesional`
-  (PR #19), los tres mergeados.
+- **Rama activa de trabajo:** ninguna. `bugs-del-paciente` se mergeó el
+  09/09/2026 (PR #29, merge commit `6580996`); antes `umbrales-frontera`
+  (PR #28, `21105a2`), `arnes-verificable` (PR #18) y `repositorio-profesional`
+  (PR #19). La siguiente se abre desde `Desarrollo`.
 - **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **nueve
   comprobaciones** en cada PR hacia `Desarrollo` y hacia `produccion`, y en cada
   push a esas dos ramas: la suite, `check`, `makemigrations --check`,
@@ -239,7 +238,7 @@ evidencia disponible, no decisiones ya tomadas.
 | Auditoría de seis frentes | Seguridad, datos, backend clínico, frontend, calidad de pruebas y repositorio, en paralelo y ciegas entre sí | ✅ **Ejecutada** (07/09/2026). **101 hallazgos, 15 de severidad ALTA.** Cuatro reproducidos ejecutando código, incluido un sabotaje que dejó las 344 pruebas en verde con el motor clínico roto |
 | Loop del arnés · D16-D17 | Que las guardias automáticas puedan fallar, y retirar la identidad de terceros | ✅ **Completado y mergeado** (07/09/2026, PR #18, merge commit `5f51831`). CI de **siete a nueve** comprobaciones; `check --deploy` recupera la capacidad de fallar; identidad del médico fuera del árbol. **344 tests OK** |
 | Loop del repositorio · D18 | Separar producto de cuaderno de trabajo, y que el repositorio se pueda instalar | ✅ **Completado y mergeado** (07/09/2026, PR #19, merge commit `591cd7c`). `README`, `LICENSE`, `CONTRIBUTING`, `SECURITY`, `pyproject.toml` en vez de tres `requirements`, plantillas de `.github/`, `CODEOWNERS`, `.mailmap`, y el proceso movido a `proceso/`. **344 tests OK** |
-| Loop de bugs del paciente | Los ocho fallos que llegan a la persona: parser de temperatura, rangos, salto, palabra de auxilio, turno de la tarde, tablero que miente, consentimiento revocado y habeas data del formulario | ✅ **Completado** (08/09/2026, rama `bugs-del-paciente`). Fichas **D19-D23**, 3 migraciones, **43 pruebas nuevas** y un arnés de **17 reversiones, las 17 atrapadas**. **409 tests OK** |
+| Loop de bugs del paciente | Los ocho fallos que llegan a la persona: parser de temperatura, rangos, salto, palabra de auxilio, turno de la tarde, tablero que miente, consentimiento revocado y habeas data del formulario | ✅ **Completado y mergeado** (PR #29, merge commit `6580996`, 09/09/2026). Fichas **D19-D23**, 3 migraciones, **43 pruebas nuevas** y un arnés de **17 reversiones, las 17 atrapadas**. **409 tests OK** |
 | Loop de umbrales | Anclar los umbrales clínicos con pruebas de frontera | ✅ **Completado y mergeado** (08/09/2026, PR #28, merge commit `21105a2`). **22 pruebas nuevas** —el valor que dispara y el inmediatamente inferior— y un arnés re-ejecutable de **21 sabotajes, los 21 atrapados**. Cierra TEST-01 a TEST-05. **366 tests OK** |
 
 **Qué pasó (22/07/2026).** Una auditoría independiente sobre `fbf62a8` confirmó
@@ -322,14 +321,7 @@ detiene el cuestionario y avisa al médico desde cualquier punto; y el turno de
 la tarde ya no se le niega. Para el médico: el tablero dejó de decir «todo bajo
 control» con una ALTA sin resolver, y ve a quien tiene el seguimiento detenido.
 
-**Antes que nada, al retomar: decidir sobre el PR #29** (`bugs-del-paciente`).
-Está abierto con la CI en verde y con el arnés de reversiones corrido sobre el
-estado commiteado. Nada más de la lista de abajo se empieza hasta que ese PR
-esté mergeado o explícitamente aparcado: trabajar sobre `Desarrollo` con 43
-pruebas y tres migraciones esperando en una rama es la forma clásica de crear
-un conflicto que nadie quiere resolver.
-
-**Próximo paso exacto (después del #29): los 34 hallazgos de criterio del linter.**
+**Próximo paso exacto (al retomar): los 34 hallazgos de criterio del linter.**
 Estaban diferidos a propósito «hasta que la red aguante», y **ya aguanta**: la
 suite pasó de 344 a 409 pruebas en un día, con dos arneses que comprueban que
 esas pruebas pueden ponerse en rojo. Pesa además que casi todos están en

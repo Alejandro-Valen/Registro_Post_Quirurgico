@@ -5398,8 +5398,7 @@ historia.
 ## Loop de los bugs que tocan al paciente
 **Fecha:** 08/09/2026
 **Responsable:** León (Arquitecto) con Claude Code
-**Estado:** COMPLETADO ✅ — **PR #29 abierto**, nueve comprobaciones en verde,
-pendiente de la compuerta humana al cerrar la sesión
+**Estado:** COMPLETADO Y MERGEADO ✅ — PR #29, merge commit `6580996`
 **Fichas:** D19, D20, D21, D22, D23
 
 ### Cómo empezó
@@ -5546,13 +5545,19 @@ que corre después: el cache no se limpia entre pruebas. Se resolvió con
 
 ### Qué queda pendiente
 
-**Este loop está cerrado en código y documentación; falta el merge.** El PR #29
-quedó abierto con la CI en verde al terminar la sesión, porque el merge es
-decisión del Arquitecto y no del agente. **Es el primer punto de la próxima
-sesión**, antes de tocar nada más: `Desarrollo` no debe avanzar con 43 pruebas
-y tres migraciones esperando en una rama.
+**Loop cerrado y mergeado.** El PR #29 quedó abierto al terminar la sesión del
+08/09 —el merge es decisión del Arquitecto, no del agente— y se mergeó al
+retomar, el **09/09/2026**, tras volver a correr el arnés sobre el estado
+commiteado (17/17) y con la CI en verde.
 
-Lo siguiente del plan, después del merge:
+La revisión previa al merge encontró un último cabo suelto, y era de los que
+importan: **`docs/bot_whatsapp.md` sí se había actualizado con el auxilio, el
+salto y el eco, pero el docstring de módulo de `bot.py` seguía describiendo la
+máquina de estados vieja** — que es lo primero que lee quien abre el archivo.
+Un mapa desactualizado al lado del código es peor que no tenerlo. Corregido en
+un commit aparte (`fa4b64b`), solo prosa.
+
+Lo siguiente del plan:
 
 1. **Los 34 hallazgos de criterio del linter.** Estaban diferidos «hasta que la
    red aguante»: aguanta. Y casi todos están en `tests/`, que es lo que los dos
