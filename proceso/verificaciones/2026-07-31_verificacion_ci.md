@@ -44,6 +44,18 @@ aquí y en las corridas, no en la historia de `Desarrollo`.
 | [30674851992](https://github.com/Alejandro-Valen/Registro_Post_Quirurgico/actions/runs/30674851992) | `e5630b8` | Las 5 rojas | Rotura deliberada 2 de 2 |
 | [30674921355](https://github.com/Alejandro-Valen/Registro_Post_Quirurgico/actions/runs/30674921355) | `e1d73af` | Las 5 en verde | Estado final, tras borrar las roturas |
 
+> **Nota del 09/09/2026.** Los commits `36dc751` y `e5630b8` **ya no existen**
+> en el repositorio: eran las roturas deliberadas, y se borraron de la rama al
+> terminar la verificación, así que no son alcanzables desde ninguna
+> referencia. `git show` sobre ellos falla en cualquier clon.
+>
+> **La evidencia de aquel día no es el commit: son los enlaces a las corridas**,
+> que sí son permanentes y públicos. Los SHA se conservan como etiqueta de qué
+> se probó en cada una.
+>
+> Lo detectó el barrido de veracidad en su primera corrida en la CI — en local
+> pasaba, porque la copia del Arquitecto todavía guarda esos objetos.
+
 ---
 
 ## Mensajes de error, textuales

@@ -74,6 +74,17 @@ mano el 09/09/2026, y para el resto no hay sustituto: alguien tiene que leer.
 
 Dicho de otro modo: esto atrapa la documentación que **envejece**, no la que
 **nació equivocada**.
+
+CORRER ESTO EN LOCAL ES MÁS DÉBIL QUE EN LA CI
+===============================================
+
+La comprobación 6 —que los commits citados existan— pregunta en realidad
+**«¿puede verificar esto cualquiera que clone el repositorio?»**. La copia de
+quien trabaja a diario conserva objetos que ya no son alcanzables desde ninguna
+rama, así que en local pasan citas que en un clon limpio no existirían.
+
+Pasó en la primera corrida: dos commits del 31/07/2026 estaban verdes en local
+y rojos en el runner. **La respuesta de la CI es la que vale.**
 """
 
 import os
@@ -139,6 +150,21 @@ ANCLA_TEMPORAL = re.compile(
     r'|Sprint \d',             # Sprint 6
     re.I,
 )
+
+# Commits citados que YA NO ESTÁN en la historia alcanzable, con su razón.
+#
+# Este hueco lo destapó la primera corrida en la CI, y no se veía en local: mi
+# copia conservaba los objetos, así que el barrido pasaba en mi máquina y caía
+# en el runner. La comprobación de la CI es la que vale — «¿puede verificar esto
+# cualquiera que clone el repositorio?»— y en local es más débil por definición.
+COMMITS_HISTORICOS = {
+    '36dc751': 'rotura deliberada 1 de 2 del 31/07/2026, para comprobar que la '
+               'CI podía ponerse en rojo. Se borró de la rama al terminar, así '
+               'que no es alcanzable desde ninguna referencia. La evidencia de '
+               'aquel día NO es el commit: son los enlaces a las corridas de '
+               'GitHub Actions, que sí son permanentes.',
+    'e5630b8': 'rotura deliberada 2 de 2 del mismo día y por la misma razón.',
+}
 
 # Rutas que la documentación cita a propósito aunque ya no existan, con su razón
 # —mismo criterio que `.gitleaksignore`: una lista de excepciones sin razones es
@@ -486,13 +512,16 @@ def comprobar_commits():
 
     rotos = 0
     for sha, quienes in sorted(citados.items()):
+        if sha in COMMITS_HISTORICOS:
+            continue
         r = subprocess.run(['git', 'cat-file', '-e', f'{sha}^{{commit}}'],
                            cwd=RAIZ, capture_output=True)
         if r.returncode != 0:
             rotos += 1
             falla('commits', f'{sha} no existe — citado en: {", ".join(sorted(quienes))}')
     if not rotos:
-        ok(f'{len(citados)} commits citados, todos existen')
+        ok(f'{len(citados)} commits citados, todos existen '
+           f'({len(COMMITS_HISTORICOS)} declarados como borrados a propósito)')
 
 
 # ---------------------------------------------------------------------------
