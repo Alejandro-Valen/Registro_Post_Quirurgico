@@ -111,7 +111,7 @@ jobs:
           fetch-depth: 0
 
       - name: Instalar Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           # 3.13, leído de .python-version — la misma fuente que usa el build.
           python-version-file: .python-version
