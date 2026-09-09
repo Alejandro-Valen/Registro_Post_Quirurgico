@@ -21,11 +21,24 @@ updates:
     labels:
       - "dependencias"
     groups:
-      # Los parches se agrupan en un solo PR: casi siempre son correcciones
-      # menores y revisarlos de a uno cuesta más de lo que aporta.
-      parches:
+      # Parches Y versiones menores en un solo PR.
+      #
+      # Hasta el 09/09/2026 solo se agrupaban los parches, y el resultado fue
+      # que la primera tanda abrió **siete PR de golpe** —cinco de pip y dos de
+      # actions— que se quedaron dos días colgando. Un repositorio con siete PR
+      # abiertos le dice a quien llega de fuera que esto está desatendido, y
+      # nadie revisa siete cosas a la vez: se mergean en bloque sin mirar, que
+      # es justo lo que esta vigilancia venía a evitar.
+      #
+      # Las MAYORES se dejan fuera del grupo a propósito: cada una llega en su
+      # propio PR porque puede cambiar comportamiento y merece leerse sola. El
+      # ejemplo está fresco: `django-axes` 7 → 8 es la pieza que decide quién
+      # entra al panel del médico, y su verde no valía nada hasta que hubo una
+      # prueba que fijara ese comportamiento (ficha D24).
+      rutina:
         update-types:
           - "patch"
+          - "minor"
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -36,3 +49,11 @@ updates:
       prefix: "ci"
     labels:
       - "dependencias"
+    groups:
+      # Mismo criterio que arriba, y aquí importa más: las actions se actualizan
+      # a menudo y son de bajo riesgo, así que de una en una son puro ruido.
+      acciones:
+        update-types:
+          - "patch"
+          - "minor"
+          - "major"
