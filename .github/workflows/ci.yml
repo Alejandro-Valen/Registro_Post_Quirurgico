@@ -264,6 +264,29 @@ jobs:
           DJANGO_SETTINGS_MODULE: Registro_Post_Quirurgico.settings_production
         run: python manage.py check --deploy --fail-level WARNING
 
+      - name: Veracidad de la documentación
+        # Décima comprobación, añadida el 09/09/2026.
+        #
+        # Por qué existe. En dos días se tropezó con cinco afirmaciones falsas en
+        # la documentación —el `cd` de CLAUDE.md, el intérprete del proyecto, el
+        # índice de decisiones, una referencia circular, y un "próximo paso" que
+        # apuntaba a trabajo inexistente—. Ninguna la habría atrapado la suite:
+        # un documento que miente no rompe ningún test.
+        #
+        # Lo que más vigila: que los umbrales de `docs/reglas_clinicas.md` sigan
+        # siendo las constantes de `alert_engine.py`. En un sistema que clasifica
+        # señales de alarma médicas, el documento clínico desactualizado es la
+        # referencia con la que alguien decidirá si una regla está bien.
+        #
+        # BLOQUEA, por la misma razón que el linter (ficha D16): una guardia que
+        # informa sin detener es la guardia-que-no-puede-fallar.
+        #
+        # Se verificó en las dos direcciones el 09/09/2026 rompiendo una
+        # afirmación de cada tipo: 7 de 7 atrapadas. Detalle en la cabecera del
+        # propio script.
+        if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' }}
+        run: python proceso/verificaciones/2026-09-09_barrido_veracidad.py
+
       - name: Suite completa
         # --noinput: sin él, una corrida anterior muerta deja la base de pruebas
         # a medio crear y el comando se queda esperando un prompt que nadie va a

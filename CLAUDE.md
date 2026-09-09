@@ -124,13 +124,24 @@ anotada para después.
   09/09/2026 (PR #29, merge commit `6580996`); antes `umbrales-frontera`
   (PR #28, `21105a2`), `arnes-verificable` (PR #18) y `repositorio-profesional`
   (PR #19). La siguiente se abre desde `Desarrollo`.
-- **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **nueve
+- **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **diez
   comprobaciones** en cada PR hacia `Desarrollo` y hacia `produccion`, y en cada
   push a esas dos ramas: la suite, `check`, `makemigrations --check`,
   `check --deploy` **con `--fail-level WARNING`**, la higiene del diff, la
   **guardia de secretos** (`gitleaks` sobre la historia completa), que no haya
-  ningún `.env` rastreado, el **linter** (`ruff`) y **`pip-audit`** sobre las
-  dependencias instaladas.
+  ningún `.env` rastreado, el **linter** (`ruff`), **`pip-audit`** sobre las
+  dependencias instaladas, y el **barrido de veracidad de la documentación**
+  (desde el 09/09/2026).
+
+  **Qué vigila el barrido, y por qué se añadió.** Comprueba que lo que la
+  documentación *afirma* sea cierto: que las rutas citadas existan, que el
+  conteo de pruebas publicado sea el real, que los commits citados estén en la
+  historia, y —lo que más importa— **que los umbrales de
+  `docs/reglas_clinicas.md` sigan siendo las constantes de `alert_engine.py`**.
+  En dos días se habían encontrado cinco afirmaciones falsas, todas por
+  casualidad. Un documento que miente no rompe ninguna prueba, y en un sistema
+  clínico el documento de reglas es la referencia con la que alguien decide si
+  un umbral está bien.
 
   **La bandera `--fail-level WARNING` no es un detalle.** Sin ella, el paso de
   configuración de producción **nunca pudo fallar**: todos los checks de

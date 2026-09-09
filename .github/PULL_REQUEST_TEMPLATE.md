@@ -19,7 +19,7 @@ que atrapa lo que debe atrapar, y que deja pasar lo que debe pasar.
 - [ ] `ruff check .`
 - [ ] `python manage.py makemigrations --check --dry-run`
 - [ ] `git diff --check`
-- [ ] Las nueve comprobaciones de la CI, **miradas una a una** (sin protección
+- [ ] Las diez comprobaciones de la CI, **miradas una a una** (sin protección
       de rama, la compuerta es humana)
 
 ## Si toca comportamiento

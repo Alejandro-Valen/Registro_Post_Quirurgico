@@ -80,7 +80,7 @@ ruff check .                           # desde la raíz
 git diff --check                       # espacios al final de línea
 ```
 
-La CI corre **nueve comprobaciones** y las mira todas aunque una falle, para que
+La CI corre **diez comprobaciones** y las mira todas aunque una falle, para que
 una corrida en rojo muestre de una vez todo lo que está mal.
 
 **`Desarrollo` no tiene protección de rama**, así que los checks se ven pero no

@@ -300,20 +300,41 @@ def comprobar_conteo_de_pruebas():
 # ---------------------------------------------------------------------------
 # 3 · Las comprobaciones que la documentación atribuye a la CI existen
 #
-# Mismo criterio que arriba: «la CI **pasa de** cinco a siete comprobaciones»
-# es un registro histórico correcto y no se marca. Solo se exige el número de
-# hoy a las frases escritas en presente.
+# POR QUÉ ESTO MIRA ESCAPARATES Y NO PROSA. El primer intento escaneaba todos
+# los documentos buscando «N comprobaciones» y descartaba las anclada a una
+# fecha o a un PR. Falló en las dos direcciones a la vez:
+#
+#   · marcaba historia correcta («la CI pasa de cinco a siete», de agosto);
+#   · y **se le escapó la única que importaba** — `CLAUDE.md` decía «corre
+#     nueve comprobaciones» en presente cuando ya eran diez, porque la viñeta
+#     VECINA llevaba una fecha y la ventana de 140 caracteres la alcanzaba.
+#
+# Un falso negativo en la comprobación que más se quiere es peor que no
+# tenerla, porque además tranquiliza. Distinguir «afirmación sobre hoy» de
+# «registro histórico» dentro de prosa libre no es mecanizable de forma
+# fiable, así que se nombran los escaparates: las frases concretas que
+# describen el presente. Si alguien escribe una nueva, la añade aquí.
 # ---------------------------------------------------------------------------
 NO_SON_COMPROBACIONES = {
     'Traer el repositorio', 'Instalar Python', 'Instalar dependencias',
 }
 
-TRANSICIONES = re.compile(r'pas[aóo]\s+de\b', re.I)
+# (documento, expresión que captura el número escrito en presente)
+ESCAPARATES_CI = [
+    ('CLAUDE.md',
+     r'`\.github/workflows/ci\.yml` corre \*\*(\w+)\s+comprobaciones\*\*'),
+    ('CONTRIBUTING.md',
+     r'La CI corre \*\*(\w+) comprobaciones\*\*'),
+    ('docs/README.md',
+     r'\*\*(\w+) comprobaciones\*\*'),
+    ('.github/PULL_REQUEST_TEMPLATE.md',
+     r'Las (\w+) comprobaciones de la CI'),
+]
 
-# Un marcador de pasado también puede ir DESPUÉS del número: «las siete
-# comprobaciones de entonces». Mirar solo hacia atrás dejaba en rojo una frase
-# que ya estaba escrita de forma inequívoca.
-MARCA_PASADO = re.compile(r'de entonces|de aquel momento|de la época', re.I)
+NUMEROS = {
+    'cinco': 5, 'seis': 6, 'siete': 7, 'ocho': 8, 'nueve': 9, 'diez': 10,
+    'once': 11, 'doce': 12,
+}
 
 
 def comprobar_ci():
@@ -321,37 +342,30 @@ def comprobar_ci():
 
     ci = (RAIZ / '.github' / 'workflows' / 'ci.yml').read_text(encoding='utf-8')
     pasos = re.findall(r'^      - name: (.+)$', ci, re.M)
-    comprobaciones = [p.strip() for p in pasos if p.strip() not in NO_SON_COMPROBACIONES]
+    comprobaciones = [p.strip() for p in pasos
+                      if p.strip() not in NO_SON_COMPROBACIONES]
     print(f'   la CI tiene {len(pasos)} pasos, de los cuales '
           f'{len(comprobaciones)} son comprobaciones:')
     for c in comprobaciones:
         print(f'      · {c}')
 
-    palabras = {
-        'cinco': 5, 'seis': 6, 'siete': 7, 'ocho': 8, 'nueve': 9, 'diez': 10,
-    }
-    # El asterisco es opcional y la frase puede partirse en dos líneas.
-    patron = re.compile(r'\*?\*?(' + '|'.join(palabras) + r')\*?\*?\s+comprobaciones', re.I)
-    encontradas = 0
-    for doc in documentos_de_estado():
-        rel = doc.relative_to(RAIZ).as_posix()
-        texto = ' '.join(doc.read_text(encoding='utf-8').split())
-        for m in patron.finditer(texto):
-            antes = texto[max(0, m.start() - 140):m.start()]
-            despues = texto[m.end():m.end() + 40]
-            if TRANSICIONES.search(antes) or ANCLA_TEMPORAL.search(antes):
-                continue          # anclada a una fecha o a un PR: es historia
-            if MARCA_PASADO.search(despues):
-                continue          # «...las siete comprobaciones DE ENTONCES»
-            encontradas += 1
-            citado = palabras[m.group(1).lower()]
-            if citado != len(comprobaciones):
-                falla('ci', f'{rel} dice "{m.group(1)} comprobaciones" en presente '
-                            f'y son {len(comprobaciones)}')
-            else:
-                ok(f'{rel} dice "{m.group(1)} comprobaciones" — correcto')
-    if not encontradas:
-        aviso('ningún documento dice cuántas comprobaciones tiene la CI')
+    for documento, expresion in ESCAPARATES_CI:
+        ruta = RAIZ / documento
+        if not ruta.exists():
+            falla('ci', f'{documento} no existe y es un escaparate declarado')
+            continue
+        texto = ' '.join(ruta.read_text(encoding='utf-8').split())
+        m = re.search(expresion, texto)
+        if m is None:
+            falla('ci', f'{documento}: no se encuentra la frase que dice cuántas comprobaciones tiene la CI — ¿se reescribió?')
+            continue
+        citado = NUMEROS.get(m.group(1).lower())
+        if citado is None:
+            falla('ci', f'{documento} dice "{m.group(1)}" y no es un número que este barrido sepa leer')
+        elif citado != len(comprobaciones):
+            falla('ci', f'{documento} dice "{m.group(1)} comprobaciones" y son {len(comprobaciones)}')
+        else:
+            ok(f'{documento} dice "{m.group(1)} comprobaciones" — correcto')
 
 # ---------------------------------------------------------------------------
 # 4 · Los umbrales del documento clínico son los del motor

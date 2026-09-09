@@ -101,7 +101,7 @@ decía antes de la mudanza: *"estos archivos son andamiaje, no producto"*.
 
 - **Tres auditorías ejecutadas y cerradas**: 22/07, 27/07 y la de seis frentes
   del 07/09. **No se repiten.** Sus correcciones son las fichas D1-D17.
-- **Cada PR se verifica solo** con **nueve comprobaciones**: suite, `check`,
+- **Cada PR se verifica solo** con **diez comprobaciones**: suite, `check`,
   `makemigrations --check`, `check --deploy` con `--fail-level WARNING`, higiene
   del diff, guardia de secretos, control de archivos de entorno, linter y
   auditoría de dependencias.
