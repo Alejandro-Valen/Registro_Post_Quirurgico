@@ -45,6 +45,7 @@ la entrada de `proceso/BITACORA.md` del 22/07/2026 (informe y hallazgos).
 | [D21](#d21) | Palabra de auxilio, y por qué no es un diagnóstico | UX-B01 | Bugs del paciente | **Decidida** (08/09/2026) |
 | [D22](#d22) | Revocar el consentimiento detiene la generación de datos | — | Bugs del paciente | **Decidida** (08/09/2026) |
 | [D23](#d23) | Autorización de habeas data en el formulario público | SEC-03 | Bugs del paciente | **Decidida** (08/09/2026), parte bloqueada |
+| [D24](#d24) | Por qué se bloquea el acceso, y a quién | SEC-02 | Cerrar lo no clínico | **Implementada** (09/09/2026) |
 
 Los hallazgos 2, 6, 7, 8, 9, 11 y 14 son correcciones técnicas sin decisión de
 producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
@@ -2040,6 +2041,81 @@ casilla esté marcada, y ese canal no tiene ni el cifrado ni el control de acces
 ni la retención del resto del sistema. **La minimización es la única parte de
 esto que no depende de un texto legal pendiente.**
 
+
+---
+
+<a id="d24"></a>
+## D24 — Por qué se bloquea el acceso, y a quién
+
+**Hallazgo:** auditoría de seis frentes del 07/09/2026, SEC-02 (severidad
+ALTA) · **Loop:** Cerrar lo que no necesita autoridad clínica ·
+**Estado:** **Decidida e implementada** (09/09/2026).
+
+### Problema
+
+Reproducido ejecutando código el 09/09/2026. `django-axes` bloquea **por IP
+sola** en su configuración por defecto (`AXES_LOCKOUT_PARAMETERS =
+['ip_address']`), y el proyecto nunca la cambió:
+
+```
+Un bot prueba 5 veces con un usuario inventado, desde la IP del edge:
+   intento 1..4: HTTP 200
+   intento 5:    HTTP 429
+
+El médico entra con SU usuario y SU clave, desde esa misma IP:
+   HTTP 429  ·  autenticado: False
+```
+
+**Detrás del edge de Railway todo el tráfico llega con la misma IP.** Es
+decir: cualquiera desde internet podía dejar al médico sin panel durante una
+hora, sin conocer ningún dato suyo. Una defensa contra el acceso no
+autorizado convertida en una negación de servicio contra el usuario legítimo.
+
+### Decisión
+
+1. **Bloquear por la combinación usuario + IP**, no por IP sola.
+2. **Que axes averigüe la IP con la misma función que el rate limit del
+   formulario público** (`AXES_CLIENT_IP_CALLABLE`). Esa función se movió a
+   `home/ip_cliente.py`: la usaban ya dos subsistemas y seguía siendo privada
+   dentro de `views.py`.
+3. **Pruebas que fijan el comportamiento**, en `home/tests.py`.
+
+### Por qué esta decisión y no otra
+
+**Por qué la combinación y no solo el usuario.** Hoy, con una sola IP para
+todos, las dos opciones se comportan igual y ambas arreglan el hallazgo. La
+diferencia llega el día que la IP real sea de fiar: entonces la combinación
+impide además que alguien **desde otra IP** bloquee al médico aunque acierte
+su usuario. Se elige la que envejece mejor.
+
+**Lo que se acepta a cambio, y queda escrito para no descubrirlo por
+sorpresa:** quien pueda rotar de IP consigue cinco intentos **por IP** en vez
+de cinco en total. Se asume porque la alternativa está **demostrada rota**,
+porque el panel tiene una o dos cuentas con contraseña propia, y porque axes
+es aquí defensa en profundidad y no la única cerradura. **Si algún día hay
+muchas cuentas, esto se revisa.**
+
+**Por qué una sola función para la IP.** Si el rate limit del formulario y el
+bloqueo de acceso la resolvieran de formas distintas, una de las dos estaría
+equivocada **y nadie lo notaría**: las dos seguirían funcionando, cada una con
+su idea de quién es el cliente.
+
+### Lo que esto desbloquea
+
+El **PR #26 de Dependabot** (`django-axes` 7.0.1 → 8.3.1, salto de versión
+mayor) se dejó esperando el 07/09 con esta razón escrita: pasaba las
+comprobaciones de la CI, pero **no había ni una prueba que fijara el
+comportamiento del bloqueo**, así que un cambio de semántica en la librería
+habría entrado sin que cayera nada. Ahora la hay.
+
+### Verificación
+
+`proceso/verificaciones/2026-09-09_verificacion_sec02.py` — cuatro
+reversiones, las cuatro atrapadas. **En la primera corrida escaparon dos**, y
+las dos por el mismo defecto que persigue la ficha D16: una prueba leía el
+propio ajuste que debía denunciar (`range(AXES_FAILURE_LIMIT)`, que se
+adaptaba al sabotaje), y otra comparaba dos implementaciones en el único
+escenario en el que coinciden por casualidad. Corregidas.
 
 ## Método de trabajo acordado
 

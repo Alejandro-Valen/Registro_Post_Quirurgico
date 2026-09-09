@@ -1,6 +1,4 @@
-import ipaddress
 import logging
-import re
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -10,6 +8,7 @@ from django.http import HttpResponse
 from django.shortcuts import render
 from django.utils import timezone
 
+from .ip_cliente import _get_client_ip
 from .models import MensajeContacto
 
 logger = logging.getLogger(__name__)
@@ -18,23 +17,6 @@ _LIMITE_CONTACTO_HORA = 5   # envíos por IP por hora
 _MAX_NOMBRE  = 100
 _MAX_TELEFONO = 30
 _MAX_MENSAJE = 2000
-_RAILWAY_EDGE_RE = re.compile(r'^railway/[a-z0-9-]+$')
-
-
-def _get_client_ip(request):
-    remote_addr = request.META.get('REMOTE_ADDR', '')
-    if not getattr(settings, 'TRUST_RAILWAY_PROXY', False):
-        return remote_addr
-
-    railway_edge = request.META.get('HTTP_X_RAILWAY_EDGE', '')
-    real_ip = request.META.get('HTTP_X_REAL_IP', '')
-    if not _RAILWAY_EDGE_RE.fullmatch(railway_edge):
-        return remote_addr
-
-    try:
-        return str(ipaddress.ip_address(real_ip))
-    except ValueError:
-        return remote_addr
 
 
 def _rate_limit_contacto_excedido(ip):
