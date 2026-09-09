@@ -1,10 +1,11 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
+from .ip_cliente import _get_client_ip
 from .models import MensajeContacto
-from .views import _get_client_ip
 
 
 class ClientIpTests(TestCase):
@@ -390,3 +391,168 @@ class AutorizacionHabeasDataTests(TestCase):
         html = self.client.get(reverse('politica_datos')).content.decode()
         self.assertIn('[por definir]', html)
         self.assertIn('Documento en preparación', html)
+
+
+class BloqueoDeAccesoTests(TestCase):
+    """SEC-02 — el bloqueo por intentos fallidos no puede castigar a inocentes.
+
+    **El hallazgo, reproducido el 09/09/2026.** `django-axes` bloquea por IP
+    sola en su configuración por defecto. Cinco intentos fallidos con un usuario
+    inventado dejaban al médico fuera de su panel una hora, con su usuario y su
+    clave correctos, respondiendo **HTTP 429**. Detrás del edge de Railway todo
+    el tráfico llega con la misma IP, así que **cualquier bot de internet podía
+    dejar al médico sin panel cuando quisiera**.
+
+    **Por qué estas pruebas son las que desbloquean el PR de Dependabot #26.**
+    Ese PR sube `django-axes` de 7.0.1 a 8.3.1 — un salto de versión mayor sobre
+    la pieza que decide quién entra al panel. Pasaba las comprobaciones de la CI,
+    pero ese verde valía poco: **no había ni una prueba que fijara este
+    comportamiento**, así que un cambio de semántica en la librería habría
+    entrado sin que cayera nada. Ahora sí lo hay.
+    """
+
+    EDGE = '198.51.100.77'          # la IP única del edge, la de todos
+    OTRA_IP = '203.0.113.42'
+    CLAVE = 'clave-larga-del-medico-2026'
+
+    def setUp(self):
+        self.medico = get_user_model().objects.create_user(
+            username='medico_real', password=self.CLAVE,
+            is_staff=True, is_superuser=True, email='medico@ejemplo.com')
+        # Axes guarda los intentos en la base y en el cache; sin limpiar, una
+        # prueba arrastra los bloqueos de la anterior.
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def _intentar(self, usuario, clave, ip=None):
+        return self.client.post(
+            reverse('admin:login'),
+            {'username': usuario, 'password': clave},
+            REMOTE_ADDR=ip or self.EDGE,
+            follow=True,
+        )
+
+    # El número va FIJO, no leído de `settings.AXES_FAILURE_LIMIT`.
+    #
+    # Con `range(settings.AXES_FAILURE_LIMIT)` la prueba se adaptaba al
+    # sabotaje: al subir el límite a 500, hacía 500 intentos y seguía
+    # bloqueando, así que subir el límite no la hacía caer. Una prueba que se
+    # ajusta sola a lo que debería denunciar no mide nada.
+    #
+    # Que 5 siga siendo el límite configurado lo fija
+    # `test_la_configuracion_no_vuelve_a_bloquear_solo_por_ip`.
+    INTENTOS = 5
+
+    def _fallar_cinco_veces(self, usuario, ip=None):
+        for _ in range(self.INTENTOS):
+            self._intentar(usuario, 'clave-equivocada', ip=ip)
+
+    def _entro(self, respuesta):
+        """¿Quedó la sesión autenticada?
+
+        Se mira la sesión del cliente y no `respuesta.context['user']`: tras un
+        acceso correcto se aterriza en el índice del Admin, cuyo contexto no
+        siempre expone `user`, y la prueba petaba con un KeyError en vez de
+        decir lo que quería decir.
+        """
+        return '_auth_user_id' in self.client.session
+
+    def test_los_fallos_de_otro_usuario_no_bloquean_al_medico(self):
+        """El hallazgo SEC-02, en una línea.
+
+        Un bot machaca un usuario inventado desde la IP del edge. El médico,
+        desde esa misma IP —que es la de todos—, tiene que poder entrar.
+        """
+        self._fallar_cinco_veces('usuario-que-no-existe')
+
+        respuesta = self._intentar('medico_real', self.CLAVE)
+
+        self.assertTrue(
+            self._entro(respuesta),
+            'Cinco fallos con OTRO usuario dejaron al médico fuera de su panel. '
+            'Detrás del edge de Railway todo el tráfico comparte IP, así que '
+            'esto lo puede provocar cualquiera desde internet (SEC-02).',
+        )
+
+    def test_el_bloqueo_sigue_existiendo_para_quien_lo_provoca(self):
+        """La otra dirección, y la que impide que esto sea un agujero.
+
+        Aflojar el bloqueo para no castigar a terceros no puede convertirse en
+        no bloquear a nadie: la cuenta atacada sí se cierra.
+        """
+        self._fallar_cinco_veces('medico_real')
+
+        respuesta = self._intentar('medico_real', self.CLAVE)
+
+        self.assertFalse(
+            self._entro(respuesta),
+            'Cinco fallos contra la cuenta del médico deberían bloquearla: si '
+            'no, no queda ninguna defensa contra la fuerza bruta.',
+        )
+
+    def test_el_bloqueo_no_alcanza_a_la_misma_cuenta_desde_otra_ip(self):
+        """La combinación usuario+IP, comprobada por su otro eje.
+
+        Fija lo que se aceptó a cambio en la decisión: quien pueda rotar de IP
+        consigue cinco intentos por IP. Está escrito a propósito en
+        `settings.py`, y esta prueba lo hace visible en vez de dejarlo como una
+        sorpresa para quien lea el código dentro de un año.
+        """
+        self._fallar_cinco_veces('medico_real', ip=self.EDGE)
+
+        respuesta = self._intentar('medico_real', self.CLAVE, ip=self.OTRA_IP)
+
+        self.assertTrue(
+            self._entro(respuesta),
+            'Con el bloqueo por usuario+IP, la misma cuenta desde otra IP no '
+            'está bloqueada. Si esto cambia, la decisión de SEC-02 cambió y hay '
+            'que reescribirla en settings.py.',
+        )
+
+    def test_la_configuracion_no_vuelve_a_bloquear_solo_por_ip(self):
+        """El defecto de axes es `['ip_address']`, y es el que causó SEC-02.
+
+        Se fija explícitamente porque **quitar la línea de `settings.py` no
+        rompe nada visible**: la aplicación arranca igual y el panel funciona.
+        El daño solo aparece cuando un tercero falla cinco veces, que es
+        precisamente lo que nadie prueba a mano.
+        """
+        parametros = settings.AXES_LOCKOUT_PARAMETERS
+        self.assertNotEqual(parametros, ['ip_address'])
+        aplanado = [p for grupo in parametros
+                    for p in (grupo if isinstance(grupo, list) else [grupo])]
+        self.assertIn('username', aplanado)
+
+        # Y el límite tiene que seguir siendo pequeño. Sin esto, subirlo a 500
+        # dejaba de bloquear a nadie y ninguna prueba caía: las de arriba
+        # fallaban tantas veces como dijera el propio ajuste saboteado.
+        self.assertLessEqual(
+            settings.AXES_FAILURE_LIMIT, 10,
+            'Un límite alto convierte el bloqueo en decorativo: la fuerza bruta '
+            'tendría margen de sobra antes de encontrarse la puerta cerrada.')
+
+    @override_settings(TRUST_RAILWAY_PROXY=True)
+    def test_axes_usa_la_misma_ip_que_el_rate_limit_del_formulario(self):
+        """Si las dos defensas resolvieran la IP distinto, una estaría mal.
+
+        Y nadie lo notaría: las dos seguirían funcionando, cada una con su idea
+        de quién es el cliente.
+
+        **El `override_settings` de arriba es obligatorio, y por la misma razón
+        que en `ClientIpTests`.** Con `TRUST_RAILWAY_PROXY=False` las dos formas
+        de resolver la IP devuelven `REMOTE_ADDR` y coinciden **aunque axes no
+        esté usando la función del proyecto**: la prueba pasaba en verde con la
+        configuración quitada. Solo con el proxy declarado de confianza
+        divergen, y solo entonces esto mide algo.
+        """
+        from axes.helpers import get_client_ip_address
+
+        peticion = RequestFactory().post(
+            '/admin/login/', REMOTE_ADDR='10.0.0.4',
+            HTTP_X_REAL_IP='198.51.100.20',
+            HTTP_X_RAILWAY_EDGE='railway/us-east4-eqdc4a')
+
+        # La función del proyecto sí se cree la cabecera cuando el edge la
+        # respalda; el `ipware` que trae axes de fábrica no la mira.
+        self.assertEqual(_get_client_ip(peticion), '198.51.100.20')
+        self.assertEqual(get_client_ip_address(peticion), _get_client_ip(peticion))

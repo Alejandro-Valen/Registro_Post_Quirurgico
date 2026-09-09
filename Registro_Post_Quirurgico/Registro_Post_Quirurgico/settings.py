@@ -93,6 +93,38 @@ AXES_COOLOFF_TIME      = 1    # desbloqueo automático tras 1 hora
 AXES_LOCK_OUT_AT_FAILURE = True
 AXES_RESET_ON_SUCCESS  = True  # reinicia el contador al loguearse bien
 
+# --- SEC-02 (auditoría del 07/09/2026, severidad ALTA) --------------------
+#
+# El valor por defecto de axes es bloquear **por IP sola**. Reproducido el
+# 09/09/2026: cinco intentos fallidos con un usuario inventado desde una IP
+# dejaban al médico fuera de su panel una hora, con su usuario y su clave
+# correctos, respondiendo HTTP 429.
+#
+# Detrás del edge de Railway eso no es un caso raro: **todo el tráfico llega
+# con la misma IP**, así que cualquier bot de internet podía dejar sin panel al
+# médico cuando quisiera. Una defensa contra el acceso no autorizado que se
+# convierte en una negación de servicio contra el usuario legítimo.
+#
+# Se bloquea por la COMBINACIÓN usuario + IP:
+#
+#   · Hoy, con una sola IP para todos, equivale a bloquear por usuario: un bot
+#     que machaca "admin" ya no toca la cuenta del médico.
+#   · El día que la IP real sea de fiar, además impide que alguien desde otra
+#     IP bloquee al médico aunque acierte su usuario.
+#
+# LO QUE SE ACEPTA A CAMBIO, y conviene tenerlo escrito: quien pueda rotar de
+# IP consigue cinco intentos por IP en vez de cinco en total. Se asume porque
+# la alternativa está demostrada rota, porque el panel tiene una o dos cuentas
+# con contraseña propia, y porque axes es aquí una defensa en profundidad y no
+# la única cerradura. Si algún día hay muchas cuentas, esto se revisa.
+AXES_LOCKOUT_PARAMETERS = [['username', 'ip_address']]
+
+# Que axes averigüe la IP igual que el rate limit del formulario: si las dos
+# defensas la resolvieran distinto, una estaría equivocada y nadie lo notaría.
+# La cadena se resuelve tarde (import_string), así que no crea un import
+# circular al cargar la configuración.
+AXES_CLIENT_IP_CALLABLE = 'home.ip_cliente._get_client_ip'
+
 ROOT_URLCONF = 'Registro_Post_Quirurgico.urls'
 
 TEMPLATES = [
