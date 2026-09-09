@@ -1490,7 +1490,12 @@ contenedor. Eso solo se ve desplegando, cuando haya plan de pago.
 
 **Hallazgo:** auditoría de seis frentes del 07/09/2026, SEC-01 · **Loop:** Arné
 · **Estado:** **Decidida** (07/09/2026).
-Guion de la sesión: `proceso/instrucciones/2026-09-07_instruccion_loop_arnes.md`.
+Sin guion de sesión escrito: los loops del arnés y del repositorio salieron de
+la propia auditoría de seis frentes
+(`proceso/auditorias/2026-09-07_auditoria_seis_frentes.md`) y se ejecutaron el
+mismo día. Hasta el 09/09/2026 esta ficha citaba un
+`2026-09-07_instruccion_loop_arnes.md` que **nunca se escribió**; lo detectó el
+barrido de veracidad.
 
 ### Problema
 
@@ -1518,8 +1523,8 @@ $ python manage.py check --deploy --fail-level WARNING
 Los checks de despliegue de Django son todos de nivel **WARNING**, y
 `--fail-level` vale **ERROR** por defecto. Es decir: desde que existe la CI
 (31/07/2026), la comprobación «Configuración de producción» **nunca pudo
-fallar**. Hoy se pueden borrar HSTS, el redirect a HTTPS y las cookies seguras y
-las siete comprobaciones siguen en verde.
+fallar**. Antes de esta ficha se podían borrar HSTS, el redirect a HTTPS y las
+cookies seguras, y las **siete comprobaciones de entonces** seguían en verde.
 
 Los otros cinco casos del mismo patrón:
 
