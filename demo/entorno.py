@@ -52,6 +52,14 @@ def arrancar():
     from django.test.utils import setup_test_environment
     setup_test_environment()
 
+    # Cada demo se lleva su propia base, con el número de proceso en el nombre.
+    # Sin esto, dos demos abiertas a la vez chocan: la segunda muere con «la base
+    # de datos test_registro_postquirurgico_db ya existe» y no arranca hasta que
+    # se cierre la primera. Pasó de verdad, con dos ventanas abiertas.
+    from django.conf import settings
+    settings.DATABASES['default'].setdefault('TEST', {})
+    settings.DATABASES['default']['TEST']['NAME'] = f'test_demo_{os.getpid()}'
+
     from django.db import DatabaseError
     try:
         # El intento fallido de PostgreSQL escupe un RuntimeWarning largo de
@@ -61,7 +69,11 @@ def arrancar():
             warnings.simplefilter('ignore')
             _montar()
         return 'PostgreSQL'
-    except (DatabaseError, OSError, ImportError):
+    except (DatabaseError, OSError, ImportError, SystemExit):
+        # `SystemExit` no sobra: cuando Django no puede crear la base de pruebas
+        # no lanza una excepción de base de datos, imprime el motivo y llama a
+        # `sys.exit(2)`. Sin capturarlo, el plan B se saltaba justo en el caso
+        # para el que existe.
         _usar_sqlite()
         _montar()
         return 'SQLite'
