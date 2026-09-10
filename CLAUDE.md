@@ -79,6 +79,7 @@ sí — ahí está el método y lo que ya falló antes.
 
 | Documento | Qué responde |
 |-----------|--------------|
+| `docs/PARA_LA_REUNION.md` | **La página para la reunión con el médico y el profesional de desarrollo:** qué hace el sistema, qué está verificado, qué NO hay, y las **once decisiones que necesitan una persona**. Es el documento que hay que abrir antes de esa reunión, y el único que reúne las decisiones abiertas en un solo sitio |
 | `README.md` (raíz) | La portada: qué hace el sistema, cómo se instala, y qué falta —técnico y normativo— para pacientes reales |
 | `CONTRIBUTING.md` | Las convenciones en forma corta: ramas, commits, qué correr antes del PR, y las reglas del código |
 | `SECURITY.md` | Qué cuenta como fallo de seguridad aquí, qué ya está resuelto y **qué sabemos que falta** |

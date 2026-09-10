@@ -1,5 +1,10 @@
 # Mapa y estado de la documentación
 
+> **Si vienes a la reunión, empieza por [`PARA_LA_REUNION.md`](PARA_LA_REUNION.md).**
+> Reúne en una página qué hace el sistema, qué está verificado, qué no hay, y
+> las once decisiones que necesitan una persona. El resto de este mapa es para
+> quien va a tocar el código.
+
 > Última revisión integral: 24/07/2026. Estado actualizado el 31/07/2026.
 
 Este índice distingue la documentación vigente de los registros históricos. Si
