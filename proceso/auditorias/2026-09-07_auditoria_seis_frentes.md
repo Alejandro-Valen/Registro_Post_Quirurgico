@@ -157,7 +157,7 @@ el `signos_sintomas/tests.py` que ya no existe. ✅ **Árbol limpio** (PR #18) �
 | **TEST-03** | Cuatro umbrales clínicos se pueden mover sin que caiga una prueba | ✅ Corregido, loop de umbrales (08/09/2026) — 21 sabotajes, los 21 atrapados |
 | **UX-P01** | El tablero imprime *"Sin alertas pendientes. Todo bajo control"* mientras su propio indicador muestra una alerta ALTA sin resolver (ocurre siempre que la ALTA es de tipo SILENCIO) | ✅ Corregido (08/09/2026) — reversión R14 |
 | **UX-B01** | **No hay palabra de auxilio.** *"estoy sangrando mucho"* en la pregunta 7 se guarda como distensión abdominal y el bot pasa a la siguiente pregunta | ✅ Corregido (08/09/2026, D21): tipo de alerta `AUXILIO` propio — reversiones R08-R10 |
-| **UX-B02** | El bot promete *"Te escribiré cuando sea la hora"*, pero el envío saliente es un stub: nadie le va a escribir nunca | ⬜ Abierto |
+| **UX-B02** | El bot promete *"Te escribiré cuando sea la hora"*, pero el envío saliente es un stub: nadie le va a escribir nunca | ⬜ **Confirmado abierto** (09/09/2026): el envío saliente sigue siendo un stub declarado en el propio comando — Abierto |
 | **REPO-01** | Cédula y nombre de un tercero en el repositorio, en la carpeta que gitleaks excluía | ✅ Árbol · ⬜ Historia |
 | **REPO-02** | El proyecto no se podía instalar: cero instrucciones en 44 documentos | ✅ Corregido, PR #19 |
 | **REPO-03** | Sin `README.md`, `LICENSE`, `CONTRIBUTING`, `SECURITY` | ✅ Corregido, PR #19 |
@@ -171,7 +171,7 @@ el `signos_sintomas/tests.py` que ya no existe. ✅ **Árbol limpio** (PR #18) �
 | SEC-04 | Sin `DJANGO_SETTINGS_MODULE` la app **arranca igual** con la configuración base y pierde HSTS, redirect HTTPS, cookies seguras y CSP. El `Dockerfile` la fija; `nixpacks.toml` no | ⬜ **Confirmado abierto** (09/09/2026): `wsgi.py` usa `setdefault` con la configuración base |
 | SEC-05 | `crear_admin` **reescribe la contraseña del superusuario en cada arranque** y puede promover a superusuario una cuenta existente. Es el defecto que D15 corrigió para el médico y aquí quedó sin corregir. Verificado 07/09: `set_password` sigue sin condición | ⬜ **Confirmado abierto** (09/09/2026): `crear_admin.py:50-51` fija `is_superuser` y `set_password` sin condición — es el mismo defecto que D15 arregló en `crear_medico` y quedó vivo en su gemelo |
 | SEC-06 | Sin vigilancia de dependencias; Django 6.0.7 con CVE-2026-15830 (no explotable: `contrib.gis` no está instalado) | ✅ PR #18 |
-| SEC-07 | **Sin registro de accesos de lectura.** Django registra escrituras del Admin, no consultas: no se puede saber qué médico consultó qué ficha | ⬜ |
+| SEC-07 | **Sin registro de accesos de lectura.** Django registra escrituras del Admin, no consultas: no se puede saber qué médico consultó qué ficha | ⬜ **Confirmado abierto** (09/09/2026): no existe ningún registro de accesos de lectura — |
 | SEC-08 | Datos sensibles sin cifrado de aplicación, retención indefinida y sin procedimiento de supresión | ⬜ |
 | SEC-09 | Secretos de producción en el `.env` de desarrollo; la documentación indica reutilizar el Auth Token **primario** de Twilio, que es la única cerradura del webhook | ⬜ |
 | SEC-10 | `cron_runner` vuelca el mensaje completo de la excepción, contra la regla del propio proyecto. Verificado 07/09: sigue así | ⬜ |
@@ -192,10 +192,10 @@ el `signos_sintomas/tests.py` que ya no existe. ✅ **Árbol limpio** (PR #18) �
 | DB-05 | **N+1 en cuatro listados del Admin.** `PacienteAdmin` no aplica ningún `select_related`: ~101 consultas por página; `AlertaAdmin` ~201 | ⬜ **Confirmado abierto** (09/09/2026): `PacienteAdmin` sigue sin `select_related` ni `get_queryset` |
 | DB-06 | `docs/modelos_datos.md` desincronizado: faltan `DeteccionAlerta`, `NotificacionAlerta` y 4 campos de `RegistroDiario` | ⬜ |
 | DB-07 | **Revocar el consentimiento no detiene la generación de datos.** Se le siguen creando turnos, no puede responderlos, y a los dos días genera `SILENCIO/ALTA` con correo al médico | ✅ Corregido (08/09/2026, ficha D22) — verificado: el cron filtra por consentimiento |
-| DB-08 | `.date()` sobre datetime *aware* en los dos seeds — el patrón que la norma del proyecto prohíbe. Hoy da el resultado correcto por casualidad | ⬜ |
+| DB-08 | `.date()` sobre datetime *aware* en los dos seeds — el patrón que la norma del proyecto prohíbe. Hoy da el resultado correcto por casualidad | ⬜ **Confirmado abierto** (09/09/2026): **4 apariciones** de `.date()` sobre datetime aware en los dos seeds — el patrón que la norma del proyecto prohíbe — |
 | DB-09 | `CheckInProgramado` sin índice por `estado`, `hora_programada` ni `fecha_dia`. La tabla **nunca se purga** y crece linealmente | ⬜ **Confirmado abierto** (09/09/2026): `CheckInProgramado.Meta` no declara `indexes` |
-| DB-10 | Dos migraciones de datos con `RunPython.noop` como reverse: un `migrate` hacia atrás **reporta éxito sin deshacer nada** | ⬜ |
-| DB-11 | **No hay procedimiento de supresión.** El botón "Eliminar" del Admin siempre termina en `ProtectedError` | ⬜ |
+| DB-10 | Dos migraciones de datos con `RunPython.noop` como reverse: un `migrate` hacia atrás **reporta éxito sin deshacer nada** | ⬜ **Confirmado abierto** (09/09/2026): 2 migraciones con `RunPython.noop` como reverse — |
+| DB-11 | **No hay procedimiento de supresión.** El botón "Eliminar" del Admin siempre termina en `ProtectedError` | ⬜ **Confirmado abierto** (09/09/2026): el Admin define `has_delete_permission` pero no existe ningún procedimiento de supresión — |
 | DB-12 | Rama de abandono del bot que hace una pregunta y luego ignora la respuesta | ⬜ |
 
 ---
@@ -210,12 +210,12 @@ escritas.** Las dos desviaciones son de sobre-alerta, no de falso negativo.
 | BE-02 | Umbrales clínicos (37,9 °C · 101 · 110 lpm) **duplicados a mano** en el panel del médico, fuera de la fuente única. El día que cambien, el médico verá la línea vieja | ✅ Corregido (09/09/2026) — el panel lee las constantes; lo vigila el barrido |
 | BE-03 | Un arranque tardío de `cron_matutino` **crea el turno de la mañana y lo cierra en la misma corrida** → SILENCIO espurio. La prueba que cubre esa secuencia **anula la condición** | ⬜ |
 | BE-04 | Una palabra clave de la FAQ impide que arranque el check-in: *"hoy tengo mucho dolor"* devuelve la respuesta enlatada y el cuestionario no empieza | ⬜ **Confirmado abierto** (09/09/2026): en `bot.py` la FAQ se consulta ANTES de buscar el check-in pendiente |
-| BE-05 | Los mensajes prometen un contacto que ningún código realiza (amplifica BE-01 y BE-04) | ⬜ |
+| BE-05 | Los mensajes prometen un contacto que ningún código realiza (amplifica BE-01 y BE-04) | ⬜ **Confirmado abierto** (09/09/2026): 3 mensajes siguen prometiendo un contacto que ningún código realiza — |
 | BE-06 | La mitad clínica de D8 —que un día sin datos **corta** el conteo— no tiene ninguna prueba | ✅ Corregido (08/09/2026, loop de umbrales) — verificado: 5 pruebas del corte D8 |
 | BE-07 | Sin salida para el paciente que no puede medir: temperatura, dolor, gases, hinchazón y líquidos no admiten "saltar". Sin termómetro, el turno se pierde | ✅ Parcial (08/09/2026, D20): temperatura y dolor resueltos. Gases, hinchazón y líquidos **siguen obligatorios a propósito** — abrir el salto en todas dejaría llegar check-ins casi vacíos sin ninguna alerta que lo denuncie |
-| BE-08 | Regla 5b escala **dos niveles** cuando la tabla no da alerta; el promedio se calcula por registro, no por día | ⬜ |
-| BE-09 | Regla 6 cuenta como "no toleró" un día cuyo dato **no se capturó** | ⬜ |
-| BE-10 | `.date()` sobre datetime aware en los seeds (mismo que DB-08) | ⬜ |
+| BE-08 | Regla 5b escala **dos niveles** cuando la tabla no da alerta; el promedio se calcula por registro, no por día | ⬜ **Confirmado abierto** (09/09/2026): **reproducido el 09/09/2026** y fijado con pruebas de caracterización; queda a la espera de la validación médica (ver `reglas_clinicas.md`) — |
+| BE-09 | Regla 6 cuenta como "no toleró" un día cuyo dato **no se capturó** | ⬜ **Confirmado abierto** (09/09/2026): **reproducido el 09/09/2026** y fijado con pruebas de caracterización; queda a la espera de la validación médica (ver `reglas_clinicas.md`) — |
+| BE-10 | `.date()` sobre datetime aware en los seeds (mismo que DB-08) | ⬜ **Confirmado abierto** (09/09/2026): el mismo `.date()` de DB-08, confirmado — |
 | BE-11 | Rama muerta en la máquina de estados del bot | ⬜ |
 | BE-12 | La docstring del stub anuncia un sprint ya cerrado | ⬜ **Confirmado abierto** (09/09/2026): el docstring de `enviar_recordatorios` sigue anunciando el Sprint 5 |
 | BE-13 | Un registro atascado en `PROCESANDO` no lo recoge ningún comando | ⬜ |
@@ -228,41 +228,41 @@ escritas.** Las dos desviaciones son de sobre-alerta, no de falso negativo.
 
 | ID | Hallazgo | Estado |
 |---|---|---|
-| UX-P02 | El changelist ordena por fecha, no por severidad; ordenar por la columna Severidad da **ALTA, BAJA, MEDIA** (alfabético) | ⬜ |
-| UX-P03 | El listado muestra `fecha_alerta` y no `fecha_ultima_deteccion`: una alerta redetectada hoy se hunde al fondo | ⬜ |
+| UX-P02 | El changelist ordena por fecha, no por severidad; ordenar por la columna Severidad da **ALTA, BAJA, MEDIA** (alfabético) | ⬜ **Confirmado abierto** (09/09/2026): sin `ordering` en `AlertaAdmin`; el listado sigue ordenando por fecha — |
+| UX-P03 | El listado muestra `fecha_alerta` y no `fecha_ultima_deteccion`: una alerta redetectada hoy se hunde al fondo | ⬜ **Confirmado abierto** (09/09/2026): `list_display` incluye `fecha_alerta` y no `fecha_ultima_deteccion` — |
 | UX-P04 | Si Chart.js no carga, el médico ve **tres lienzos en blanco sin ningún aviso** — idéntico a "no hay datos". El estado *error* no está resuelto en ninguna pantalla | ⬜ |
-| UX-P05 | La escala de temperatura está fijada a 35–40 °C, pero el bot acepta hasta 45: **el valor más grave es el único que la gráfica no dibuja** | ⬜ |
+| UX-P05 | La escala de temperatura está fijada a 35–40 °C, pero el bot acepta hasta 45: **el valor más grave es el único que la gráfica no dibuja** | ⬜ **Confirmado abierto** (09/09/2026): `graficas_signos_vitales.js:83-84` fija `min: 35, max: 40` y el bot acepta hasta 45 — **el valor más grave es el único que la gráfica no dibuja** — |
 | UX-P06 | Contrastes por debajo de WCAG: píldora MEDIA **2,90:1**, texto atenuado 3,57:1, nota de la gráfica 2,54:1 | ⬜ |
-| UX-P07 | La tabla de historial tiene 9 columnas sin contenedor desplazable: desborda en móvil | ⬜ |
-| UX-P08 | La ficha no define `fieldsets`: para ver la evolución clínica hay que pasar por encima de los campos administrativos | ⬜ |
-| UX-P09 | Chart.js (204 KB) se descarga también en el listado de pacientes, donde no hay gráficas | ⬜ |
-| UX-P10 | `.pt-alerta-sistema` no existe en ningún CSS; el estilo va en línea y duplicado | ⬜ |
+| UX-P07 | La tabla de historial tiene 9 columnas sin contenedor desplazable: desborda en móvil | ⬜ **Confirmado abierto** (09/09/2026): cero apariciones de `overflow` en `admin.py`: la tabla de 9 columnas sigue sin contenedor desplazable — |
+| UX-P08 | La ficha no define `fieldsets`: para ver la evolución clínica hay que pasar por encima de los campos administrativos | ⬜ **Confirmado abierto** (09/09/2026): cero `fieldsets` en `admin.py` — |
+| UX-P09 | Chart.js (204 KB) se descarga también en el listado de pacientes, donde no hay gráficas | ⬜ **Confirmado abierto** (09/09/2026): `PacienteAdmin.Media` carga `chart.umd.min.js`, y esa Media aplica también al listado — |
+| UX-P10 | `.pt-alerta-sistema` no existe en ningún CSS; el estilo va en línea y duplicado | ⬜ **Confirmado abierto** (09/09/2026): `.pt-alerta-sistema` sigue sin CSS y con el estilo en línea duplicado dos veces — |
 | UX-P11 | El selector de días pisa el query string y pierde el retorno al filtro | ⬜ |
 
 **Bot / paciente**
 
 | ID | Hallazgo | Estado |
 |---|---|---|
-| UX-B03 | La pregunta 6 mete dos cosas en un mensaje: *"si, no tuve nauseas: 0"* se registra como **sin gases**, que alimenta la regla de íleo | ⬜ |
+| UX-B03 | La pregunta 6 mete dos cosas en un mensaje: *"si, no tuve nauseas: 0"* se registra como **sin gases**, que alimenta la regla de íleo | ⬜ **Confirmado abierto** (09/09/2026): **reproducido**: `"si, no tuve nauseas: 0"` devuelve `gases=False`. El paciente dice que SÍ pasó gases y se registra lo contrario, alimentando la regla de íleo con un dato falso — |
 | UX-B04 | **Sin termómetro no se puede avanzar**, y "saltar" no funciona en esa pregunta. Un paciente sin dolor tampoco puede responder: el rango es 1-10 y "0" se rechaza | ✅ Corregido (08/09/2026, D20) — reversiones R04-R06 |
 | UX-B05 | El parser de temperatura trunca y **el bot nunca devuelve lo que entendió** (mismo que DB-02) | ✅ Corregido (08/09/2026, D19): el eco va en el paso de la temperatura, no en el cierre — ver la nota de `bot_whatsapp.md` |
 | UX-B06 | El paciente sin drenaje ve saltar del 3 al 6 sin explicación, y el cuestionario de "10 preguntas" nunca llega a 10 | ⬜ |
 | UX-B07 | Conversación abandonada sin check-in hoy: el bot hace una pregunta y luego ignora la respuesta | ⬜ |
 | UX-B08 | La FAQ contesta y **no encadena** el inicio del reporte | ⬜ |
-| UX-B09 | Las preguntas 1-6 tutean y las 7-10 tratan de usted, contra la regla del documento dueño | ⬜ |
-| UX-B10 | Los dos mensajes que mandan al paciente a urgencias están **sin tildes**; los otros veinte sí las llevan | ⬜ |
-| UX-B11 | *"parece que ayer no pudimos terminar"* puede haber sido hace una semana | ⬜ |
+| UX-B09 | Las preguntas 1-6 tutean y las 7-10 tratan de usted, contra la regla del documento dueño | ⬜ **Confirmado abierto** (09/09/2026): las preguntas 7, 8 y 9 usan «su» mientras 1-6 tutean — |
+| UX-B10 | Los dos mensajes que mandan al paciente a urgencias están **sin tildes**; los otros veinte sí las llevan | ⬜ **Confirmado abierto** (09/09/2026): `MSG_CIERRE_ALERTA_ALTA` sigue sin tildes («atencion», «precaucion», «medico») — |
+| UX-B11 | *"parece que ayer no pudimos terminar"* puede haber sido hace una semana | ⬜ **Confirmado abierto** (09/09/2026): `bot.py:124` sigue diciendo «parece que ayer no pudimos terminar» — |
 
 **Landing pública** — el estado de boceto es decisión documentada (P-12), no hallazgo.
 
 | ID | Hallazgo | Estado |
 |---|---|---|
-| UX-L01 | En móvil desaparecen los cuatro enlaces del menú y **el único visible es "Acceso médico"**, que lleva al login del Admin | ⬜ |
-| UX-L02 | El formulario con espacios en blanco no crea nada y **no muestra ni éxito ni error** | ⬜ |
-| UX-L03 | Si salta el rate limit, el usuario pierde todo lo que escribió | ⬜ |
-| UX-L04 | El mensaje se recorta a 2000 caracteres **en silencio** y responde "enviado correctamente" | ⬜ |
-| UX-L05 | Los avisos del formulario sin `role="alert"`: un lector de pantalla no anuncia el resultado | ⬜ |
-| UX-L06 | El bucle de animación llama a `getComputedStyle` en cada fotograma | ⬜ |
+| UX-L01 | En móvil desaparecen los cuatro enlaces del menú y **el único visible es "Acceso médico"**, que lleva al login del Admin | ⬜ **Confirmado abierto** (09/09/2026): `site.css:324` — `.navlinks a:not(.cta) { display: none }` bajo 900px: el único enlace visible en móvil lleva al login del Admin — |
+| UX-L02 | El formulario con espacios en blanco no crea nada y **no muestra ni éxito ni error** | ⬜ **Confirmado abierto** (09/09/2026): `home/views.py:136` — con un campo en blanco no entra en ninguna rama: ni éxito ni error — |
+| UX-L03 | Si salta el rate limit, el usuario pierde todo lo que escribió | ⬜ **Confirmado abierto** (09/09/2026): cero `value="{{` en el formulario: al saltar el rate limit se pierde todo lo escrito — |
+| UX-L04 | El mensaje se recorta a 2000 caracteres **en silencio** y responde "enviado correctamente" | ⬜ **Confirmado abierto** (09/09/2026): `home/views.py:124` sigue recortando con `[:_MAX_MENSAJE]` sin avisar — |
+| UX-L05 | Los avisos del formulario sin `role="alert"`: un lector de pantalla no anuncia el resultado | ⬜ **Confirmado abierto** (09/09/2026): 3 avisos en el formulario y **solo 1** con `role="alert"` (el de autorización, añadido el 08/09) — |
+| UX-L06 | El bucle de animación llama a `getComputedStyle` en cada fotograma | ⬜ **Confirmado abierto** (09/09/2026): el bucle `requestAnimationFrame` llama a `draw()` en cada fotograma — |
 
 ---
 
@@ -287,8 +287,8 @@ justo las dos que pasaron por una auditoría previa.
 | TEST-05 | La ventana de dolor POD 3-5 y las fronteras entre ventanas no se prueban | ✅ Corregido (08/09/2026) — matriz de las tres ventanas, sabotajes S11-S14 |
 | TEST-06 | El backoff de reintentos del correo ALTA no está probado: cualquier valor positivo satisface la aserción | ⬜ |
 | TEST-07 | Umbrales operativos sin frontera: gracia del cron, ingreso tardío, aviso del Admin | ⬜ |
-| TEST-08 | Cinco pruebas sin ninguna aserción; dos de ellas no protegen nada | ⬜ |
-| TEST-09 | El badge de severidad se verifica por la subcadena `border-radius`: no comprueba color ni severidad | ⬜ |
+| TEST-08 | Cinco pruebas sin ninguna aserción; dos de ellas no protegen nada | ⬜ **Confirmado abierto** (09/09/2026): **exactamente 5** pruebas sin ninguna aserción, las mismas que citó la auditoría — |
+| TEST-09 | El badge de severidad se verifica por la subcadena `border-radius`: no comprueba color ni severidad | ⬜ **Confirmado abierto** (09/09/2026): `test_admin.py:397` sigue comprobando el badge con `assertContains(resp, 'border-radius')` — |
 | TEST-10 | Una prueba de rate limit importa la constante de producción: si el límite cambia, la prueba cambia con él | ⬜ **Confirmado abierto** (09/09/2026): `test_webhook.py:320` importa `_LIMITE_MENSAJES_HORA` de producción |
 | TEST-11 | Escenarios multidía fuera del ancla de reloj (PLAUSIBLE, no confirmado) | ⬜ |
 | TEST-12 | La prueba de "no re-notificar en recurrencia" pasa por un motivo colateral | ⬜ |
@@ -315,9 +315,9 @@ atrapados el 08/09/2026, incluido el del drenaje fecaloide que originó todo.
 | REPO-04 | `docs/README.md` con cuatro afirmaciones falsas | ✅ PR #19 |
 | REPO-05 | El ROADMAP documenta `medico_responsable` con `SET_NULL`; el código usa `PROTECT` desde julio. **Verificado 07/09: sigue diciendo `SET_NULL` en la línea 168** | ⬜ **Confirmado abierto** (09/09/2026): el ROADMAP sigue diciendo `SET_NULL` en la línea 170 y el código usa `PROTECT` |
 | REPO-06 | `cron_setup.md` y `transferencia_cuentas.md` afirman infraestructura desplegada; no hay producción desde el 07/08 | ⬜ |
-| REPO-07 | `trampas_conocidas.md` describe los cron en presente y no menciona la caída | ⬜ |
+| REPO-07 | `trampas_conocidas.md` describe los cron en presente y no menciona la caída | ⬜ **Confirmado abierto** (09/09/2026): `trampas_conocidas.md` sigue sin mencionar la caída de producción — |
 | REPO-08 | El árbol de archivos del ROADMAP lista un archivo que no existe y omite 13 de los 15 documentos de `docs/` | ⬜ |
-| REPO-09 | El ROADMAP duplica las tablas de modelos que `modelos_datos.md` posee (REPO-05 es la divergencia que la regla predecía) | ⬜ |
+| REPO-09 | El ROADMAP duplica las tablas de modelos que `modelos_datos.md` posee (REPO-05 es la divergencia que la regla predecía) | ⬜ **Confirmado abierto** (09/09/2026): el ROADMAP sigue conservando su propia tabla de modelos (REPO-05 es su síntoma) — |
 | REPO-10 | La CI sin linter, sin auditoría de dependencias, sin cobertura | ✅ PR #18 |
 | REPO-11 | `.github/` sin plantillas, `CODEOWNERS` ni `dependabot` | ✅ PR #19 |
 | REPO-12 | `.gitignore` no cubría `entorno_registro/` sin punto, `.venv/`, `.claude/` ni las cachés | ✅ PR #18 |
@@ -329,7 +329,7 @@ atrapados el 08/09/2026, incluido el del drenaje fecaloide que originó todo.
 | REPO-18 | Sin `docker-compose.yml` y sin una sola captura de pantalla | Capturas ✅ PR #27 · `docker-compose` ⬜ **Confirmado abierto** (09/09/2026): no existe el archivo |
 | REPO-19 | Ruta absoluta de la máquina del Arquitecto en el ROADMAP | ✅ Verificado el 09/09/2026: no queda ninguna ruta absoluta en el ROADMAP |
 | REPO-20 | `concurrency: cancel-in-progress` puede cancelar la corrida post-merge, que sin protección de rama es la única señal (NO reproducido) | ⬜ **Confirmado abierto** (09/09/2026): `ci.yml:37` mantiene `cancel-in-progress: true` |
-| REPO-21 | La landing muestra `[Nombre y apellido]` y `[Institución donde ejerce]` — decisión documentada P-12, no hallazgo nuevo | ⬜ |
+| REPO-21 | La landing muestra `[Nombre y apellido]` y `[Institución donde ejerce]` — decisión documentada P-12, no hallazgo nuevo | ⬜ **Confirmado abierto** (09/09/2026): 9 marcadores `[...]` en la landing — decisión documentada P-12, no defecto — |
 
 ---
 
@@ -376,6 +376,26 @@ No es cortesía: sirve para no "arreglar" lo que ya está bien.
 > loops que cerraron varios. Un informe con estados viejos deja de ser evidencia
 > y pasa a ser ruido — lo dice el propio documento tres líneas más abajo.
 
+**El recuento, al cierre del 09/09/2026:**
+
+| | |
+|---|---|
+| Cerrados | **32** |
+| Cerrados a medias | 3 |
+| **Abiertos, confirmados ejecutando comandos** | **44** |
+| Sin verificar todavía | **23** |
+
+De los 101 hallazgos, **78 tienen hoy un estado comprobado**. Antes de esta
+sesión eran 26, y los 75 restantes eran un ⬜ que no distinguía «roto» de
+«nadie miró».
+
+**Los 23 que faltan** necesitan leer código con calma, no un `grep`: ramas de
+la máquina de estados del bot (BE-11, BE-13, DB-12, UX-B06 a UX-B08),
+semántica de pruebas (TEST-06, TEST-07, TEST-11, TEST-12), reversibilidad de
+migraciones (DB-03, DB-04, DB-06) y cuatro de seguridad que dependen de
+decisiones de infraestructura (SEC-08 a SEC-12). Ninguno es de los que se ven
+al abrir la aplicación.
+
 Lo que se hizo el 09/09/2026, ejecutando comandos contra el código:
 
 **Cerrados y comprobados** — cinco que seguían marcados abiertos sin serlo:
@@ -386,12 +406,10 @@ REPO-19.
 SEC-11, SEC-13, SEC-15, DB-05, DB-09, BE-04, BE-12, TEST-10, REPO-05, REPO-18
 y REPO-20. Ya no son hipótesis: se miraron.
 
-**El resto sigue SIN VERIFICAR**, y conviene decirlo en vez de dejarlo
-ambiguo: SEC-07, SEC-08, SEC-09, SEC-10, SEC-12, DB-03, DB-04, DB-06, DB-08,
-DB-10, DB-11, DB-12, BE-03, BE-05, BE-08, BE-09, BE-10, BE-11, BE-13, TEST-06
-a TEST-09, TEST-11, TEST-12, REPO-06 a REPO-09 y REPO-21, más los UX del panel,
-del bot y de la landing. Su ⬜ significa **«nadie lo ha comprobado»**, no
-«comprobado y sigue roto».
+**Los que siguen sin comprobar** están listados arriba y su ⬜ significa
+**«nadie lo ha mirado»**, no «comprobado y sigue roto». La diferencia
+importa: es lo que separa un informe que sirve para decidir de uno que solo
+inquieta.
 
 **BE-08 y BE-09 sí se reprodujeron** el 09/09 (ver el loop de tratamiento D10),
 aunque su fila siga en ⬜ a la espera de la validación médica.

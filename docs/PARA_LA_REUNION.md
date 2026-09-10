@@ -94,12 +94,18 @@ reescribe la historia.
 
 Cinco preguntas clínicas. **Ninguna requiere leer código.**
 
-### 5.1 a 5.3 · Las tres respuestas que el bot le da al paciente
+### 5.1 a 5.3 · Las respuestas que el bot le da al paciente
 Cuando el paciente pregunta algo fuera del cuestionario, el bot responde con un
-texto fijo. Hoy hay tres —fiebre, dolor, alimentación— **redactados por el
-equipo técnico y sin validar clínicamente** (ficha **D4**). Están en
-`signos_sintomas/knowledge_base.md`, con la pregunta concreta al lado de cada
-uno; se responden sobre ese mismo documento en unos diez minutos.
+texto fijo. Son **cuatro** —fiebre, dolor, alimentación, y una cuarta para
+cuando no entiende la pregunta—, **redactadas por el equipo técnico y sin validar
+clínicamente** (ficha **D4**). Están en `signos_sintomas/knowledge_base.md`, con
+la pregunta concreta al lado de cada una; se responden sobre ese mismo documento
+en unos diez minutos.
+
+Tres llevan contenido clínico y son las que de verdad hay que validar. La cuarta
+solo remite al médico, y se incluye para que vea **todo** lo que el bot le dice a
+su paciente: hasta el 09/09/2026 esta consulta sometía tres de cuatro sin
+decirlo.
 
 **Una regla que conviene conservar:** ninguna respuesta contiene un umbral
 numérico. Si el paciente se auto-evalúa con un número propio, puede quedarse

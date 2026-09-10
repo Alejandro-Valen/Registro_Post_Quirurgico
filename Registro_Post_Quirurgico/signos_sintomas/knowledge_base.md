@@ -44,11 +44,18 @@
 
 ## Consulta pendiente al médico
 
-> **Para el médico.** Son tres preguntas concretas, ~10 minutos. Estas frases
-> son las únicas que el bot le dice al paciente cuando pregunta algo fuera del
-> cuestionario diario. Hoy están redactadas de forma conservadora por el equipo
-> técnico y **ninguna ha sido validada clínicamente**. Puede responder sobre
-> este mismo documento.
+> **Para el médico.** Son **tres preguntas concretas, ~10 minutos**, más una
+> cuarta frase que se incluye solo para que vea **todo** lo que el bot le dice a
+> su paciente. Estas cuatro son las únicas respuestas del bot cuando el paciente
+> pregunta algo fuera del cuestionario diario. Hoy están redactadas de forma
+> conservadora por el equipo técnico y **ninguna ha sido validada
+> clínicamente**. Puede responder sobre este mismo documento.
+>
+> **Corrección del 09/09/2026.** Hasta hoy esta consulta sometía tres respuestas
+> y el bot tenía **cuatro**: faltaba la de «no entendí tu pregunta»
+> (`RESP_FALLBACK`). No lleva contenido clínico —solo remite al médico— y por eso
+> se había quedado fuera, pero someter tres de cuatro dejaba al médico opinando
+> sobre un conjunto incompleto sin saberlo.
 >
 > **Regla que no debe romperse:** la respuesta no puede contener un umbral
 > numérico (grados, pulsaciones, escala de dolor). El paciente no necesita
@@ -109,3 +116,17 @@ nueva redacción siga sin exponer cifras clínicas.
 >
 > No agregar umbrales, diagnósticos ni recomendaciones nuevas sin validación
 > explícita del médico y pruebas del comportamiento resultante.
+
+### 4. Cuando el bot no entiende la pregunta
+
+- **Texto actual:** "Para esa pregunta específica, te recomiendo contactar
+  directamente a tu médico. Estamos aquí para tu seguimiento diario."
+- **Cuándo aparece:** cuando el paciente escribe una pregunta que no encaja
+  en ninguna de las tres anteriores.
+- **Por qué se incluye aquí aunque no tenga contenido clínico:** es la cuarta
+  y última cosa que el bot le puede decir a un paciente fuera del
+  cuestionario. El médico debería ver el conjunto completo, no tres de
+  cuatro.
+- **Pregunta:** ¿le parece bien remitir sin más, o prefiere que el bot añada
+  alguna indicación de seguridad —por ejemplo, cuándo no esperar respuesta y
+  acudir a urgencias?
