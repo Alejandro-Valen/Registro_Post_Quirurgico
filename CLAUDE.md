@@ -121,10 +121,12 @@ anotada para después.
 - **Rama de despliegue:** `produccion` — la miran los tres servicios de Railway.
   Nadie trabaja aquí; solo recibe merges desde `Desarrollo`. Ver
   `docs/railway_deploy.md` §4.1.
-- **Rama activa de trabajo:** `cerrar-be02-y-verificar-hallazgos` (PR #33).
-  Mergeadas ya: `sec-02-bloqueo-acceso` (PR #30), `bugs-del-paciente` (PR #29,
-  `6580996`), `umbrales-frontera` (PR #28, `21105a2`), `arnes-verificable`
-  (PR #18) y `repositorio-profesional` (PR #19).
+- **Rama activa de trabajo:** ninguna, y **cero PR abiertos**. Mergeadas el
+  09/09/2026: `pagina-para-la-reunion` (PR #34, `ffcc966`),
+  `cerrar-be02-y-verificar-hallazgos` (PR #33, `ad9f6ed`),
+  `dependabot-agrupar-menores` (PR #31) y `sec-02-bloqueo-acceso` (PR #30).
+  Antes: `bugs-del-paciente` (PR #29, `6580996`), `umbrales-frontera` (PR #28,
+  `21105a2`), `arnes-verificable` (PR #18) y `repositorio-profesional` (PR #19).
 - **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **diez
   comprobaciones** en cada PR hacia `Desarrollo` y hacia `produccion`, y en cada
   push a esas dos ramas: la suite, `check`, `makemigrations --check`,
@@ -345,7 +347,34 @@ control» con una ALTA sin resolver, y ve a quien tiene el seguimiento detenido.
 > dominados por `import-outside-top-level` y `relative-imports`, que son idioma
 > de Django y no defectos. **No hay cola de linter pendiente.**
 
-**Próximo paso exacto (al retomar): el tratamiento D10 para lo clínico.**
+> **Antes de nada, si vas a una reunión: `docs/PARA_LA_REUNION.md`.** Reúne en
+> una página qué hace el sistema, qué está verificado, qué NO hay, y las once
+> decisiones que necesitan una persona.
+
+**Estado de la auditoría del 07/09/2026, al cierre del 09/09:** de sus 101
+hallazgos, **78 tienen estado comprobado** — 32 cerrados, 3 a medias, 44
+abiertos confirmados ejecutando comandos — y **23 siguen sin verificar**.
+Antes del 09/09 solo 26 tenían estado: los otros 75 eran un ⬜ que no distinguía
+«roto» de «nadie ha mirado».
+
+**Próximo paso exacto (al retomar): los 23 hallazgos sin verificar.** Necesitan
+leer código con calma y no un `grep` —ramas de la máquina de estados del bot,
+semántica de pruebas, reversibilidad de migraciones y cuatro de seguridad que
+dependen de infraestructura—. **Ninguno es visible al abrir la aplicación.**
+
+Después, los **44 abiertos ya identificados**. Los tres que más pesan, todos
+reproducidos: **UX-B03** (*"si, no tuve nauseas: 0"* se registra como **sin
+gases** y alimenta la regla de íleo con un dato falso — el único de UX que
+corrompe datos clínicos), **UX-P05** (la gráfica va de 35 a 40 °C y el bot
+acepta hasta 45: el valor más grave es el único que no se dibuja) y **UX-L01**
+(en móvil el único enlace visible lleva al login del Admin).
+
+Y **SEC-05**, el gemelo de la ficha D15: `crear_admin` sigue reescribiendo la
+contraseña del superusuario en cada arranque, y promoviendo a superusuario sin
+condición. No es clínico.
+
+~~**Próximo paso exacto: el tratamiento D10 para lo clínico.**~~ Hecho el
+09/09/2026 (PR #33).
 **BE-08** y **BE-09** están reproducidos y son desviaciones reales entre el motor
 y `docs/reglas_clinicas.md`, las dos de **sobre-alerta** (nunca de falso
 negativo). El tratamiento es el que fijó la ficha **D10** y no otro: pruebas de

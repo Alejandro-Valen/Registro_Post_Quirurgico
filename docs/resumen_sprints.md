@@ -265,6 +265,21 @@ entre el Sprint 5 y hoy.
   leyendo el código: la palabra de auxilio no atrapaba el caso que la originó, y
   «no tengo termómetro» seguía atascando al paciente.
 
+- **Dejar el terreno despejado (09/09/2026, PR #30, #31, #33 y #34).** Cuatro
+  ítems para que el sistema se pueda presentar sin sorpresas. El plan cambió al
+  empezar: el «próximo paso» que anunciaba `CLAUDE.md` —34 hallazgos del
+  linter— **no existía**, y con otros cuatro desfases encontrados por casualidad
+  en dos días, el diagnóstico pasó a ser que **nadie había comprobado nunca la
+  documentación de forma sistemática**. De ahí salió el **barrido de veracidad**,
+  hoy décima comprobación de la CI, que vigila ocho cosas —entre ellas que los
+  umbrales del documento clínico sigan siendo las constantes del motor—.
+  Calibrarlo costó más que escribirlo: la primera corrida dio 27 hallazgos y 26
+  eran historia correcta. Se cerró **SEC-02** (ficha **D24**: el bloqueo de
+  acceso dejaba al médico fuera de su panel por intentos de terceros), los siete
+  PR de Dependabot, y **BE-08/BE-09** quedaron **fijadas sin tocarlas** con el
+  tratamiento de la ficha D10. De los 101 hallazgos de la auditoría, los que
+  tienen estado comprobado pasan de **26 a 78**. Suite: 409 → **420 tests**.
+
 ---
 
 ## Preguntas de arquitectura ya resueltas

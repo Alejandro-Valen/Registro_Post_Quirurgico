@@ -5587,3 +5587,166 @@ dirección, canal de derechos y plazo de retención. Es el mismo pendiente de P-
 y del formato de consentimiento.
 
 **Sigue sin haber producción.** La verificación es la suite local más la CI.
+
+---
+
+## Dejar el terreno despejado antes de la reunión — los cuatro ítems
+**Fecha:** 09/09/2026
+**Responsable:** León (Arquitecto) con Claude Code
+**Estado:** COMPLETADO ✅ — PR #30, #31, #33 y #34 mergeados
+**Fichas:** D24
+
+### Cómo empezó, y por qué el plan cambió a mitad
+
+La sesión arrancó cerrando el loop del día anterior (PR #29, `6580996`) y con la
+idea de seguir con «los 34 hallazgos de criterio del linter», que era el próximo
+paso escrito en `CLAUDE.md`.
+
+**Esos 34 hallazgos no existen.** `ruff` con la configuración que bloquea la CI
+pasa limpio desde el 07/09/2026. La cifra venía de un conteo exploratorio con un
+conjunto de reglas más amplio que el que se acabó seleccionando (ficha D16).
+Quien se hubiera fiado del documento habría gastado media sesión en trabajo
+inventado.
+
+Sumado a otros cuatro desfases encontrados por casualidad en dos días —el `cd`
+de `CLAUDE.md`, el intérprete del proyecto, el índice de decisiones parado en
+D15 y la referencia circular de «los 18 sabotajes»—, el diagnóstico dejó de ser
+«mala suerte» y pasó a ser **nadie ha comprobado nunca la documentación de forma
+sistemática**. De ahí salió el plan de cuatro ítems.
+
+### Ítem 1 · Barrido de veracidad de la documentación
+
+Se escribió `proceso/verificaciones/2026-09-09_barrido_veracidad.py`, que
+comprueba **ocho** cosas: que las rutas citadas existan, que el conteo de pruebas
+publicado sea el real, que el número de comprobaciones de la CI sea el real, que
+**los umbrales de `reglas_clinicas.md` sean las constantes de `alert_engine.py`**,
+que el índice de decisiones cubra el cuerpo, que los commits citados existan, que
+el camino documentado hasta `manage.py` funcione, y que **ningún umbral clínico
+esté repetido a mano fuera del motor**.
+
+**Es la décima comprobación de la CI, y bloquea.** Un guardián que hay que
+acordarse de correr se pudre igual que la documentación que vigila.
+
+**Lo que costó de verdad no fue escribirlo, sino calibrarlo.** La primera corrida
+dio 27 hallazgos y **26 eran historia correcta**: «PR #12 (10/08), 340 tests OK»
+debe seguir diciéndolo. El criterio que los separa quedó escrito en el script:
+
+> Una cifra pegada a una fecha, un PR o un commit es un **registro histórico**.
+> Una cifra sin ancla temporal es una **afirmación sobre hoy**. Y `proceso/`
+> entero es cuaderno (ficha D18): describe el momento en que se escribió.
+
+Un barrido con 26 falsos positivos se ignora, que es peor que no tenerlo.
+
+**Los ⬜ del informe de auditoría.** Era la parte que faltaba y estuvo a punto de
+quedarse fuera: de los 101 hallazgos, **75 eran un cuadrito vacío que nadie había
+vuelto a mirar desde el 07/09**, aunque entre medias dos loops habían cerrado
+varios. Al terminar la sesión, **78 tienen estado comprobado**: 32 cerrados, 3 a
+medias, 44 abiertos confirmados ejecutando comandos, y 23 pendientes de una
+lectura de código con calma.
+
+### Ítem 2 · Cerrar lo que no necesita autoridad clínica
+
+**SEC-02 (ficha D24).** `django-axes` bloqueaba **por IP sola**, y detrás del edge
+de Railway todo el tráfico comparte IP: cinco intentos fallidos con un usuario
+inventado dejaban al médico fuera de su panel una hora, respondiendo HTTP 429.
+Reproducido antes de tocar nada. Ahora bloquea por la combinación usuario + IP, y
+axes averigua la IP con **la misma función que el rate limit del formulario** —si
+las dos defensas la resolvieran distinto, una estaría mal y nadie lo notaría—.
+
+**Los siete PR de Dependabot**, cerrados. Dos los mergeó el Arquitecto desde la
+web porque el token del agente no tiene el permiso `workflow` que GitHub exige
+para tocar `ci.yml`. Y `dependabot.yml` pasa a agrupar también las menores: la
+prueba de que funciona llegó sola, con el PR #32 ya agrupado.
+
+### Ítem 3 · Tratamiento D10 para lo clínico
+
+**BE-08 y BE-09**, reproducidos: dos ramas donde el motor decide algo que la regla
+escrita nunca describió, las dos de **sobre-alerta** y ninguna de falso negativo.
+
+**No se cambió ninguna, y esa es la decisión.** Es el tratamiento que fijó la
+ficha **D10** para esta situación exacta: *primero hacerla auditable, después
+decidir*. Seis pruebas de caracterización, las dos ramas escritas en
+`reglas_clinicas.md` marcadas «pendiente de validación médica», y la pregunta
+para el médico redactada en una línea. Al cierre, **el motor tiene cero líneas
+cambiadas**.
+
+### Ítem 4 · La página para la reunión
+
+`docs/PARA_LA_REUNION.md`. Qué es el sistema, qué está verificado, **qué NO hay**
+—colocado antes de las decisiones, porque un documento para decidir que esconde
+eso no sirve— y **once decisiones agrupadas por quién puede tomarlas**: tres del
+grupo, cinco del médico y tres administrativas.
+
+### Problemas encontrados y cómo se resolvieron
+
+**Dejé el motor clínico saboteado en disco.** Al improvisar en línea la
+verificación de BE-08/BE-09, el proceso murió entre el sabotaje y la restauración
+y `alert_engine.py` quedó con `severidad_base` en `'ALTA'` en vez de `'BAJA'`. Lo
+detectó `git status`, se restauró y no llegó a git. **Causa:** todos los arneses
+de `proceso/verificaciones/` restauran en un `finally`; el de usar y tirar no lo
+tenía. Se rehízo como archivo, con la explicación dentro.
+
+**Dos de las cinco pruebas de SEC-02 no medían lo que decían.** Lo destapó su
+propio arnés: una hacía `range(settings.AXES_FAILURE_LIMIT)`, así que al subir el
+límite a 500 hacía 500 intentos y **se adaptaba al sabotaje**; la otra comparaba
+las dos formas de resolver la IP con `TRUST_RAILWAY_PROXY=False`, donde ambas
+devuelven `REMOTE_ADDR` y coinciden aunque axes no use la función del proyecto.
+
+**Y una tercera, en el ítem 3.** La prueba que decía fijar la diferencia entre
+promediar por registro y por día usaba números con los que **ambas lecturas
+escalaban igual**. Se rehízo con un escenario donde solo una cruza el umbral
+(3.00 frente a 2.25), y al arnés se le añadió la reversión que lo habría cazado.
+
+Tres veces el mismo patrón en un día, y las tres en pruebas escritas esa misma
+tarde. **Es la razón por la que los arneses no son opcionales.**
+
+**El barrido tuvo un falso negativo, y en la comprobación que más importaba.**
+`CLAUDE.md` decía «corre nueve comprobaciones» cuando ya eran diez, y el barrido
+lo perdonó porque la viñeta **vecina** llevaba una fecha y su ventana de 140
+caracteres la alcanzaba. Distinguir «afirmación de hoy» de «registro histórico»
+dentro de prosa libre no es mecanizable de forma fiable, así que esa comprobación
+pasó a mirar **escaparates nombrados**: las frases concretas que dicen el número
+en presente.
+
+**La CI encontró algo invisible en local.** El barrido falló en su primera corrida
+del runner: `2026-07-31_verificacion_ci.md` cita dos commits que **no existen en
+un clon limpio** —eran las roturas deliberadas de aquel día, borradas al
+terminar—. En la copia del Arquitecto pasaban, porque todavía guarda esos
+objetos. Quedó escrito en el barrido: **correr la comprobación de commits en
+local es más débil que en la CI**, y la respuesta de la CI es la que vale.
+
+**BE-02 había empeorado por culpa nuestra.** Los umbrales estaban copiados a mano
+en el panel, sí — pero además la etiqueta decía «Dolor EVA (1-10)» y la decisión
+**D20** abrió la escala a 0-10 el día anterior. **El panel del médico llevaba un
+día mintiendo sobre la escala.** Corregido leyendo las constantes, y vigilado por
+la octava comprobación del barrido.
+
+**Y el proyecto sometía tres de cuatro respuestas del bot** a validación médica.
+`CLAUDE.md` decía «las cuatro»; `knowledge_base.md` listaba tres. La cuarta —la de
+«no entendí tu pregunta»— no lleva contenido clínico, pero someter tres de cuatro
+dejaba al médico opinando sobre un conjunto incompleto sin saberlo.
+
+### Verificación
+
+- **Suite: 409 → 420 tests OK.** `ruff` limpio. Barrido en verde.
+- **Arneses corridos:** SEC-02 (4/4, revalidado contra `django-axes` 8.3.1 tras
+  el salto de versión mayor), caracterización D10 (3/3), barrido (7/7 en las dos
+  direcciones), umbrales (21/21) y bugs del paciente (17/17).
+- **Cero PR abiertos.** CI de `Desarrollo` en verde con las diez comprobaciones.
+
+### Qué queda pendiente
+
+**Técnico, sin necesitar a nadie de fuera:**
+
+1. **Los 23 hallazgos sin comprobar.** Necesitan lectura de código, no `grep`.
+   Ninguno es visible al abrir la aplicación.
+2. **Los 44 abiertos ya identificados.** Los que más pesan: **UX-B03** —*"si, no
+   tuve nauseas: 0"* se registra como *sin gases* y alimenta la regla de íleo con
+   un dato falso—, **UX-P05** —la gráfica va de 35 a 40 °C y el bot acepta hasta
+   45: el valor más grave es el único que no se dibuja— y **UX-L01** —en móvil el
+   único enlace visible lleva al login del Admin—.
+3. **SEC-05**, el gemelo de la ficha D15: `crear_medico` dejó de reescribir la
+   contraseña en cada arranque el 12/08 y **`crear_admin` sigue haciéndolo**.
+4. **22 ramas muertas** en el remoto, todas ya fusionadas.
+
+**Para la reunión del domingo:** `docs/PARA_LA_REUNION.md`.
