@@ -59,6 +59,28 @@ CAMBIOS = [
         "            severidad_por_tendencia = siguiente_nivel[severidad_por_tabla]",
     ),
     (
+        'BE-08b',
+        'aplicar la otra lectura del promedio: por DÍA en vez de por registro, '
+        'que es lo que dice la regla escrita',
+        "    promedio_reciente = RegistroDiario.objects.filter(\n"
+        "        paciente=registro.paciente,\n"
+        "        fecha_registro__date__gte=fecha_referencia - timedelta(days=DOLOR_DIAS_TENDENCIA - 1),\n"
+        "        fecha_registro__date__lte=fecha_referencia,\n"
+        "    ).aggregate(promedio=models.Avg('dolor_eva'))['promedio']",
+        "    _por_dia = (\n"
+        "        RegistroDiario.objects.filter(\n"
+        "            paciente=registro.paciente,\n"
+        "            fecha_registro__date__gte=fecha_referencia - timedelta(days=DOLOR_DIAS_TENDENCIA - 1),\n"
+        "            fecha_registro__date__lte=fecha_referencia,\n"
+        "        )\n"
+        "        .values('fecha_registro__date')\n"
+        "        .annotate(media=models.Avg('dolor_eva'))\n"
+        "        .values_list('media', flat=True)\n"
+        "    )\n"
+        "    _medias = list(_por_dia)\n"
+        "    promedio_reciente = sum(_medias) / len(_medias) if _medias else None",
+    ),
+    (
         'BE-09',
         'aplicar la otra lectura: que un día con reporte pero SIN el dato de '
         'líquidos corte el conteo, por coherencia con la ficha D8',

@@ -1620,26 +1620,37 @@ class CaracterizacionBE08yBE09Tests(TestCase):
         que uno con uno solo. El resultado dependerá de cuántas veces respondió
         el paciente, no de cómo estuvo.
 
-        Se fija con dos registros el mismo día para que el efecto sea visible en
-        cuanto alguien lo toque.
+        **El escenario está elegido para que las dos lecturas den resultados
+        DISTINTOS**, y eso no es un detalle: el primer intento usaba números con
+        los que ambas escalaban igual, así que la prueba decía fijar la
+        diferencia y no la fijaba. Es el mismo defecto que este proyecto
+        persigue —verde por un motivo distinto del que dice medir— y apareció
+        aquí, en una prueba escrita para denunciarlo.
+
+            días -3 y -2 → EVA 0        ventana anterior:  promedio 0.00
+            ayer         → EVA 0 y 9    ventana reciente:  por registro 3.00
+            hoy          → EVA 0                          por día      2.25
+
+        Con el umbral en 3, **solo la lectura por registro escala**. Y como hoy
+        el EVA es 0, la tabla no aporta nada: la severidad que salga viene
+        entera de la tendencia.
         """
         paciente = self._paciente(dias_desde_cirugia=8)
-        # Días -3 y -2, base baja.
         self._registro(paciente, dias_atras=3, dolor_eva=0)
         self._registro(paciente, dias_atras=2, dolor_eva=0)
-        # Ayer, DOS registros: 0 y 6. Por día el promedio sería 3; por registro,
-        # ambos entran sueltos en la media de la ventana reciente.
+        # Ayer, DOS registros — el caso que aparece con dos check-ins diarios.
         self._registro(paciente, dias_atras=1, dolor_eva=0)
-        self._registro(paciente, dias_atras=1, dolor_eva=6)
-        hoy = self._registro(paciente, dolor_eva=6)
+        self._registro(paciente, dias_atras=1, dolor_eva=9)
+        hoy = self._registro(paciente, dolor_eva=0)
 
-        promedio_por_registro = (0 + 6 + 6) / 3          # 4.0  ← lo que hace hoy
-        promedio_por_dia = ((0 + 6) / 2 + 6) / 2         # 4.5  ← lo que dice la regla
-        self.assertNotEqual(promedio_por_registro, promedio_por_dia)
+        por_registro = (0 + 9 + 0) / 3        # 3.00 → alcanza el umbral
+        por_dia = ((0 + 9) / 2 + 0) / 2       # 2.25 → no lo alcanza
+        self.assertGreaterEqual(por_registro, 3)
+        self.assertLess(por_dia, 3)
 
-        # El comportamiento actual, fijado: con delta 4.0 - 0.0 = 4.0 >= 3 la
-        # tendencia escala sobre la tabla (POD 8, EVA 6 → MEDIA) hasta ALTA.
-        self.assertEqual(self._severidades(hoy, 'DOLOR_AGUDO'), ['ALTA'])
+        # Comportamiento ACTUAL: promedia por registro, así que escala. Con la
+        # lectura por día no habría ninguna alerta.
+        self.assertEqual(self._severidades(hoy, 'DOLOR_AGUDO'), ['MEDIA'])
 
     # --- BE-09 · el día con reporte pero sin el dato de líquidos ---
 
