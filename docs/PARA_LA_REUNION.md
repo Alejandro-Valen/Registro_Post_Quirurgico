@@ -44,9 +44,28 @@ hallazgo concreto —un sabotaje de una línea sobre el motor clínico dejó **3
 pruebas en verde con el sistema roto**— y hoy es la norma escrita.
 
 **Auditorías realizadas:** tres, independientes entre sí (22/07, 27/07 y una de
-seis frentes el 07/09). La última encontró 101 hallazgos. **Su estado está
-verificado uno a uno**, y el informe distingue tres cosas que suelen confundirse:
-cerrado, confirmado abierto, y **sin comprobar todavía**.
+seis frentes el 07/09). La última encontró **101 hallazgos**. Su estado, hoy:
+
+| | |
+|---|---|
+| Cerrados | **32** (y 3 a medias) |
+| **Abiertos**, comprobados uno a uno ejecutando comandos | **44** |
+| Sin comprobar todavía | **23** |
+
+**Los 44 abiertos están todos identificados, con la evidencia al lado.** Ninguno
+afecta a la clasificación clínica: el motor de alertas es la parte más protegida
+del sistema. Se reparten sobre todo en experiencia de uso (panel, bot y web),
+infraestructura, y calidad de pruebas.
+
+**Los 23 sin comprobar** necesitan leer código con calma, no un comando: ramas de
+la conversación del bot, semántica de algunas pruebas, reversibilidad de
+migraciones y cuatro de seguridad que dependen de decisiones de infraestructura.
+**Ninguno de ellos es visible al abrir la aplicación.**
+
+> **Por qué se dice esto y no «está todo revisado».** Antes de esta semana, 75 de
+> los 101 eran un cuadrito vacío que no distinguía «roto» de «nadie ha mirado».
+> Esa distinción es la diferencia entre un informe con el que se puede decidir y
+> uno que solo inquieta.
 
 ---
 
