@@ -5836,6 +5836,19 @@ conversación. Ahora la burbuja se encoge hasta el texto más largo que contiene
 bot —que va lleno de tildes y signos de apertura— se imprime como basura. No es
 cosmética: sin forzar UTF-8 la demo no se puede enseñar.
 
+**Y un fallo que solo apareció al usarla de verdad.** Con una demo abierta, la
+segunda moría al arrancar —«la base de datos `test_registro_postquirurgico_db` ya
+existe»— y no había forma de levantarla hasta cerrar la primera. En una reunión
+eso es una ventana que no abre delante de gente. Ahora **cada demo se lleva su
+propia base**, con el número de proceso en el nombre.
+
+Lo que dejó ese fallo, que vale más que el fallo: **el plan B no se disparaba**.
+Cuando Django no puede crear la base de pruebas no lanza una excepción de base de
+datos — imprime el motivo y llama a `sys.exit(2)`—, así que el `except` no lo
+veía y el respaldo en SQLite se saltaba **justo en el único caso para el que
+existe**. Verificarlo cortando el puerto de PostgreSQL no bastó: ese camino sí
+levantaba la excepción esperada. Hizo falta que fallara por el otro motivo.
+
 **Las seis cosas que el README propone probar en el modo libre se ejecutaron una
 por una antes de escribirlas.** Escribir «prueba a mandar `379`» sin haberlo
 mandado es la misma clase de afirmación sin comprobar que el barrido de veracidad
