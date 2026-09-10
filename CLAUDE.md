@@ -357,17 +357,25 @@ abiertos confirmados ejecutando comandos — y **23 siguen sin verificar**.
 Antes del 09/09 solo 26 tenían estado: los otros 75 eran un ⬜ que no distinguía
 «roto» de «nadie ha mirado».
 
-**Próximo paso exacto (al retomar): los 23 hallazgos sin verificar.** Necesitan
-leer código con calma y no un `grep` —ramas de la máquina de estados del bot,
-semántica de pruebas, reversibilidad de migraciones y cuatro de seguridad que
-dependen de infraestructura—. **Ninguno es visible al abrir la aplicación.**
+**Próximo paso exacto (al retomar): los tres bugs VISIBLES.** Guion escrito:
+`proceso/instrucciones/2026-09-09_instruccion_antes_de_la_reunion.md`.
 
-Después, los **44 abiertos ya identificados**. Los tres que más pesan, todos
-reproducidos: **UX-B03** (*"si, no tuve nauseas: 0"* se registra como **sin
-gases** y alimenta la regla de íleo con un dato falso — el único de UX que
-corrompe datos clínicos), **UX-P05** (la gráfica va de 35 a 40 °C y el bot
-acepta hasta 45: el valor más grave es el único que no se dibuja) y **UX-L01**
-(en móvil el único enlace visible lleva al login del Admin).
+Se eligen por lo que se ve, no por lo que falta: son los únicos hallazgos
+abiertos que alguien puede encontrar **sin leer una línea de código**, y hay una
+reunión con el médico y un ingeniero externo.
+
+1. **UX-B03** — *"si, no tuve nauseas: 0"* se registra como **sin gases**. El
+   paciente dice que sí pasó gases y el sistema anota lo contrario, alimentando
+   la regla de íleo con un dato falso. **Es el único de UX que no es cosmético:
+   corrompe un dato clínico.** Si solo hay tiempo para uno, este.
+2. **UX-P05** — la gráfica va de 35 a 40 °C y el bot acepta hasta 45: el valor
+   más grave es el único que no se dibuja.
+3. **UX-L01** — en móvil desaparecen los cuatro enlaces del menú y el único
+   visible lleva al login del Admin.
+
+Después: **SEC-05** (barato, con precedente exacto en D15), las **22 ramas
+muertas**, y por último **los 23 hallazgos sin verificar** — que necesitan leer
+código con calma y **ninguno es visible al abrir la aplicación**.
 
 Y **SEC-05**, el gemelo de la ficha D15: `crear_admin` sigue reescribiendo la
 contraseña del superusuario en cada arranque, y promoviendo a superusuario sin
