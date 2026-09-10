@@ -120,10 +120,10 @@ anotada para después.
 - **Rama de despliegue:** `produccion` — la miran los tres servicios de Railway.
   Nadie trabaja aquí; solo recibe merges desde `Desarrollo`. Ver
   `docs/railway_deploy.md` §4.1.
-- **Rama activa de trabajo:** ninguna. `bugs-del-paciente` se mergeó el
-  09/09/2026 (PR #29, merge commit `6580996`); antes `umbrales-frontera`
-  (PR #28, `21105a2`), `arnes-verificable` (PR #18) y `repositorio-profesional`
-  (PR #19). La siguiente se abre desde `Desarrollo`.
+- **Rama activa de trabajo:** `cerrar-be02-y-verificar-hallazgos` (PR #33).
+  Mergeadas ya: `sec-02-bloqueo-acceso` (PR #30), `bugs-del-paciente` (PR #29,
+  `6580996`), `umbrales-frontera` (PR #28, `21105a2`), `arnes-verificable`
+  (PR #18) y `repositorio-profesional` (PR #19).
 - **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **diez
   comprobaciones** en cada PR hacia `Desarrollo` y hacia `produccion`, y en cada
   push a esas dos ramas: la suite, `check`, `makemigrations --check`,
@@ -332,16 +332,40 @@ detiene el cuestionario y avisa al médico desde cualquier punto; y el turno de
 la tarde ya no se le niega. Para el médico: el tablero dejó de decir «todo bajo
 control» con una ALTA sin resolver, y ve a quien tiene el seguimiento detenido.
 
-**Próximo paso exacto (al retomar): los 34 hallazgos de criterio del linter.**
-Estaban diferidos a propósito «hasta que la red aguante», y **ya aguanta**: la
-suite pasó de 344 a 409 pruebas en un día, con dos arneses que comprueban que
-esas pruebas pueden ponerse en rojo. Pesa además que casi todos están en
-`tests/`, que es justo lo que los dos loops de hoy acaban de reescribir:
-refactorizarlos ahora evita hacerlo dos veces.
+> **Los «34 hallazgos de criterio del linter» NO EXISTEN.** Hasta el 09/09/2026
+> este mismo párrafo los daba como el próximo paso, y era falso: `ruff` con la
+> configuración que bloquea la CI pasa limpio desde el 07/09/2026. La cifra venía
+> de un conteo exploratorio con un conjunto de reglas más amplio que el que se
+> acabó seleccionando (ficha D16). Quien se fiara del documento habría gastado
+> media sesión en trabajo inexistente — y eso es lo que motivó el **barrido de
+> veracidad**, que hoy es la décima comprobación de la CI.
+>
+> Lo que sí aparece con un conjunto de reglas más amplio son ~447 avisos,
+> dominados por `import-outside-top-level` y `relative-imports`, que son idioma
+> de Django y no defectos. **No hay cola de linter pendiente.**
 
-Después, y sin urgencia: los hallazgos de calidad de pruebas que no son de
-frontera (**TEST-06 a TEST-12**), el resto de la UX del panel y del bot
-(**UX-P02 a UX-P11**, **UX-B06 a UX-B11**), y **BE-02 a BE-13**.
+**Próximo paso exacto (al retomar): el tratamiento D10 para lo clínico.**
+**BE-08** y **BE-09** están reproducidos y son desviaciones reales entre el motor
+y `docs/reglas_clinicas.md`, las dos de **sobre-alerta** (nunca de falso
+negativo). El tratamiento es el que fijó la ficha **D10** y no otro: pruebas de
+caracterización que fijen el comportamiento actual, la rama escrita en el
+documento clínico, y marcado **«pendiente de validación médica»**. **Sin tocar
+cuándo dispara nada** — eso lo decide el médico, no una sesión técnica.
+
+Después, y sin autoridad clínica de por medio:
+
+- **SEC-05**, el gemelo de la ficha D15: `crear_medico` dejó de reescribir la
+  contraseña en cada arranque el 12/08/2026 y **`crear_admin` sigue haciéndolo**,
+  además de promover a superusuario sin condición.
+- Los hallazgos de calidad de pruebas que no son de frontera (**TEST-06 a
+  TEST-12**), el resto de la UX del panel y del bot (**UX-P02 a UX-P11**,
+  **UX-B06 a UX-B11**), y **BE-03 a BE-13**.
+- **20 ramas muertas** en el remoto, todas ya fusionadas en `Desarrollo`.
+
+**Qué está verificado y qué no.** Desde el 09/09/2026 el informe de la auditoría
+distingue las tres cosas en su sección «Estado de los hallazgos»: cerrado,
+confirmado abierto ejecutando comandos, y **sin verificar** — que no es lo mismo
+que «comprobado y sigue roto».
 
 **Lo que este loop dejó abierto a propósito, y necesita datos tuyos:** la
 página `/politica-datos/` está publicada como **BORRADOR**. Le faltan
