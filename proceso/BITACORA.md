@@ -5750,3 +5750,99 @@ dejaba al médico opinando sobre un conjunto incompleto sin saberlo.
 4. **22 ramas muertas** en el remoto, todas ya fusionadas.
 
 **Para la reunión del domingo:** `docs/PARA_LA_REUNION.md`.
+
+---
+
+## Material para la reunión — una demo en la terminal y una presentación
+**Fecha:** 09/09/2026
+**Responsable:** León (Arquitecto) con Claude Code
+**Estado:** COMPLETADO ✅ — PR #35 mergeado (`3ca571a`)
+
+### Por qué esto y por qué ahora
+
+La reunión con el médico, el ingeniero y Alejandro es el domingo a las 18:00, y
+**no hay nada desplegado que enseñar**: el hosting venció el 07/08/2026. Sin una
+forma de ver el sistema funcionando, la reunión se reduce a mirar código y hablar
+de intenciones, que es exactamente la impresión que no queremos dejar.
+
+### Qué se construyó
+
+**`demo/` — una terminal que hace de WhatsApp.** Se escribe como escribiría un
+paciente y responde **el bot de verdad**: cada mensaje pasa por
+`bot.procesar_mensaje()` y cada registro por `alert_engine.evaluar_registro()`.
+El escenario del paciente callado llama al management command real del cron,
+`cerrar_checkins_vencidos`. Al lado del chat aparece **el panel del médico**, con
+las alertas que se acaban de generar. No hay guion grabado: si el sistema se
+equivoca delante de alguien, se ve.
+
+Seis opciones: un día que va bien · contenido intestinal por el drenaje (seis
+alertas a la vez) · la escalera de SILENCIO subiendo turno a turno · la palabra
+de auxilio · el sabotaje del 07/09 con los arneses que salieron de él · modo
+libre.
+
+**Que esto saliera barato no es mérito de la demo.** El bot se escribió desde el
+principio como *lógica pura respecto al transporte* —recibe texto plano, devuelve
+texto plano, no conoce HTTP ni Twilio—, así que cambiar WhatsApp por una terminal
+es cambiarle la puerta de entrada. Es la primera vez que esa decisión de diseño
+paga en algo visible.
+
+**Una presentación de nueve láminas**, publicada aparte del repositorio: cómo
+trabajamos (con agentes, en tiempo libre, sin aceptar cajas negras), de dónde
+salen las reglas y qué dijo la auditoría de la evidencia, la tabla de umbrales,
+lo que ve el paciente, los cinco subsistemas, los arneses, **qué NO hay** y las
+once decisiones repartidas por quién puede tomarlas.
+
+### Decisiones
+
+**La carpeta está aislada a propósito.** No la importa ningún módulo del sistema,
+no aparece en la suite y se puede borrar entera sin consecuencias. Existe para
+una reunión, y si mañana estorba, se va sin dejar hueco.
+
+**Base de datos desechable.** Se crea al arrancar y se destruye al salir, con la
+maquinaria de bases de prueba de Django. La base de desarrollo no se toca y
+ningún paciente de la demo sobrevive a cerrar la ventana — cada ensayo empezaba
+llenando el panel de «Paciente Demo 7».
+
+**Plan B en SQLite, anunciado en pantalla.** Si PostgreSQL no responde, la demo
+sigue sobre SQLite en memoria y lo dice. Bajar de motor en silencio sería
+justamente el tipo de detalle que este proyecto lleva un mes quitándose de
+encima.
+
+### Problemas encontrados y cómo se resolvieron
+
+**El plan B no arrancaba, y por dos razones distintas.** La primera: Django
+normaliza `DATABASES` una sola vez y guarda el resultado, así que reemplazar la
+conexión después de haberla usado producía una configuración a medio construir
+que reventaba con `KeyError: 'MIRROR'` — es decir, con un error que no tenía nada
+que ver con el problema real. Hay que tirar ese caché a mano.
+
+La segunda: la migración **0010** crea un índice funcional con `AT TIME ZONE`,
+que es SQL de PostgreSQL y SQLite no entiende. Se resolvió con `MIGRATION_MODULES`
+en `None` —mecanismo del propio Django—, que crea las tablas directamente desde
+los modelos. Lo que se pierde es ese índice, que solo acelera consultas: ninguna
+regla clínica depende de él.
+
+**El plan B se verificó en las dos direcciones**, que era lo que faltaba para
+darlo por bueno: con PostgreSQL levantado entra por PostgreSQL, con el puerto
+apuntando a un servicio inexistente entra por SQLite, y el caso grave produce las
+mismas cinco alertas en los dos. Un plan B que nunca se ha visto entrar es una
+rama de código que nadie ha ejecutado.
+
+**Las burbujas del chat salían todas del mismo ancho.** Un «hola» se dibujaba
+como un bloque verde de sesenta caracteres y la pantalla dejaba de parecer una
+conversación. Ahora la burbuja se encoge hasta el texto más largo que contiene.
+
+**La consola de Windows abre la salida en cp1252**, y con eso todo el texto del
+bot —que va lleno de tildes y signos de apertura— se imprime como basura. No es
+cosmética: sin forzar UTF-8 la demo no se puede enseñar.
+
+**Las seis cosas que el README propone probar en el modo libre se ejecutaron una
+por una antes de escribirlas.** Escribir «prueba a mandar `379`» sin haberlo
+mandado es la misma clase de afirmación sin comprobar que el barrido de veracidad
+existe para cazar.
+
+### Qué queda pendiente
+
+Lo de siempre, sin cambios: los tres bugs visibles (**UX-B03** primero), SEC-05,
+las 22 ramas muertas y los 23 hallazgos sin comprobar. El guion está en
+`proceso/instrucciones/2026-09-09_instruccion_antes_de_la_reunion.md`.
