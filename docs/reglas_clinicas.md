@@ -121,6 +121,21 @@ paciente que reporta de forma intermitente puede acumular signos sin que
 ninguna regla escale, mientras recibe alertas SILENCIO por separado — las dos
 señales no se suman.
 
+**Una rama que D8 no cubre, PENDIENTE DE VALIDACIÓN MÉDICA** (hallazgo BE-09,
+reproducido el 09/09/2026). D8 habla del día en que el paciente **no reportó
+nada**. Pero existe un caso distinto: el paciente **sí reportó** y ese dato
+concreto vino vacío — `tolero_liquidos` sin capturar, por ejemplo.
+
+Hoy la **Regla 6** cuenta ese día como «no toleró», y con eso la alerta llega a
+**ALTA** («ir a urgencias») en lugar de MEDIA. No se ha cambiado: está fijado con
+pruebas de caracterización, con el contraste al lado —un día sin reporte ninguno
+sí corta el conteo—.
+
+**La pregunta para el médico, en una línea:** *¿es lo mismo «no dijo nada» que
+«no le preguntamos esto»?* La coherencia con D8 diría que corte; la clínica
+podría decir lo contrario, porque la deshidratación es la causa #1 de readmisión
+y ahí conviene errar hacia la sensibilidad.
+
 **Esto no cierra la pregunta clínica.** Si el médico considera que un hueco de
 un solo día no debería reiniciar el conteo, eso es un cambio de umbral y
 requiere su validación explícita. Razonamiento completo en
@@ -134,6 +149,33 @@ calendario sube >=3 puntos vs. el promedio de los 2 días anteriores,
 escala un nivel de severidad sobre el valor de la tabla (nunca baja
 una severidad ya alcanzada). Base: Delaney 2008, Lee 2022, Outersterp
 2025, Coeckelberghs 2025.
+
+**Nota Regla 5b (tendencia) — DOS RAMAS PENDIENTES DE VALIDACIÓN MÉDICA**
+(hallazgo BE-08, reproducido el 09/09/2026). El motor hace hoy dos cosas que
+esta regla, tal como está escrita, no describe. **No se han cambiado**: se han
+fijado con pruebas de caracterización
+(`CaracterizacionBE08yBE09Tests` en `tests/test_alert_engine.py`) siguiendo el
+criterio de la ficha **D10** — *primero hacerla auditable, después decidir*.
+Las dos **sobre-alertan**; ninguna produce un falso negativo.
+
+1. **Cuando la tabla (5a) no da ninguna alerta, la tendencia escala a MEDIA, no
+   a BAJA.** El código toma `BAJA` como base cuando no hay severidad y sube un
+   nivel desde ahí, o sea que salta dos escalones desde «ninguna». Leída al pie
+   de la letra, «sube un nivel sobre 5a» daría BAJA.
+
+   *Ejemplo real:* POD 2, EVA 3 — por debajo del piso de 5 de esa ventana— con
+   una subida de 3 puntos en el promedio → hoy **MEDIA** («llamar al médico»).
+
+   **La pregunta para el médico:** ¿una subida brusca merece MEDIA aunque el
+   valor absoluto sea bajo, o debería quedarse en BAJA? Las dos son defendibles
+   y por eso no la decide una sesión técnica.
+
+2. **El promedio se calcula por REGISTRO, no por día.** La regla dice «promedio
+   de los últimos 2 días»; el motor promedia todos los registros de la ventana.
+   **Hoy no cambia nada** porque el bot captura una vez al día — pero con los
+   dos check-ins diarios ya decididos, un día con dos reportes pesará el doble
+   que uno con uno solo, y el resultado dependerá de cuántas veces respondió el
+   paciente en vez de cómo estuvo. **Es una diferencia latente, con fecha.**
 
 **Regla operativa: AUXILIO (el paciente pide ayuda) — decisión D21,
 08/09/2026.** No la produce `alert_engine.evaluar_registro` ni ninguna regla:

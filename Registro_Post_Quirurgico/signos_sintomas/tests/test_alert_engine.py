@@ -1509,3 +1509,190 @@ class FronterasDeUmbralTests(TestCase):
         self._registro(paciente, dias_atras=1, hinchazon_abdominal='mucho')
         hoy = self._registro(paciente, hinchazon_abdominal='mucho')
         self.assertEqual(self._severidades(hoy, 'ILEO_PARALITICO'), [])
+
+
+@freeze_time(ANCLA_MEDIANOCHE)
+class CaracterizacionBE08yBE09Tests(TestCase):
+    """Fija lo que el motor hace HOY en dos ramas que la regla escrita no cubre.
+
+    **Esto no corrige nada, y es deliberado.** Es el tratamiento que fijó la
+    ficha **D10** para exactamente esta situación: *«primero hacerla auditable,
+    después decidir»*. Cambiar cuándo dispara una alerta es mover un umbral
+    clínico, y eso lo valida el médico — no una sesión técnica.
+
+    **Qué son BE-08 y BE-09.** Dos hallazgos de la auditoría del 07/09/2026,
+    reproducidos ejecutando código el 09/09/2026. En los dos, el motor decide
+    algo razonable en un caso de borde que **la frase corta de la regla nunca
+    describió**. No es que alguien cambiara una regla: es que la regla no
+    llegaba hasta ahí.
+
+    **Las dos fallan hacia el lado seguro.** Sobre-alertan: MEDIA donde la
+    lectura literal daría BAJA, ALTA donde daría MEDIA. Ningún paciente deja de
+    generar alerta. Eso es lo que hace que se puedan dejar quietas sin riesgo
+    mientras el médico decide.
+
+    **Por qué fijarlas ahora si no se van a cambiar.** Porque hoy nadie —ni el
+    médico— puede opinar con fundamento sobre un comportamiento que no está
+    escrito en ninguna parte. Con estas pruebas, la pregunta que llega a la
+    reunión es concreta y reproducible; y si alguien cambia el comportamiento
+    sin querer, cae una prueba en vez de pasar desapercibido.
+
+    La pregunta abierta está en `docs/reglas_clinicas.md`, marcada **pendiente
+    de validación médica**, junto a la regla que la produce.
+    """
+
+    def setUp(self):
+        self.medico = medico_de_pruebas()
+        self.contador = 0
+
+    def _paciente(self, dias_desde_cirugia=5):
+        self.contador += 1
+        return Paciente.objects.create(
+            medico_responsable=self.medico,
+            nombre_completo=f'Paciente D10 {self.contador}',
+            telefono_whatsapp=f'+57301{self.contador:07d}',
+            fecha_cirugia=timezone.localdate() - timedelta(days=dias_desde_cirugia),
+        )
+
+    def _registro(self, paciente, dias_atras=0, **campos):
+        valores = {
+            'temperatura': Decimal('37.0'),
+            'dolor_eva': 2,
+            'tiene_drenaje': False,
+            'presencia_gases': True,
+            'episodios_nauseas': 0,
+        }
+        valores.update(campos)
+        registro = RegistroDiario.objects.create(paciente=paciente, **valores)
+        if dias_atras:
+            RegistroDiario.objects.filter(pk=registro.pk).update(
+                fecha_registro=timezone.now() - timedelta(days=dias_atras))
+            registro.refresh_from_db()
+        return registro
+
+    def _severidades(self, registro, tipo):
+        return [a.severidad for a in evaluar_registro(registro) if a.tipo == tipo]
+
+    # --- BE-08 · la tendencia cuando la tabla no da alerta ---
+
+    def test_be08_la_tendencia_sube_a_media_aunque_la_tabla_no_alerte(self):
+        """Comportamiento ACTUAL, fijado sin juzgarlo (BE-08).
+
+        POD 2 con EVA 3: la tabla no da nada — el piso de BAJA en esa ventana es
+        5. Pero el promedio subió 3 puntos, y el motor devuelve **MEDIA**.
+
+        La regla escrita dice que 5b «sube un nivel sobre 5a». Leída al pie de
+        la letra, si 5a no da nada, un nivel sería BAJA. El código hace
+        `severidad_base = severidad_por_tabla or 'BAJA'` y luego sube, o sea que
+        salta dos escalones desde «ninguna».
+
+        **Cuál de las dos lecturas es la correcta es una pregunta clínica**, no
+        una errata: una subida brusca puede merecer MEDIA aunque el valor
+        absoluto sea bajo. Va a la reunión con el médico.
+        """
+        paciente = self._paciente(dias_desde_cirugia=2)
+        for dias_atras, eva in ((3, 0), (2, 0), (1, 3)):
+            self._registro(paciente, dias_atras=dias_atras, dolor_eva=eva)
+        hoy = self._registro(paciente, dolor_eva=3)
+
+        self.assertEqual(self._severidades(hoy, 'DOLOR_AGUDO'), ['MEDIA'])
+
+    def test_be08_sin_tendencia_la_tabla_manda_y_no_hay_alerta(self):
+        """La otra dirección: sin el salto de 3 puntos, EVA 3 en POD 2 no alerta.
+
+        Deja claro que el MEDIA de arriba lo produce **la tendencia** y no otra
+        cosa — sin esto, la prueba anterior no distinguiría una causa de otra.
+        """
+        paciente = self._paciente(dias_desde_cirugia=2)
+        for dias_atras in (3, 2, 1):
+            self._registro(paciente, dias_atras=dias_atras, dolor_eva=3)
+        hoy = self._registro(paciente, dolor_eva=3)
+
+        self.assertEqual(self._severidades(hoy, 'DOLOR_AGUDO'), [])
+
+    def test_be08_el_promedio_se_calcula_por_registro_no_por_dia(self):
+        """La segunda mitad de BE-08, y hoy está LATENTE (BE-08).
+
+        La regla dice «promedio de los últimos 2 **días**»; el motor hace `Avg`
+        sobre todos los registros de la ventana. **Hoy no cambia nada** porque
+        el bot captura una vez al día — pero los dos check-ins diarios ya están
+        decididos, y el día que entren, un día con dos reportes pesará el doble
+        que uno con uno solo. El resultado dependerá de cuántas veces respondió
+        el paciente, no de cómo estuvo.
+
+        **El escenario está elegido para que las dos lecturas den resultados
+        DISTINTOS**, y eso no es un detalle: el primer intento usaba números con
+        los que ambas escalaban igual, así que la prueba decía fijar la
+        diferencia y no la fijaba. Es el mismo defecto que este proyecto
+        persigue —verde por un motivo distinto del que dice medir— y apareció
+        aquí, en una prueba escrita para denunciarlo.
+
+            días -3 y -2 → EVA 0        ventana anterior:  promedio 0.00
+            ayer         → EVA 0 y 9    ventana reciente:  por registro 3.00
+            hoy          → EVA 0                          por día      2.25
+
+        Con el umbral en 3, **solo la lectura por registro escala**. Y como hoy
+        el EVA es 0, la tabla no aporta nada: la severidad que salga viene
+        entera de la tendencia.
+        """
+        paciente = self._paciente(dias_desde_cirugia=8)
+        self._registro(paciente, dias_atras=3, dolor_eva=0)
+        self._registro(paciente, dias_atras=2, dolor_eva=0)
+        # Ayer, DOS registros — el caso que aparece con dos check-ins diarios.
+        self._registro(paciente, dias_atras=1, dolor_eva=0)
+        self._registro(paciente, dias_atras=1, dolor_eva=9)
+        hoy = self._registro(paciente, dolor_eva=0)
+
+        por_registro = (0 + 9 + 0) / 3        # 3.00 → alcanza el umbral
+        por_dia = ((0 + 9) / 2 + 0) / 2       # 2.25 → no lo alcanza
+        self.assertGreaterEqual(por_registro, 3)
+        self.assertLess(por_dia, 3)
+
+        # Comportamiento ACTUAL: promedia por registro, así que escala. Con la
+        # lectura por día no habría ninguna alerta.
+        self.assertEqual(self._severidades(hoy, 'DOLOR_AGUDO'), ['MEDIA'])
+
+    # --- BE-09 · el día con reporte pero sin el dato de líquidos ---
+
+    def test_be09_un_dia_sin_el_dato_cuenta_como_no_tolero(self):
+        """Comportamiento ACTUAL, fijado sin juzgarlo (BE-09).
+
+        Ayer hubo reporte, pero `tolero_liquidos` vino vacío. Hoy no tolera. El
+        motor cuenta **dos días** y devuelve **ALTA** — «ir a urgencias».
+
+        La ficha **D8** decidió que un día sin datos **corta** el conteo, «porque
+        contar a través de él inventaría un hecho clínico». Pero D8 habla del día
+        en que el paciente **no reportó nada**; este es un día en que sí reportó
+        y ese dato concreto no se capturó. **La decisión no cubre este caso.**
+
+        Que deba cortar (coherencia con D8) o no cortar (la deshidratación es la
+        causa #1 de readmisión, y ahí conviene errar hacia la sensibilidad) es
+        una pregunta para el médico.
+        """
+        paciente = self._paciente()
+        self._registro(paciente, dias_atras=1, tolero_liquidos=None)
+        hoy = self._registro(paciente, tolero_liquidos=False)
+
+        self.assertEqual(self._severidades(hoy, 'INTOLERANCIA_ORAL'), ['ALTA'])
+
+    def test_be09_un_dia_sin_ningun_reporte_si_corta_el_conteo(self):
+        """El contraste que hace útil la prueba anterior.
+
+        Sin reporte ninguno ayer, la Regla 6 sí corta y se queda en MEDIA — eso
+        es D8 aplicada correctamente. La diferencia entre las dos pruebas es
+        exactamente la pregunta que va a la reunión: **¿es lo mismo «no dijo
+        nada» que «no le preguntamos esto»?**
+        """
+        paciente = self._paciente()
+        self._registro(paciente, dias_atras=2, tolero_liquidos=False)
+        hoy = self._registro(paciente, tolero_liquidos=False)
+
+        self.assertEqual(self._severidades(hoy, 'INTOLERANCIA_ORAL'), ['MEDIA'])
+
+    def test_be09_el_dia_en_que_si_tolero_corta_igual(self):
+        """Y la tercera pata: un día con el dato en positivo corta el conteo."""
+        paciente = self._paciente()
+        self._registro(paciente, dias_atras=1, tolero_liquidos=True)
+        hoy = self._registro(paciente, tolero_liquidos=False)
+
+        self.assertEqual(self._severidades(hoy, 'INTOLERANCIA_ORAL'), ['MEDIA'])

@@ -9,7 +9,7 @@
 > **Loop E el 07/08/2026**, el **reparto de `tests.py` + la guardia de secretos
 > el 10/08/2026** y **D15 · `crear_medico` el 12/08/2026**; **umbrales
 > anclados con pruebas de frontera el 08/09/2026** y **los bugs que tocan al
-> paciente corregidos (D19-D23) el 08/09/2026**, 414 tests OK)
+> paciente corregidos (D19-D23) el 08/09/2026**, 420 tests OK)
 > **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026 —
 > **nueve comprobaciones** desde el 07/09/2026 (siete hasta entonces; se sumaron
 > el linter `ruff` y `pip-audit`, y `check --deploy` recuperó la capacidad de

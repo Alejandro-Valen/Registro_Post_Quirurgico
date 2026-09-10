@@ -8,6 +8,7 @@ from django.template.response import TemplateResponse
 from django.utils import timezone
 from django.utils.html import format_html, mark_safe
 
+from .alert_engine import FC_BAJA_MIN, FC_MEDIA_MIN, TEMPERATURA_ALTA
 from .management.commands.desactivar_pacientes_vencidos import DIAS_SEGUIMIENTO
 from .models import (
     Alerta,
@@ -220,6 +221,21 @@ def _datos_grafica(paciente, dias):
     return {'labels': labels, 'temps': temps, 'evas': evas, 'fcs': fcs, 'alertas_idx': alertas_idx}
 
 
+# BE-02 (auditoría del 07/09/2026) — los umbrales del panel se leen de
+# `alert_engine`, no se reescriben a mano.
+#
+# Estaban copiados como texto («umbral fiebre: 37.9°C», «101 lpm · 110 lpm»), y
+# el hallazgo avisaba de lo obvio: el día que cambien, el médico seguiría viendo
+# la línea vieja. Pero el daño ya se había materializado por otra vía: la
+# etiqueta decía **«Dolor EVA (1-10)»** y la decisión **D20** abrió la escala a
+# **0-10** el 08/09/2026. El panel del médico llevaba un día mintiendo sobre la
+# escala, y lo rompió el propio equipo sin notarlo.
+#
+# Se sustituye por interpolación desde la fuente única. Lo vigila además el
+# barrido de veracidad, que desde hoy comprueba que ningún umbral clínico
+# aparezca escrito a mano fuera de `alert_engine.py`.
+_RANGO_DOLOR = '0-10'   # D20: 0 = sin dolor
+
 _HTML_GRAFICAS_TEMPLATE = """
 <div class="js-graficas-signos" data-paciente="{paciente_id}"
      data-graficas="{datos}" style="margin-top:8px;">
@@ -235,16 +251,16 @@ _HTML_GRAFICAS_TEMPLATE = """
 
   <div style="margin-bottom:4px;font-size:0.8em;color:#6b7280;display:flex;justify-content:space-between;">
     <span>Temperatura (°C)</span>
-    <span style="color:#fca5a5;">- - umbral fiebre: 37.9°C</span>
+    <span style="color:#fca5a5;">- - umbral fiebre: {umbral_fiebre}°C</span>
   </div>
   <canvas data-serie="temperatura" height="90" style="width:100%;margin-bottom:16px;"></canvas>
 
-  <div style="margin-bottom:4px;font-size:0.8em;color:#6b7280;">Dolor EVA (1-10)</div>
+  <div style="margin-bottom:4px;font-size:0.8em;color:#6b7280;">Dolor EVA ({rango_dolor})</div>
   <canvas data-serie="dolor" height="90" style="width:100%;margin-bottom:16px;"></canvas>
 
   <div style="margin-bottom:4px;font-size:0.8em;color:#6b7280;display:flex;justify-content:space-between;">
     <span>Frecuencia cardíaca (lpm)</span>
-    <span style="color:#6b7280;">- - 101 lpm  · - - 110 lpm</span>
+    <span style="color:#6b7280;">- - {fc_baja} lpm  · - - {fc_media} lpm</span>
   </div>
   <canvas data-serie="frecuencia" height="90" style="width:100%;margin-bottom:8px;"></canvas>
   <p style="font-size:0.75em;color:#9ca3af;margin:4px 0 0;">
@@ -274,6 +290,11 @@ def _grafica_signos_vitales(paciente):
         _HTML_GRAFICAS_TEMPLATE,
         datos=json.dumps(datos, separators=(',', ':')),
         paciente_id=paciente.pk,
+        # BE-02: los tres umbrales salen de `alert_engine`, no de un literal.
+        umbral_fiebre=TEMPERATURA_ALTA,
+        fc_baja=FC_BAJA_MIN,
+        fc_media=FC_MEDIA_MIN,
+        rango_dolor=_RANGO_DOLOR,
     )
 
 

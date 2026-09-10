@@ -478,6 +478,92 @@ def comprobar_umbrales():
 # ---------------------------------------------------------------------------
 # 5 · El índice de decisiones cubre el cuerpo
 # ---------------------------------------------------------------------------
+def _sin_comentarios(ruta):
+    """Devuelve el archivo sin sus comentarios.
+
+    Un comentario que explica **por qué** se quitó un valor tiene todo el
+    derecho a citarlo: «estaban copiados como texto (37.9°C, 101 lpm)». Sin esta
+    poda, el propio comentario que documenta la corrección hace saltar la alarma
+    — y una alarma que salta por su propia explicación se desactiva en una
+    semana.
+
+    Las cadenas SÍ se conservan: la plantilla HTML del panel vive dentro de una,
+    y es justo donde estaban los literales que hay que impedir.
+    """
+    texto = ruta.read_text(encoding='utf-8')
+    if ruta.suffix != '.py':
+        # En las plantillas, los comentarios de Django y los de HTML.
+        texto = re.sub(r'\{#.*?#\}|<!--.*?-->', '', texto, flags=re.S)
+        return texto
+
+    import io as _io
+    import tokenize
+    piezas = []
+    try:
+        for tok in tokenize.generate_tokens(_io.StringIO(texto).readline):
+            if tok.type != tokenize.COMMENT:
+                piezas.append(tok.string)
+    except (tokenize.TokenError, IndentationError):
+        return texto          # ante la duda, se mira todo
+    return '\n'.join(piezas)
+
+
+def comprobar_umbrales_duplicados():
+    """Ningún umbral clínico escrito a mano fuera de su fuente única (BE-02).
+
+    **El caso que lo motiva es el mejor argumento.** El panel del médico traía
+    los umbrales como texto —«umbral fiebre: 37.9°C», «101 lpm · 110 lpm»— y la
+    auditoría avisó de lo evidente: el día que cambien, el médico verá la línea
+    vieja. Pero el daño ya había ocurrido por otra puerta: la etiqueta decía
+    **«Dolor EVA (1-10)»**, y la decisión **D20** abrió la escala a **0-10** el
+    08/09/2026. El panel llevaba un día mintiéndole al médico sobre la escala, y
+    lo rompió el propio equipo sin enterarse.
+
+    Por eso esto no basta con arreglarlo: hay que impedir que vuelva. Se buscan
+    los valores de las constantes en el código de presentación; si aparecen
+    escritos, es que alguien volvió a copiarlos.
+    """
+    titulo(8, 'Ningún umbral clínico repetido fuera de alert_engine.py')
+
+    sys.path.insert(0, str(PROYECTO))
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Registro_Post_Quirurgico.settings')
+    import django
+    django.setup()
+    from signos_sintomas import alert_engine as motor
+
+    umbrales = {
+        'TEMPERATURA_ALTA': str(motor.TEMPERATURA_ALTA),
+        'FC_BAJA_MIN': str(motor.FC_BAJA_MIN),
+        'FC_MEDIA_MIN': str(motor.FC_MEDIA_MIN),
+        'FC_ALTA_MIN': str(motor.FC_ALTA_MIN),
+    }
+
+    # Dónde se mira: lo que ve el médico y lo que ve el paciente. NO se mira
+    # `alert_engine.py` (es la fuente), ni las pruebas (ahí los valores tienen
+    # que estar escritos: son justo las que fijan los umbrales), ni las
+    # migraciones (código generado).
+    vigilados = []
+    for patron in ('signos_sintomas/admin.py', 'signos_sintomas/templatetags/*.py',
+                   'signos_sintomas/bot.py', 'templates/**/*.html',
+                   'signos_sintomas/templates/**/*.html'):
+        vigilados += list(PROYECTO.glob(patron))
+
+    encontrados = 0
+    for ruta in vigilados:
+        texto = _sin_comentarios(ruta)
+        rel = ruta.relative_to(PROYECTO).as_posix()
+        for nombre, valor in umbrales.items():
+            # Se busca el número como valor suelto, no como parte de otro.
+            if re.search(rf'(?<![\d.]){re.escape(valor)}(?![\d.])', texto):
+                encontrados += 1
+                falla('umbrales-copiados',
+                      f'{rel} contiene «{valor}», que es {nombre}. Los umbrales '
+                      f'se leen de `alert_engine`, no se reescriben (BE-02).')
+    if not encontrados:
+        ok(f'{len(vigilados)} archivos de presentación revisados, '
+           f'ninguno repite un umbral')
+
+
 def comprobar_fichas():
     titulo(5, 'El índice de decisiones lista todas las fichas del cuerpo')
 
@@ -555,6 +641,7 @@ def main():
     comprobar_conteo_de_pruebas()
     comprobar_ci()
     comprobar_umbrales()
+    comprobar_umbrales_duplicados()
     comprobar_fichas()
     comprobar_commits()
     comprobar_comandos()
