@@ -103,7 +103,9 @@ anotada para después.
 
 ## Stack Tecnológico
 
-- **Backend:** Django 6.0.7 + Python 3.13
+- **Backend:** Django 6.1.1 + Python 3.13 — hasta el 12/09/2026 esta línea
+  decía **6.0.7**, que era falso desde el bump de Dependabot; lo fija
+  `pyproject.toml` y lo confirma `django.get_version()`
 - **Base de datos:** PostgreSQL 18 (local: registro_postquirurgico_db)
 - **Interfaz paciente:** WhatsApp Bot vía Twilio API (en construcción, Sprint 3)
 - **Panel médico:** Django Admin personalizado

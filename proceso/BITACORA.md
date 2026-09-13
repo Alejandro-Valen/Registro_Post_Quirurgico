@@ -5859,3 +5859,153 @@ existe para cazar.
 Lo de siempre, sin cambios: los tres bugs visibles (**UX-B03** primero), SEC-05,
 las 22 ramas muertas y los 23 hallazgos sin comprobar. El guion está en
 `proceso/instrucciones/2026-09-09_instruccion_antes_de_la_reunion.md`.
+
+---
+
+## Ensayo de la demostración — y la base local que llevaba dos meses atrasada
+**Fecha:** 12/09/2026
+**Responsable:** León (Arquitecto) con Claude Code
+**Estado:** COMPLETADO ✅ — commit `ff3a9f5` en `Desarrollo`
+
+### Por qué esta sesión
+
+Repasar los comandos de la reunión y ensayar la demostración antes de enseñarla.
+No se planeó tocar nada. Acabó destapando un fallo que habría reventado delante
+del médico.
+
+### El estado real, comprobado con comandos
+
+Antes de repasar nada verifiqué lo que la documentación afirma, porque es más
+barato desmentirlo aquí que en la reunión:
+
+| | |
+|---|---|
+| Suite completa | **420 pruebas, todas en verde** |
+| `manage.py check` | sin problemas |
+| `makemigrations --check` | sin migraciones por escribir |
+| `ruff` | limpio |
+| Portal (`/`, `/contacto/`, `/politica-datos/`, `/salud/`) | 200 |
+| `/admin/` | 302 al login |
+
+El conteo de **420** lo confirmó después, por su cuenta, el barrido de veracidad.
+Las cifras de 366 y 409 que aparecen en la tabla de `CLAUDE.md` no se
+contradicen con esta: son el conteo **de cada fila histórica**, lo que había al
+cerrar aquel PR.
+
+### El fallo: seis migraciones sin aplicar en la base local
+
+El `runserver` avisaba de **seis migraciones sin aplicar** (`axes`, `home`,
+`signos_sintomas`). Al entrar al Admin con usuario y contraseña **correctos**, la
+respuesta era un **500**:
+
+```
+psycopg2.errors.UndefinedTable: no existe la relación «axes_accessattemptexpiration»
+```
+
+**La cadena, leída del traceback:** el formulario valida bien, Django llama a
+`auth_login`, que emite `user_logged_in`; **django-axes escucha esa señal** y,
+con `AXES_RESET_ON_SUCCESS = True`, borra los intentos fallidos previos; esa
+tabla la crea `axes.0010`, que no estaba aplicada. Fallaba **después** de aceptar
+las credenciales, no por ellas.
+
+**Lo que más despista:** ese borrado solo se ejecuta si había intentos fallidos
+que borrar. Había 4 de `medico_piloto` y 2 de `demo_medico`, de buscar una
+contraseña un rato antes. Con el contador a cero el mismo login pasa limpio, así
+que el fallo parece intermitente y parece un problema de contraseña.
+
+**Las otras dos migraciones pegaban justo donde se enseña el sistema:**
+`home.0003` trae las columnas del habeas data —sin ellas el formulario de
+contacto revienta al enviarlo— y `signos_sintomas.0029` deja `temperatura` en
+`null` —sin ella, responder *saltar* falla al guardar, que es la decisión D20
+entera—. Dos de las tres cosas que iban a enseñarse.
+
+**Antes de migrar comprobé que los datos lo permitían:** la 0028 añade el
+`CheckConstraint` *activo ⇒ médico responsable* y falla si existe algún paciente
+activo sin médico. Había cero. Migré, y verifiqué en las dos direcciones:
+`temperatura` quedó nullable, el constraint existe, **0 migraciones pendientes**,
+los datos intactos (3 pacientes / 28 registros / 16 alertas), y una escritura
+real con los campos nuevos de habeas data que después borré.
+
+**Por qué no lo cazó nada**, que es la lección que queda: `check` no mira la
+base; `makemigrations --check` compara `models.py` con los **archivos** de
+migración, no con la base; y la suite **crea su propia base desde cero**. Las 420
+pruebas pueden estar en verde con la base de desarrollo dos meses atrasada. El
+único comando que responde a esa pregunta es `showmigrations --plan`.
+
+### La demostración, ensayada entera
+
+Los cinco escenarios guiados se ejercitaron con el bot y el motor reales —solo se
+anularon las pausas y los «Enter para seguir»—, sobre **PostgreSQL**, no sobre el
+plan B. **Cero excepciones.**
+
+| | Escenario | Qué produjo |
+|---|---|---|
+| 1 | Un día que va bien | ninguna alerta |
+| 2 | La peor señal | **6 alertas**: 2 ALTA (fuga, sepsis) + 4 MEDIA |
+| 3 | Deja de responder | **BAJA → MEDIA → MEDIA → ALTA**, y «Sin respuesta ×4» |
+| 4 | Pide ayuda | **ALTA · PIDIÓ AYUDA** |
+| 5 | Las pruebas | el sabotaje del drenaje con su diff |
+
+**El modo libre se probó con las frases difíciles**, una a una: `379` y
+`treinta y siete` se rechazan explicando por qué (D19), `37,5` con coma responde
+«Anoté: 37.5 °C», `no tengo termómetro` en frase completa responde «Anoté: sin
+medir (la saltaste)» y sigue (D20), `15` se rechaza y `0` se acepta, y `AYUDA`
+detiene el cuestionario y genera la alerta ALTA.
+
+Detalle para quien la enseñe: **`saltar` solo vale en la pregunta de
+temperatura**. En la de dolor el bot pide un número —que es correcto— pero
+tecleado delante de alguien parece que no entiende.
+
+### Problemas encontrados y cómo se resolvieron
+
+**1 · Una base huérfana que la demo no había dejado.** Apareció
+`test_demo_17088` en PostgreSQL, lo que contradice la promesa de «no queda
+rastro». Corrí la demo real de principio a fin comparando la lista de bases
+antes y después: sale con código 0, dice «Listo. No queda rastro» y **borra la
+suya**. La huérfana es anterior, de una ejecución que murió sin llegar a su
+`finally`. Queda sin borrar, a la espera de decidirlo; no estorba porque cada
+demo usa su propio nombre con el PID.
+
+**2 · Perseguí un bug que no existía, y era mi herramienta.** Durante el
+diagnóstico del login concluí que tras autenticarse el sistema redirigía a
+`/accounts/profile/` y devolvía 404. Era falso: **Git Bash convierte las rutas
+POSIX al estilo Windows**, y el `next=/admin/` de mis pruebas con `curl` llegaba
+al servidor como `next=C:/Program Files/Git/admin/`; Django lo rechazaba por no
+ser una URL segura y caía en el destino por defecto. Se destapó al probar con
+otro valor (`next=/contacto/`) y ver la ruta mutilada en la propia salida.
+Repetida la prueba con `MSYS_NO_PATHCONV=1`, el login redirige a `/admin/` como
+debe. **Lo que enseña:** cuando una prueba manual y el test client de Django no
+coinciden, sospechar de la herramienta antes que del código — y cambiar el valor
+de entrada para ver si el resultado cambia con él.
+
+**3 · Una afirmación falsa en `CLAUDE.md`.** El «Stack Tecnológico» decía
+**Django 6.0.7**; el instalado y el fijado en `pyproject.toml` es **6.1.1**,
+desde un bump de Dependabot. Corregido en esta sesión. El barrido de veracidad
+no cubre versiones de dependencias — hoy comprueba rutas, conteo de pruebas,
+commits citados y umbrales clínicos.
+
+### Decisiones
+
+- **Commit directo a `Desarrollo`, sin rama ni PR.** El cambio es documentación
+  y la ceremonia habría pesado más que el trabajo. Lo autoricé explícitamente
+  tras ver el diff y las guardias en verde.
+- **La huérfana `test_demo_17088` no se borra todavía.** Un `drop database` no
+  se deshace, y no molesta a nada.
+
+### Verificación
+
+Antes del commit: rama y sincronía, nada preparado de antes, ningún archivo sin
+rastrear, **79 líneas añadidas y 0 borradas** (no toca nada existente),
+`git diff --check` limpio y el barrido de veracidad en *«Todo lo que la
+documentación afirma es cierto»*. `gitleaks` no está instalado en esta máquina;
+lo corre la CI sobre el push. No se corrió la suite porque el commit no toca
+código.
+
+### Qué queda pendiente
+
+Sin cambios respecto al 09/09: los tres bugs visibles (**UX-B03** primero),
+**SEC-05**, las 22 ramas muertas y los 23 hallazgos sin comprobar. El guion sigue
+siendo `proceso/instrucciones/2026-09-09_instruccion_antes_de_la_reunion.md`.
+
+Nuevo, menor: decidir si se borra `test_demo_17088`, y si el barrido de veracidad
+debería vigilar también las versiones de dependencias que la documentación cita.
