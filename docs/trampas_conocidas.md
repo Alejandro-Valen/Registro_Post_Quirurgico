@@ -250,6 +250,54 @@ para Python y para el propio linter, pero hace fallar el paso «Higiene del diff
 de la CI, que corre `git diff --check`. Tras cualquier corrida de `ruff --fix`,
 comprobar `git diff --check` antes de commitear.
 
+**El aviso «unapplied migration(s)» del arranque tumba el login del Admin, y el
+error no se parece en nada a su causa (12/09/2026).** El `runserver` avisaba de
+seis migraciones sin aplicar. Al entrar al Admin con usuario y contraseña
+**correctos**, la respuesta era un **500**:
+
+```
+psycopg2.errors.UndefinedTable: no existe la relación «axes_accessattemptexpiration»
+DELETE FROM "axes_accessattemptexpiration" WHERE ...
+```
+
+La cadena: el formulario valida bien y Django llama a `auth_login`, que emite la
+señal `user_logged_in`; **django-axes la escucha** y, con
+`AXES_RESET_ON_SUCCESS = True`, borra los intentos fallidos previos; esa tabla
+la crea `axes.0010`, que no estaba aplicada. Es decir, **fallaba después de
+aceptar las credenciales**, no por ellas.
+
+Lo que más despista: el borrado solo se ejecuta **si había intentos fallidos que
+borrar**. Con el contador a cero, el mismo login pasa limpio. Así que el fallo
+parece intermitente y parece un problema de contraseña — se pierde el tiempo
+buscando la clave en vez de mirar la base.
+
+Las otras dos migraciones que faltaban pegaban justo donde se enseña el sistema:
+`home.0003` trae las columnas del habeas data (**el formulario de contacto
+revienta al enviarlo** sin ellas) y `signos_sintomas.0029` deja `temperatura` en
+`null` (sin ella, **responder *saltar* falla al guardar**, que es la decisión
+D20 entera).
+
+**Por qué no lo caza ninguna de las comprobaciones habituales**, y esto es lo
+que hay que recordar: `manage.py check` no mira la base; `makemigrations
+--check` compara `models.py` con los **archivos** de migración, no con la base;
+y la suite **crea su propia base desde cero** y la destruye al acabar. Las 420
+pruebas pueden estar en verde mientras tu base de desarrollo lleva dos meses
+atrasada. Son preguntas distintas y es fácil confundirlas.
+
+El comando que sí responde a esta pregunta, y que conviene correr **antes de
+cualquier demostración**:
+
+```powershell
+python manage.py showmigrations --plan | findstr /C:"[ ]"   # vacío = base al día
+python manage.py migrate                                     # aplicarlas
+```
+
+**Antes de migrar una base que ya tiene datos**, comprobar una cosa: la 0028
+añade el `CheckConstraint` *activo ⇒ médico responsable* y **la migración falla
+si existe algún paciente activo sin médico**. Se mira con
+`select count(*) from signos_sintomas_paciente where activo and
+medico_responsable_id is null` — si da 0, migra limpio.
+
 **`ruff` mueve los import-estrella de los settings, y ahí el orden importa
 (07/09/2026).** El ordenador de imports movió `from .settings import *` detrás
 de los demás imports en `settings_production.py`. Funcionalmente no rompió nada,

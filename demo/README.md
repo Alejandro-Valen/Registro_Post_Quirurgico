@@ -63,3 +63,34 @@ que se pierde es un índice de rendimiento que ninguna regla clínica usa.
 - `saltar` cuando no hay termómetro.
 - `no tengo termómetro` — frase completa, no solo la palabra.
 - Un dolor fuera de rango: `15`.
+
+## Antes de enseñarla: una comprobación de diez segundos
+
+La demo monta su propia base y no depende de la de desarrollo, así que arranca
+aunque tu base local esté atrasada. **El Admin no.** Si vas a enseñar las dos
+cosas en la misma sesión, comprueba antes que la base de desarrollo está al día:
+
+```
+python manage.py showmigrations --plan | findstr /C:"[ ]"
+```
+
+Si imprime algo, corre `python manage.py migrate`. Con migraciones sin aplicar,
+el login del Admin puede caer con un 500 que parece un problema de contraseña y
+no lo es — está contado en `docs/trampas_conocidas.md`, sección «Pruebas y
+comprobaciones locales».
+
+## Si la demo muere sin salir por `q`
+
+Cerrar la ventana con la X, o matar el proceso, se salta el `finally` que borra
+la base temporal, y queda una `test_demo_<pid>` huérfana en PostgreSQL. **No
+estorba a la siguiente demo** —cada una usa su propio nombre— pero se acumula.
+Se ven y se borran así:
+
+```sql
+select datname from pg_database where datname like 'test_demo%';
+drop database test_demo_12345;
+```
+
+Salir con `q` desde el menú sí la borra: lo dice en pantalla («Borrando la base
+temporal… Listo. No queda rastro.») y se comprobó el 12/09/2026 mirando la lista
+de bases antes y después.
