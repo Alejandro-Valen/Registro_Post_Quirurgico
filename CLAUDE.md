@@ -78,7 +78,6 @@ extender el sistema.
 
 | Documento | Qué responde |
 |-----------|--------------|
-| `docs/PARA_LA_REUNION.md` | **La página para la reunión con el médico y el profesional de desarrollo:** qué hace el sistema, qué está verificado, qué NO hay, y las **once decisiones que necesitan una persona**. Es el documento que hay que abrir antes de esa reunión, y el único que reúne las decisiones abiertas en un solo sitio |
 | `README.md` (raíz) | La portada: qué hace el sistema, cómo se instala, y qué falta —técnico y normativo— para pacientes reales |
 | `CONTRIBUTING.md` | Las convenciones en forma corta: ramas, commits, qué correr antes del PR, y las reglas del código |
 | `SECURITY.md` | Qué cuenta como fallo de seguridad aquí, qué ya está resuelto y **qué sabemos que falta** |
@@ -87,6 +86,13 @@ extender el sistema.
 | `docs/auditoria_literatura/` | La evidencia clínica que respalda (o no) cada umbral |
 | `docs/transferencia_cuentas.md` | Propiedad de servicios y credenciales |
 | `docs/FORMATO_CONSENTIMIENTO_HABEAS_DATA.md` | Documento legal canónico (Ley 1581/2012) |
+
+**Los documentos de la reunión salieron del repositorio el 20/09/2026** — la
+página de decisiones y el guion para explicar el sistema. Viven fuera del árbol,
+en el cuaderno de trabajo, porque son material de una conversación concreta y no
+documentación del producto: quedan en la voz de quien la dirige y con lo que esa
+persona elige contar. **Aquí no se recrean**, que es justo lo que esa mudanza
+deshizo.
 
 ### Si algo se contradice
 
@@ -343,10 +349,6 @@ control» con una ALTA sin resolver, y ve a quien tiene el seguimiento detenido.
 > Lo que sí aparece con un conjunto de reglas más amplio son ~447 avisos,
 > dominados por `import-outside-top-level` y `relative-imports`, que son idioma
 > de Django y no defectos. **No hay cola de linter pendiente.**
-
-> **Antes de nada, si vas a una reunión: `docs/PARA_LA_REUNION.md`.** Reúne en
-> una página qué hace el sistema, qué está verificado, qué NO hay, y las once
-> decisiones que necesitan una persona.
 
 **Estado de la auditoría del 07/09/2026, al cierre del 09/09:** de sus 101
 hallazgos, **78 tienen estado comprobado** — 32 cerrados, 3 a medias, 44
