@@ -70,10 +70,9 @@ clasifica señales de alarma médicas.
 ### Dónde está cada cosa (desde el 07/09/2026)
 
 `docs/` es **solo producto**: reglas clínicas, modelo de datos, bot, operación,
-legal. `proceso/` es el **cuaderno del equipo**: bitácora, auditorías, guiones
-de sesión y scripts de verificación. Un desarrollador nuevo no necesita abrir
-`proceso/` para usar ni extender el sistema; un agente que va a corregir algo,
-sí — ahí está el método y lo que ya falló antes.
+legal. `proceso/verificaciones/` guarda los scripts que se ejecutan a mano para
+comprobar el trabajo. Un desarrollador nuevo no necesita abrirlos para usar ni
+extender el sistema.
 
 ### Consúltalo cuando necesites contexto
 
@@ -84,8 +83,6 @@ sí — ahí está el método y lo que ya falló antes.
 | `CONTRIBUTING.md` | Las convenciones en forma corta: ramas, commits, qué correr antes del PR, y las reglas del código |
 | `SECURITY.md` | Qué cuenta como fallo de seguridad aquí, qué ya está resuelto y **qué sabemos que falta** |
 | `docs/README.md` | Índice general y **orden de autoridad** si dos documentos se contradicen |
-| `proceso/metodo_de_trabajo.md` | **Cómo se corrige algo aquí:** decidir → documentar → test en rojo → implementar → verificar. Léelo antes de tu primer cambio |
-| `proceso/BITACORA.md` | Qué pasó en cada sesión, con los problemas encontrados y cómo se resolvieron |
 | `docs/resumen_sprints.md` | Qué entregó cada sprint, bloque y loop — el mapa de la BITÁCORA |
 | `docs/auditoria_literatura/` | La evidencia clínica que respalda (o no) cada umbral |
 | `docs/transferencia_cuentas.md` | Propiedad de servicios y credenciales |
@@ -94,9 +91,8 @@ sí — ahí está el método y lo que ya falló antes.
 ### Si algo se contradice
 
 Manda **el código**; después el documento dueño de ese tema (los de la tabla
-"antes de tocar"); después este archivo. `proceso/BITACORA.md` describe el momento en
-que se escribió y nunca es fuente de verdad sobre el estado actual. Al
-encontrar una contradicción, **corrígela en el mismo commit** en vez de dejarla
+"antes de tocar"); después este archivo. Al encontrar una contradicción,
+**corrígela en el mismo commit** en vez de dejarla
 anotada para después.
 
 ---
@@ -280,8 +276,7 @@ bloquear el PR** con dos hallazgos ALTOS: identidad del paciente en la salida
 operativa, y un paciente activo que puede quedarse sin médico responsable —
 invisible para todos. Los cuatro hallazgos se reprodujeron contra el código
 antes de aceptarlos; la verificación cambió de sitio una corrección y encontró
-una ocurrencia que el informe no vio. Informe completo en
-`proceso/auditorias/2026-07-27_informe_cierre_codex.md`.
+una ocurrencia que el informe no vio.
 
 - **Loop D** (privacidad operativa, responsable clínico, firma del webhook):
   **cerrado y verificado (27/07).** Los nueve pasos, 15 commits, suite en **337
@@ -359,8 +354,7 @@ abiertos confirmados ejecutando comandos — y **23 siguen sin verificar**.
 Antes del 09/09 solo 26 tenían estado: los otros 75 eran un ⬜ que no distinguía
 «roto» de «nadie ha mirado».
 
-**Próximo paso exacto (al retomar): los tres bugs VISIBLES.** Guion escrito:
-`proceso/instrucciones/2026-09-09_instruccion_antes_de_la_reunion.md`.
+**Próximo paso exacto (al retomar): los tres bugs VISIBLES.**
 
 Se eligen por lo que se ve, no por lo que falta: son los únicos hallazgos
 abiertos que alguien puede encontrar **sin leer una línea de código**, y hay una
@@ -417,19 +411,14 @@ repositorio se hace público, y avisarle al médico de sus datos en la historia.
 Esas tres van a la reunión con Alejandro, el médico y el profesional de
 desarrollo.
 
-Los cinco cierres anteriores están **completos**: la rama del Sprint 5
-(`proceso/instrucciones/2026-07-28_instruccion_cierre_rama_sprint5.md`, 29/07), la CI
-(`proceso/instrucciones/2026-07-30_instruccion_sprint6_ci.md`, 31/07), el Loop E
-(`proceso/instrucciones/2026-08-01_instruccion_loop_e.md`, 07/08) y el reparto de
-`tests.py` (`proceso/instrucciones/2026-08-07_instruccion_partir_tests.md`, 10/08) y
-`crear_medico` (`proceso/instrucciones/2026-08-10_instruccion_crear_medico.md`, 12/08).
+Los cinco cierres anteriores están **completos**: la rama del Sprint 5 (29/07),
+la CI (31/07), el Loop E (07/08), el reparto de `tests.py` (10/08) y
+`crear_medico` (12/08).
 
-Lo que sigue, en este orden (razonamiento y detalle en
-`proceso/auditorias/2026-07-29_revision_pr_sprint5.md`):
+Lo que sigue, en este orden:
 
 1. ~~**Montar CI**~~ — ✅ hecho el 31/07/2026 (PR #5, `5b40c01`). Las cinco
-   comprobaciones se verificaron en rojo:
-   `proceso/verificaciones/2026-07-31_verificacion_ci.md`.
+   comprobaciones se verificaron en rojo.
 2. ~~**Loop E**~~ — ✅ hecho el 07/08/2026 (PR #10, `4fc690d`). D14 implementada;
    verificación independiente en
    `proceso/verificaciones/2026-08-06_verificacion_loop_e.py`.
@@ -466,18 +455,15 @@ decisión de **protección de rama**.
 Las dos auditorías de julio **ya se ejecutaron — no repetirlas.** A ellas se
 sumó la **auditoría de seis frentes del 07/09/2026** (seguridad, datos,
 backend clínico, frontend, calidad de pruebas y repositorio), de la que salieron
-las fichas **D16**, **D17** y **D18**. **Sus 101 hallazgos están itemizados con
-su estado actual en
-`proceso/auditorias/2026-09-07_auditoria_seis_frentes.md`** — es el documento
-que hay que abrir antes de tocar cualquiera de ellos, porque dice cuáles siguen
-abiertos y cuáles solo están *trazados* y no reproducidos. Las decisiones D1-D18
-están tomadas; no se reabren salvo que el Arquitecto lo pida.
+las fichas **D16**, **D17** y **D18**. **Sus 101 hallazgos están itemizados
+con su estado actual**, y hay que consultarlos antes de tocar cualquiera de
+ellos: dicen cuáles siguen abiertos y cuáles solo están *trazados* y no
+reproducidos. Las decisiones D1-D18 están tomadas; no se reabren salvo que el
+Arquitecto lo pida.
 
 **Deuda técnica y su orden de atención (29/07/2026).** La revisión de cierre del
 PR dejó **8 puntos** de deuda que no bloquean el merge, con la secuencia decidida
-de dónde se atiende cada uno:
-`proceso/auditorias/2026-07-29_revision_pr_sprint5.md`. Lo esencial: **el
-Loop E es solo el punto 2** (D14, aislar el cron) y no se le agrega nada más —
+de dónde se atiende cada uno. Lo esencial: **el Loop E es solo el punto 2** (D14, aislar el cron) y no se le agrega nada más —
 un loop, un tema. El punto 1 (CI) **ya está hecho**; **partir `tests.py` va
 después del Loop E**, en la ventana en que ninguna rama esté avanzando en
 paralelo.
@@ -563,10 +549,13 @@ se contradicen: responden preguntas distintas.
 **Esto no es opcional. Al final de CADA sesión de trabajo, sin que el Arquitecto
 tenga que pedirlo, Claude Code debe ejecutar estos 3 procesos en orden:**
 
-### 1. Documentar en BITACORA.md
-Agregar una nueva entrada de sesión siguiendo el formato ya usado en el archivo
-(Sprint, Fecha, Responsable, Estado, Qué se hizo, Decisiones tomadas, Problemas
-encontrados y resueltos). Debe incluir:
+### 1. Documentar la sesión en el cuaderno de trabajo
+**La bitácora salió del repositorio el 20/09/2026.** La narrativa de sesión vive
+desde entonces en el cuaderno de trabajo, fuera del árbol; aquí ya no se escribe
+—y no se recrea `BITACORA.md`, que es justo lo que esa mudanza deshizo—. Agregar
+una entrada de sesión con el formato de siempre (Sprint, Fecha, Responsable,
+Estado, Qué se hizo, Decisiones tomadas, Problemas encontrados y resueltos).
+Debe incluir:
 - Qué se construyó, en lenguaje claro. La bitácora la lee quien retoma meses
   después y quien nunca vio esta sesión: tiene que entenderse sin abrir el diff.
 - Decisiones clínicas tomadas y su justificación médica.
@@ -594,7 +583,7 @@ encontrados y resueltos). Debe incluir:
   | Despliegue, cron, variables de entorno | `docs/railway_deploy.md` · `docs/cron_setup.md` |
 
   Esto **NUNCA se difiere**, ni siquiera si el Arquitecto pidió esperar
-  para escribir en BITACORA.md. La narrativa de la BITÁCORA (qué se hizo,
+  para escribir la bitácora. La narrativa del cuaderno (qué se hizo,
   por qué, qué queda pendiente) sí puede acumularse en una sola entrada al
   cierre de una fase; las referencias técnicas no — deben reflejar el
   código real en todo momento, porque son lo primero que cualquier agente

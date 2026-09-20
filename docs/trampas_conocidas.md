@@ -1,7 +1,7 @@
 # Trampas conocidas
 
 > **Qué es esto.** Cosas que ya costaron horas y volverán a morder si nadie las
-> escribe. No es historia —para eso está `proceso/BITACORA.md`— sino advertencias
+> escribe. No es historia, sino advertencias
 > vigentes: cada una describe un comportamiento que sigue siendo cierto hoy.
 >
 > Si vas a tocar despliegue, cron, Twilio o correo, **lee esto primero**.
@@ -112,7 +112,7 @@ UTC); mínimo de intervalo 5 min. Cambiar el Custom Start Command exige
   Dockerfile tenía que esquivarlo a mano. Ya no existe esa trampa.
 - **Variables de Railway: valor crudo, nunca entre `< >` ni comillas.** Los
   placeholders `<...>` pegados literalmente fueron la causa raíz del 403 de
-  Twilio y de los login fallidos al Admin (detalle en BITACORA 06/07/2026).
+  Twilio y de los login fallidos al Admin (detalle en la bitácora, 06/07/2026).
 - El superusuario en producción se gestiona con el comando **`crear_admin`**
   (idempotente, desde `DJANGO_SUPERUSER_*`), no con `createsuperuser` (que no
   actualiza usuarios existentes). El interruptor `RESET_AXES=1` corre
@@ -160,8 +160,7 @@ tocar`, o `credenciales reescritas por DJANGO_MEDICO_RESET=1`. Es lo primero que
 hay que mirar cuando el médico reporte que no puede entrar.
 
 Razonamiento completo en `docs/decisiones_correccion_auditoria.md`, ficha D15;
-el hallazgo que lo originó, en
-`proceso/auditorias/2026-07-29_revision_pr_sprint5.md`, punto 8.
+el hallazgo que lo originó (revisión de cierre del PR del Sprint 5, punto 8).
 
 **Trampa asociada, esta sigue viva:** `DJANGO_MEDICO_EMAIL` alimenta el campo que
 `notificaciones.py` usa como **destinatario de las alertas**. Hasta el
@@ -186,7 +185,7 @@ reales, no reutilizar esos números.
 con el **Auth Token PRIMARIO** (Twilio Console → Account Dashboard), NO con el de
 Test Credentials; usar el de Test causa `403`. Para ngrok free, `ALLOWED_HOSTS`
 usa el comodín `.ngrok-free.dev` (el subdominio cambia en cada reinicio). Detalle
-completo en BITACORA.md.
+completo en la bitácora del cuaderno de trabajo.
 
 ---
 

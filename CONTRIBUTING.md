@@ -56,8 +56,6 @@ que debe atrapar *y* que deja pasar lo que debe pasar. Comprobar solo la primera
 mitad es cómo se da por bueno un arnés roto. Y cuando puedas, añade la tercera:
 anula la corrección y comprueba que la prueba vuelve a caer.
 
-El razonamiento completo, con los casos reales que originaron cada regla, está
-en [`proceso/metodo_de_trabajo.md`](proceso/metodo_de_trabajo.md).
 
 ## Ramas y commits
 

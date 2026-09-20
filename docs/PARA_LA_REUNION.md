@@ -33,7 +33,7 @@ recomendación de acción, no un diagnóstico.
 | | |
 |---|---|
 | **Suite de pruebas** | **420**, todas en verde |
-| **Comprobaciones automáticas por cada cambio** | **10**, y todas bloquean |
+| **Comprobaciones automáticas por cada cambio** | **10**, y ninguna es informativa: cualquiera que falle tumba la corrida. **No bloquean el merge** — ver §4.2 |
 | **Reglas clínicas documentadas** | 24, y una guardia comprueba que el documento y el código digan lo mismo |
 | **Decisiones registradas** | 24 fichas, cada una con su porqué y la alternativa descartada |
 | **Arneses de verificación** | 12 scripts que **rompen el sistema a propósito** para comprobar que las pruebas lo detectan |
@@ -211,7 +211,6 @@ En orden, y ninguno es opcional:
 |---|---|
 | ¿Qué reglas clínicas hay y por qué esos umbrales? | `docs/reglas_clinicas.md` |
 | ¿Qué se decidió, cuándo y descartando qué? | `docs/decisiones_correccion_auditoria.md` (24 fichas) |
-| ¿Qué encontraron las auditorías y qué queda abierto? | `proceso/auditorias/2026-09-07_auditoria_seis_frentes.md` |
 | ¿Qué evidencia científica respalda cada umbral? | `docs/auditoria_literatura/` |
 | ¿Qué falta de seguridad, dicho por el propio equipo? | `SECURITY.md` |
 | ¿Cómo se instala y se trabaja aquí? | `README.md` y `CONTRIBUTING.md` |

@@ -97,7 +97,7 @@ gráfica clínica es cómo se inventa un hecho.
 |  |  |
 |---|---|
 | **Suite** | 420 pruebas |
-| **Integración continua** | 9 comprobaciones por PR: suite, `check`, migraciones, configuración de producción, higiene del diff, `gitleaks` sobre la historia completa, control de archivos de entorno, linter y auditoría de dependencias |
+| **Integración continua** | 10 comprobaciones por PR: suite, `check`, migraciones, configuración de producción, higiene del diff, `gitleaks` sobre la historia completa, control de archivos de entorno, linter, auditoría de dependencias y barrido de veracidad de la documentación |
 | **Despliegue** | **Sin entorno productivo activo.** Ver [`docs/railway_deploy.md`](docs/railway_deploy.md) |
 | **Piloto con pacientes reales** | **No.** Ver la sección siguiente |
 
@@ -207,13 +207,9 @@ pip-audit --strict --skip-editable
 | [Bot de WhatsApp](docs/bot_whatsapp.md) | Máquina de estados y reglas de redacción |
 | [Despliegue](docs/railway_deploy.md) · [Tareas programadas](docs/cron_setup.md) | Operación |
 | [Trampas conocidas](docs/trampas_conocidas.md) | Errores que ya costaron horas. Léelo antes de tocar despliegue o cron |
-| [Decisiones D1–D17](docs/decisiones_correccion_auditoria.md) | Cada corrección post-auditoría con su razonamiento completo |
+| [Decisiones D1–D24](docs/decisiones_correccion_auditoria.md) | Cada corrección post-auditoría con su razonamiento completo |
 | [Evidencia clínica](docs/auditoria_literatura/) | La literatura que respalda —o no— cada umbral |
 | [Cómo contribuir](CONTRIBUTING.md) · [Seguridad](SECURITY.md) | |
-
-El cuaderno de trabajo del equipo —bitácora sesión por sesión, informes de
-auditoría, guiones de sesión y scripts de verificación— vive en
-[`proceso/`](proceso/). No hace falta leerlo para usar ni extender el sistema.
 
 ## Cómo se verifica aquí
 
@@ -237,9 +233,8 @@ De ahí salieron las dos reglas que gobiernan el proyecto:
    atrapar, y que deja pasar lo que debe pasar. Comprobar solo la primera mitad
    es cómo se da por bueno un arnés roto.
 
-Los informes de las tres auditorías están en
-[`proceso/auditorias/`](proceso/auditorias/), completos, con los hallazgos que
-no supimos ver. Los scripts que reproducen cada verificación están en
+Los informes de las tres auditorías se conservan completos, con los hallazgos
+que no supimos ver. Los scripts que reproducen cada verificación están en
 [`proceso/verificaciones/`](proceso/verificaciones/).
 
 ## Equipo

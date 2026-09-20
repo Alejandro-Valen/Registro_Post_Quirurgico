@@ -6,15 +6,14 @@
 >
 > **Para qué sirve.** Para responder "¿por qué se hizo así?" sin depender de
 > la memoria de nadie ni de una conversación. Se consulta **por tema**, no por
-> fecha — la cronología vive en `proceso/BITACORA.md`.
+> fecha.
 >
 > **A quién le sirve.** Al Arquitecto, al médico (decisión D4), a Codex, y a
 > cualquier agente IA que retome el proyecto.
 
 **Fecha de las decisiones:** 22/07/2026
 **Rama:** `sprint-5-produccion` · **Punto de partida:** `fbf62a8`
-**Auditoría de origen:** ver `proceso/auditorias/2026-07-22_instruccion_loops_1_6.md` (instrucción) y
-la entrada de `proceso/BITACORA.md` del 22/07/2026 (informe y hallazgos).
+**Auditoría de origen:** la auditoría independiente del 22/07/2026.
 
 ---
 
@@ -51,14 +50,11 @@ Los hallazgos 2, 6, 7, 8, 9, 11 y 14 son correcciones técnicas sin decisión de
 producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
 
 **D15 no viene de ninguna de las dos auditorías.** Salió del punto 8 de la
-revisión de cierre del PR del Sprint 5 (`proceso/auditorias/2026-07-29_revision_pr_sprint5.md`),
-que la primera lectura de ese mismo PR no había visto. No tiene loop asignado:
-se decidió en su propia sesión, siguiendo el guion
-`proceso/instrucciones/2026-08-10_instruccion_crear_medico.md`.
+revisión de cierre del PR del Sprint 5, que la primera lectura de ese mismo PR
+no había visto. No tiene loop asignado: se decidió en su propia sesión.
 
 **D11, D12 y D13 vienen de una auditoría posterior**, la de cierre pre-merge del
-27/07/2026 — informe y verificación en
-`proceso/auditorias/2026-07-27_informe_cierre_codex.md`. Los "hallazgos
+27/07/2026. Los "hallazgos
 cierre 1-3" de la tabla son los de **ese** informe, no los de la auditoría del
 22/07.
 
@@ -111,9 +107,6 @@ mirarlos antes de mergear sigue siendo manual.
 (`Desarrollo` antes del loop)
 **Línea base de la suite:** 337 tests OK antes del Loop E · **340 OK** al
 implementarlo
-**Guion de la sesión:** `proceso/instrucciones/2026-08-01_instruccion_loop_e.md`
-**Informe de la auditoría de cierre:**
-`proceso/auditorias/2026-07-27_informe_cierre_codex.md`
 
 ### Loop A — Corrección clínica *(bloquea el merge)*
 
@@ -990,8 +983,7 @@ con su celular.
 Y `settings.py:189` afirma que el LOGGING "filtra PHI/PII". **No filtra nada:**
 el único filtro configurado es `RequireDebugFalse`.
 
-Reproducido el 27/07/2026 — ver
-`proceso/auditorias/2026-07-27_informe_cierre_codex.md`.
+Reproducido el 27/07/2026.
 
 ### Decisión
 
@@ -1334,7 +1326,6 @@ sí solo. D14 es lo que hace que el sistema sea correcto **mientras tanto**.
 
 **Hallazgo:** revisión de cierre del PR del Sprint 5, punto 8 · **Loop:** — ·
 **Estado:** **Decidida** (12/08/2026), **pendiente de implementar.**
-Guion de la sesión: `proceso/instrucciones/2026-08-10_instruccion_crear_medico.md`.
 
 ### Problema
 
@@ -1492,11 +1483,9 @@ contenedor. Eso solo se ve desplegando, cuando haya plan de pago.
 **Hallazgo:** auditoría de seis frentes del 07/09/2026, SEC-01 · **Loop:** Arné
 · **Estado:** **Decidida** (07/09/2026).
 Sin guion de sesión escrito: los loops del arnés y del repositorio salieron de
-la propia auditoría de seis frentes
-(`proceso/auditorias/2026-09-07_auditoria_seis_frentes.md`) y se ejecutaron el
-mismo día. Hasta el 09/09/2026 esta ficha citaba un
-`2026-09-07_instruccion_loop_arnes.md` que **nunca se escribió**; lo detectó el
-barrido de veracidad.
+la propia auditoría de seis frentes y se ejecutaron el mismo día. Hasta el
+09/09/2026 esta ficha citaba un `2026-09-07_instruccion_loop_arnes.md` que
+**nunca se escribió**; lo detectó el barrido de veracidad.
 
 ### Problema
 

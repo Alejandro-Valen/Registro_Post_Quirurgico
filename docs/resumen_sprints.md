@@ -1,9 +1,8 @@
 # Resumen de entregas por sprint, bloque y loop
 
 > **Qué es esto.** Un índice compacto de qué entregó cada etapa, para ubicarse
-> sin leer los 197.000 caracteres de `proceso/BITACORA.md`. La cronología completa —con
-> los problemas encontrados y cómo se resolvieron— vive en la BITÁCORA; esto es
-> el mapa, no el territorio.
+> sin leer la cronología completa, con los problemas encontrados y cómo se
+> resolvieron; esto es el mapa, no el territorio.
 >
 > **No es fuente de verdad sobre el sistema actual.** Describe lo que se hizo en
 > su momento. Para saber cómo funciona el sistema hoy: `docs/reglas_clinicas.md`,
@@ -166,8 +165,7 @@ entre el Sprint 5 y hoy.
   comprobaciones que hasta entonces solo corrían en la máquina Windows del
   Arquitecto pasan a ejecutarse en Linux en cada PR: suite, `check`,
   `makemigrations --check`, `check --deploy` y la higiene del diff. **Las cinco
-  se verificaron en rojo** antes de darlas por buenas
-  (`proceso/verificaciones/2026-07-31_verificacion_ci.md`). El montaje
+  se verificaron en rojo** antes de darlas por buenas. El montaje
   destapó de paso una prueba frágil en `home`, corregida el mismo día (PR #7,
   `dc32530`).
 

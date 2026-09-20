@@ -21,8 +21,6 @@ mismo commit que el código que describe.
    que corre.
 2. **El documento dueño del tema** (las "fuentes únicas" de abajo).
 3. **`CLAUDE.md`**, para el estado del proyecto y cómo se trabaja aquí.
-4. **`proceso/BITACORA.md`** describe el momento en que se escribió: nunca es fuente de
-   verdad sobre el estado actual.
 
 Al encontrar una contradicción, corrígela en el mismo commit en vez de anotarla
 para después.
@@ -54,23 +52,20 @@ para después.
 | `LICENSE` | Todos los derechos reservados, con el porqué y el aviso clínico |
 | `docs/trampas_conocidas.md` | Errores que ya costaron horas: cron, despliegue, Twilio, correo. Léelo antes de tocar esas áreas |
 | `docs/resumen_sprints.md` | Qué entregó cada sprint, bloque y loop — el mapa compacto de la BITÁCORA |
-| `proceso/BITACORA.md` | La cronología completa: qué se hizo cada sesión, qué falló y cómo se resolvió |
 
 ## Material histórico o de referencia
 
-- `proceso/auditorias/2026-07-22_instruccion_loops_1_6.md` es la **instrucción** que se usó para la
-  auditoría independiente previa al PR. La auditoría **ya se ejecutó** (22/07);
-  sus 14 hallazgos y su informe están en la entrada de `proceso/BITACORA.md` de esa
-  fecha y su corrección en `docs/decisiones_correccion_auditoria.md`. No debe
-  volver a ejecutarse.
-- `proceso/auditorias/2026-09-07_auditoria_seis_frentes.md` es el informe
-  completo de la tercera auditoría: **los 101 hallazgos itemizados, con el estado
-  de cada uno**. A diferencia de los dos anteriores, este se mantiene vivo —
-  cuando se corrige un hallazgo, su fila se actualiza en el mismo commit. Trae
+- La auditoría independiente previa al PR **ya se ejecutó** (22/07); la
+  corrección de sus 14 hallazgos está en `docs/decisiones_correccion_auditoria.md`.
+  No debe volver a ejecutarse.
+- La tercera auditoría (07/09/2026) produjo **101 hallazgos itemizados, con el
+  estado de cada uno**. A diferencia de las dos anteriores, ese informe se
+  mantiene vivo — cuando se corrige un hallazgo, su fila se actualiza en el
+  mismo commit. Trae
   además la advertencia que hay que leer antes de usarlo: **97 de los 101 están
   trazados contra el código pero NO reproducidos ejecutando**, así que cada uno
   es una hipótesis hasta que se compruebe.
-- `proceso/auditorias/2026-06_informe_sprint3_cierre.md` conserva el diagnóstico previo al hardening. Sus
+- El diagnóstico previo al Sprint 3-Hardening se conserva aparte. Sus
   hallazgos no deben reportarse como actuales sin volver a reproducirlos.
 - `docs/auditoria_literatura/` conserva los análisis clínicos de junio de 2026.
   Las frases "pendiente" dentro de esos análisis pertenecen a la sesión
@@ -90,17 +85,6 @@ antes del uso real.
 Existe localmente una copia raíz no rastreada con el mismo nombre. Al cierre del
 21/07/2026 ambas copias tenían el mismo SHA-256, pero la copia raíz no forma
 parte del repositorio y no debe agregarse automáticamente a commits o PR.
-
-## Dónde vive el proceso
-
-Desde el 07/09/2026 el cuaderno de trabajo del equipo está en **`proceso/`**, un
-nivel por encima de aquí: bitácora, informes de auditoría, guiones de sesión y
-scripts de verificación. `docs/` quedó **solo con documentación de producto**.
-
-No fue una limpieza estética. De cada 100 KB de documentación del repositorio,
-solo 12 describían el sistema; el resto era cómo trabajan dos personas, y era lo
-primero que veía cualquiera que abriera el proyecto. `proceso/README.md` ya lo
-decía antes de la mudanza: *"estos archivos son andamiaje, no producto"*.
 
 ## Estado (07/09/2026)
 

@@ -321,7 +321,7 @@ Restricción: como máximo una alerta abierta por `(paciente, tipo)`.
 
 > **Resuelto:** la validación de firma detrás de ngrok funciona; el 403 NO era por
 > la URL (build_absolute_uri() era correcta) sino por usar el Test Auth Token en
-> vez del primario. Detalle completo en BITACORA.md (sesión Twilio+ngrok).
+> vez del primario. Detalle completo en la bitácora (sesión Twilio+ngrok).
 >
 > **Diferido:** el envío automático matutino sigue en stub; antes del piloto
 > requiere WhatsApp Business, plantillas aprobadas y una decisión explícita de
@@ -458,7 +458,6 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
 
 > Rama: `sprint-3-hardening` (desde `Desarrollo` post-merge)
 > Prerequisito: merge de `sprint-3-whatsapp` → `Desarrollo`.
-> Detalle completo de cada hallazgo en `proceso/auditorias/2026-06_informe_sprint3_cierre.md`.
 
 **Grupo A — Obligatorio antes de pacientes reales:**
 - [x] A1 — Conversación abandonada no reinicia al día siguiente
@@ -566,7 +565,7 @@ DECISIÓN de arquitectura documentada, no el código de frecuencia):**
     - Gating pre-operatorio — **CERRADO (0-⑤):** `VENTANAS_DOLOR[0]` ya
       cubre POD 0 con `dia_postoperatorio <= 2`. Solo comentario actualizado.
   - [x] **Deuda de diseño detectada en el cruce contra el código
-    (detalle y razonamiento en BITACORA.md, entrada del 22/06/2026):**
+    (detalle y razonamiento en la bitácora, entrada del 22/06/2026):**
     - [x] **Fecha autoritativa — IMPLEMENTADA (0-①, Bloque 2A, 26/06/2026):**
       `evaluar_registro(registro, fecha_referencia=None)`. Los 6 usos de
       `fecha_registro__date` en funciones privadas reemplazados por el
@@ -772,7 +771,7 @@ sesión el 01/07/2026 (no re-discutir, ejecutar):**
   end-to-end** (Sandbox de Twilio), acceso al Admin resuelto con el comando
   `crear_admin`, y limpieza de seguridad hecha. Detalle completo (incluida la
   causa raíz: placeholders `< >` pegados literalmente en las variables) en
-  BITACORA.md, sesión 06/07/2026. **194 tests OK.** **Pendiente del despliegue:
+  la bitácora, sesión 06/07/2026. **194 tests OK.** **Pendiente del despliegue:
   cron jobs** (ver `docs/cron_setup.md` + Bloque 6, abajo).
 - [x] **Bloque 5 (01/07/2026):** SMTP real. Variables `EMAIL_*` agregadas
   al `settings_production.py` **existente** (append, no reemplazo —
@@ -1144,7 +1143,7 @@ DB_PORT=5432
 *Última actualización: 21/07/2026. Sprint 5 en cierre sobre
 `sprint-5-produccion`: Loops 1-6 completados técnicamente, 280 tests OK y
 producción validada con flujos NORMAL/MEDIA/ALTA. Siguiente paso: ejecutar la
-auditoría independiente descrita en `proceso/auditorias/2026-07-22_instruccion_loops_1_6.md`, resolver
+auditoría independiente, resolver
 hallazgos bloqueantes y solo entonces preparar el PR hacia `Desarrollo`. Los
 requisitos externos de WhatsApp Business, correo con dominio propio, plan
 Railway, Habeas Data y datos definitivos del médico siguen siendo compuertas
