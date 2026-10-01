@@ -26,9 +26,9 @@ readme = "README.md"
 
 dependencies = [
     "Django==6.1.1",            # 6.0.8 cierra CVE-2026-15830 (ficha D16)
-    "psycopg2-binary==2.9.12",  # controlador de PostgreSQL
+    "psycopg2-binary==2.9.13",  # controlador de PostgreSQL
     "python-decouple==3.8",     # lee el .env; se importa como `decouple`
-    "twilio==9.11.0",           # webhook de WhatsApp
+    "twilio==9.11.2",           # webhook de WhatsApp
     "django-axes==8.3.1",       # bloqueo por intentos de acceso fallidos
     "redis==8.1.0",             # cache y rate limit
     "requests==2.34.2",         # entrega de correo por HTTPS (Resend)
@@ -44,7 +44,7 @@ dev = [
     "freezegun==1.5.5",
     # Linter. Octava comprobación de la CI (ficha D16). Sus reglas y el porqué
     # de cada excepción viven en `ruff.toml`, en la raíz.
-    "ruff==0.16.6",
+    "ruff==0.16.9",
     # Vulnerabilidades conocidas de las dependencias. Novena comprobación.
     "pip-audit==2.10.1",
 ]
