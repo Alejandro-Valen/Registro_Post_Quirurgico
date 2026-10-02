@@ -9,7 +9,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import DataError, IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -677,3 +677,58 @@ class RangosClinicosEnLaBaseTests(TestCase):
                 hora_programada=timezone.now(),
                 estado='LO_QUE_SEA',
             )
+
+
+class MigracionGasesYNauseasTests(TransactionTestCase):
+    """La migración 0031 parte el estado combinado, y su reverso lo junta (UX-B03).
+
+    Prueba los dos sentidos porque una migración de datos con un reverso que
+    no deshace nada reporta éxito igual (hallazgo DB-10). Se ejecuta contra el
+    esquema histórico, no contra los modelos de hoy.
+    """
+
+    ANTES = [('signos_sintomas', '0030_tipo_alerta_auxilio')]
+    DESPUES = [('signos_sintomas', '0031_conversacion_gases_y_nauseas_por_separado')]
+
+    def _migrar(self, destino):
+        from django.db import connection
+        from django.db.migrations.executor import MigrationExecutor
+        ejecutor = MigrationExecutor(connection)
+        ejecutor.loader.build_graph()
+        ejecutor.migrate(destino)
+        return ejecutor.loader.project_state(destino).apps
+
+    def _conversacion(self, apps, estado, **temporales):
+        usuarios = apps.get_model('auth', 'User').objects
+        pacientes = apps.get_model('signos_sintomas', 'Paciente').objects
+        conversaciones = apps.get_model('signos_sintomas', 'ConversacionWhatsApp').objects
+        medico = usuarios.create(username='medico_migracion_0031')
+        paciente = pacientes.create(
+            nombre_completo='Paciente Migración', telefono_whatsapp='+573009990031',
+            fecha_cirugia=timezone.localdate(), medico_responsable=medico,
+        )
+        return conversaciones.create(paciente=paciente, estado=estado, **temporales)
+
+    def tearDown(self):
+        # Deja la base en la última migración para las pruebas que vengan detrás.
+        from django.db import connection
+        from django.db.migrations.executor import MigrationExecutor
+        ejecutor = MigrationExecutor(connection)
+        ejecutor.loader.build_graph()
+        ejecutor.migrate(ejecutor.loader.graph.leaf_nodes())
+
+    def test_hacia_adelante_la_espera_combinada_pasa_a_gases(self):
+        apps = self._migrar(self.ANTES)
+        conv = self._conversacion(apps, 'ESPERANDO_GASES_NAUSEAS')
+        apps = self._migrar(self.DESPUES)
+        conv = apps.get_model('signos_sintomas', 'ConversacionWhatsApp').objects.get(pk=conv.pk)
+        self.assertEqual(conv.estado, 'ESPERANDO_GASES')
+
+    def test_hacia_atras_las_dos_esperas_vuelven_a_la_combinada(self):
+        apps = self._migrar(self.DESPUES)
+        conv = self._conversacion(apps, 'ESPERANDO_NAUSEAS', temp_presencia_gases=True)
+        apps = self._migrar(self.ANTES)
+        conv = apps.get_model('signos_sintomas', 'ConversacionWhatsApp').objects.get(pk=conv.pk)
+        self.assertEqual(conv.estado, 'ESPERANDO_GASES_NAUSEAS')
+        # El estado viejo pide los dos datos a la vez: un gases suelto no vale.
+        self.assertIsNone(conv.temp_presencia_gases)

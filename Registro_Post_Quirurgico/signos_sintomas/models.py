@@ -774,14 +774,19 @@ class ConversacionWhatsApp(models.Model):
     momento en que bot.py crea el RegistroDiario y dispara el alert_engine.
     """
 
-    # --- Estados de la máquina (10 preguntas) ---
+    # --- Estados de la máquina (11 preguntas) ---
     ESTADO_INICIO            = 'INICIO'
     ESTADO_TEMPERATURA       = 'ESPERANDO_TEMPERATURA'
     ESTADO_DOLOR             = 'ESPERANDO_DOLOR'
     ESTADO_TIENE_DRENAJE     = 'ESPERANDO_TIENE_DRENAJE'
     ESTADO_ASPECTO_DRENAJE   = 'ESPERANDO_ASPECTO_DRENAJE'
     ESTADO_CANTIDAD_DRENAJE  = 'ESPERANDO_CANTIDAD_DRENAJE'
-    ESTADO_GASES_NAUSEAS     = 'ESPERANDO_GASES_NAUSEAS'
+    # UX-B03 (02/10/2026): gases y náuseas eran UN estado que pedía los dos
+    # datos en un mensaje, y «si, no tuve nauseas: 0» se guardaba como sin
+    # gases. Ahora son dos preguntas; la migración 0031 lleva al primero
+    # cualquier conversación que estuviera en el estado viejo.
+    ESTADO_GASES             = 'ESPERANDO_GASES'
+    ESTADO_NAUSEAS           = 'ESPERANDO_NAUSEAS'
     ESTADO_HINCHAZON         = 'ESPERANDO_HINCHAZON'
     ESTADO_FRECUENCIA_CARDIACA = 'ESPERANDO_FRECUENCIA_CARDIACA'
     ESTADO_FRECUENCIA_RESPIRATORIA = 'ESPERANDO_FRECUENCIA_RESPIRATORIA'
@@ -795,7 +800,8 @@ class ConversacionWhatsApp(models.Model):
         (ESTADO_TIENE_DRENAJE,    'Esperando si tiene drenaje'),
         (ESTADO_ASPECTO_DRENAJE,  'Esperando aspecto del drenaje'),
         (ESTADO_CANTIDAD_DRENAJE, 'Esperando cantidad del drenaje'),
-        (ESTADO_GASES_NAUSEAS,    'Esperando gases y náuseas'),
+        (ESTADO_GASES,            'Esperando gases'),
+        (ESTADO_NAUSEAS,          'Esperando náuseas'),
         (ESTADO_HINCHAZON,        'Esperando hinchazón abdominal'),
         (ESTADO_FRECUENCIA_CARDIACA, 'Esperando frecuencia cardíaca'),
         (ESTADO_FRECUENCIA_RESPIRATORIA, 'Esperando frecuencia respiratoria'),

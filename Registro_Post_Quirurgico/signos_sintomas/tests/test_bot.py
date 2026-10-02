@@ -44,18 +44,19 @@ class BotWhatsAppTests(TestCase):
         )
         return paciente
 
-    def _completar_flujo(self, gases_nauseas="sí, 0", temperatura="37.0",
+    def _completar_flujo(self, gases="sí", nauseas="0", temperatura="37.0",
                          tiene_drenaje="sí", aspecto="1", cantidad="normal",
                          hinchazon="nada", frecuencia_cardiaca="78",
                          frecuencia_respiratoria="16", tolero_liquidos="sí"):
-        """Recorre las 10 preguntas y devuelve la respuesta final del bot."""
+        """Recorre las 11 preguntas y devuelve la respuesta final del bot."""
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")          # -> temperatura
         bot.procesar_mensaje(self.TELEFONO_TWILIO, temperatura)     # -> dolor
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")             # -> tiene_drenaje
         bot.procesar_mensaje(self.TELEFONO_TWILIO, tiene_drenaje)   # -> aspecto (si sí)
         bot.procesar_mensaje(self.TELEFONO_TWILIO, aspecto)         # -> cantidad
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, cantidad)        # -> gases/nauseas
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, gases_nauseas)   # -> hinchazón
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, cantidad)        # -> gases
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, gases)           # -> náuseas
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, nauseas)         # -> hinchazón
         bot.procesar_mensaje(self.TELEFONO_TWILIO, hinchazon)       # -> frecuencia cardíaca
         bot.procesar_mensaje(self.TELEFONO_TWILIO, frecuencia_cardiaca)      # -> frecuencia respiratoria
         bot.procesar_mensaje(self.TELEFONO_TWILIO, frecuencia_respiratoria)  # -> tolerancia líquidos
@@ -78,7 +79,7 @@ class BotWhatsAppTests(TestCase):
     def test_flujo_completo_crea_registro(self):
         self._crear_paciente()
         respuesta = self._completar_flujo(
-            temperatura="37.0", aspecto="1", cantidad="normal", gases_nauseas="sí, 0"
+            temperatura="37.0", aspecto="1", cantidad="normal", gases="sí", nauseas="0"
         )
         self.assertEqual(respuesta, bot.MSG_CONFIRMACION)
         self.assertEqual(RegistroDiario.objects.count(), 1)
@@ -132,9 +133,9 @@ class BotWhatsAppTests(TestCase):
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "37.0")
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")           # dolor -> tiene_drenaje
         respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "no")  # no tiene drenaje
-        self.assertEqual(respuesta, bot.MSG_PREGUNTA_GASES_NAUSEAS)
+        self.assertEqual(respuesta, bot.MSG_PREGUNTA_GASES)
         conv = ConversacionWhatsApp.objects.get()
-        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_GASES_NAUSEAS)
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_GASES)
         self.assertFalse(conv.temp_tiene_drenaje)
         self.assertEqual(conv.temp_aspecto_drenaje, "sin_drenaje")
         self.assertEqual(conv.temp_cantidad_drenaje, "sin_drenaje")
@@ -154,15 +155,19 @@ class BotWhatsAppTests(TestCase):
         self.assertEqual(RegistroDiario.objects.count(), 1)
 
     def test_duda_fiebre_responde_predefinido(self):
+        """Hasta el 02/10/2026 exigía la respuesta de la FAQ SOLA, con un turno
+        pendiente: fijaba justo el defecto BE-04. Ahora la duda se contesta y el
+        reporte arranca detrás; lo que no cambia es que no se crea registro."""
         self._crear_paciente()
         respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "¿es normal tener fiebre?")
-        self.assertEqual(respuesta, bot.RESP_FIEBRE)
+        self.assertEqual(respuesta, bot.RESP_FIEBRE + bot.MSG_ARRANQUE_TRAS_DUDA)
         self.assertEqual(RegistroDiario.objects.count(), 0)
 
     def test_duda_desconocida_responde_fallback(self):
+        """Mismo cambio que la anterior (UX-B08): el fallback también encadena."""
         self._crear_paciente()
         respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "¿puedo bañarme hoy?")
-        self.assertEqual(respuesta, bot.RESP_FALLBACK)
+        self.assertEqual(respuesta, bot.RESP_FALLBACK + bot.MSG_ARRANQUE_TRAS_DUDA)
 
     def test_respuestas_predefinidas_no_revelan_umbrales_clinicos(self):
         """Ninguna respuesta al paciente puede contener un umbral clínico (D4).
@@ -191,18 +196,18 @@ class BotWhatsAppTests(TestCase):
                 f'{encontrado.group(0) if encontrado else ""!r}',
             )
 
-    def test_gases_nauseas_ambiguo_reintenta(self):
+    def test_gases_ambiguo_reintenta(self):
         self._crear_paciente()
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "37.0")
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")      # dolor -> tiene_drenaje
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "sí")     # tiene_drenaje -> aspecto
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "1")      # aspecto -> cantidad
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, "normal") # cantidad -> gases/nauseas
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "normal") # cantidad -> gases
         respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "no sé")
-        self.assertEqual(respuesta, bot.MSG_REINTENTO_GASES_NAUSEAS)
+        self.assertEqual(respuesta, bot.MSG_REINTENTO_GASES)
         conv = ConversacionWhatsApp.objects.get()
-        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_GASES_NAUSEAS)
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_GASES)
         self.assertEqual(RegistroDiario.objects.count(), 0)
 
     def test_fc_saltar_guarda_none_y_avanza(self):
@@ -214,7 +219,8 @@ class BotWhatsAppTests(TestCase):
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "sí")
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "1")
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "normal")
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, "sí, 0")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "sí")
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "0")
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "nada")
         respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "saltar")
         self.assertEqual(respuesta, bot.MSG_PREGUNTA_FRECUENCIA_RESPIRATORIA)
@@ -253,8 +259,9 @@ class BotWhatsAppTests(TestCase):
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "3")        # dolor -> tiene_drenaje
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "sí")       # tiene_drenaje -> aspecto
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "1")        # aspecto -> cantidad
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, "normal")   # cantidad -> gases/nauseas
-        bot.procesar_mensaje(self.TELEFONO_TWILIO, "sí, 0")    # gases -> hinchazón
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "normal")   # cantidad -> gases
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "sí")       # gases -> náuseas
+        bot.procesar_mensaje(self.TELEFONO_TWILIO, "0")        # náuseas -> hinchazón
         bot.procesar_mensaje(self.TELEFONO_TWILIO, "nada")     # hinchazón -> frecuencia cardíaca
         respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "999")  # fuera de rango
         self.assertEqual(respuesta, bot.MSG_REINTENTO_FRECUENCIA_CARDIACA)
@@ -388,8 +395,8 @@ class BotMensajeCierreAlertaTests(TestCase):
         )
         return paciente
 
-    def _completar_flujo(self, temperatura="37.0", aspecto="1", gases_nauseas="sí, 0"):
-        """Recorre las 10 preguntas con drenaje presente. Devuelve la respuesta final."""
+    def _completar_flujo(self, temperatura="37.0", aspecto="1"):
+        """Recorre las 11 preguntas con drenaje presente. Devuelve la respuesta final."""
         def env(t):
             return bot.procesar_mensaje(self.TELEFONO_TWILIO, t)
         env("hola")            # -> temperatura
@@ -397,8 +404,9 @@ class BotMensajeCierreAlertaTests(TestCase):
         env("3")               # -> tiene_drenaje
         env("sí")              # -> aspecto
         env(aspecto)           # -> cantidad
-        env("normal")          # -> gases/nauseas
-        env(gases_nauseas)     # -> hinchazón
+        env("normal")          # -> gases
+        env("sí")              # -> náuseas
+        env("0")               # -> hinchazón
         env("nada")            # -> frecuencia cardíaca
         env("78")              # -> frecuencia respiratoria
         env("16")              # -> tolerancia líquidos
@@ -638,14 +646,15 @@ class BotEstadoEvaluacionMotorTests(TestCase):
         )
 
     def _completar_flujo(self):
-        """Recorre las 10 preguntas sin drenaje. Devuelve la respuesta final."""
+        """Recorre las preguntas sin drenaje. Devuelve la respuesta final."""
         def env(t):
             return bot.procesar_mensaje(self.TELEFONO_TWILIO, t)
         env("hola")     # -> temperatura
         env("37.0")     # -> dolor
         env("3")        # -> tiene_drenaje
-        env("no")       # -> gases/náuseas (omite aspecto y cantidad)
-        env("sí, 0")    # -> hinchazón
+        env("no")       # -> gases (omite aspecto y cantidad)
+        env("sí")       # -> náuseas
+        env("0")        # -> hinchazón
         env("nada")     # -> frecuencia cardíaca
         env("78")       # -> frecuencia respiratoria
         env("16")       # -> tolerancia líquidos
@@ -745,7 +754,8 @@ class BugsDelPacienteTests(TestCase):
         env(temperatura)
         env(dolor)
         env('no')          # sin drenaje
-        env('si, 0')       # gases / náuseas
+        env('si')          # gases
+        env('0')           # náuseas
         env('nada')        # hinchazón
         env('78')          # frecuencia cardíaca
         env('16')          # frecuencia respiratoria
@@ -836,7 +846,8 @@ class BugsDelPacienteTests(TestCase):
 
         bot.procesar_mensaje(self.WA, '3')
         bot.procesar_mensaje(self.WA, 'no')
-        bot.procesar_mensaje(self.WA, 'si, 0')
+        bot.procesar_mensaje(self.WA, 'si')
+        bot.procesar_mensaje(self.WA, '0')
         bot.procesar_mensaje(self.WA, 'nada')
         bot.procesar_mensaje(self.WA, '78')
         bot.procesar_mensaje(self.WA, '16')
@@ -892,15 +903,16 @@ class BugsDelPacienteTests(TestCase):
         """`"si, 99999"` reventaba la base y el webhook devolvía 500.
 
         El paciente escribía y **no recibía ninguna respuesta**: no podía saber
-        si su reporte había entrado.
+        si su reporte había entrado. Desde el 02/10/2026 las náuseas son su
+        propia pregunta (UX-B03) y el techo vive en `_parse_nauseas`.
         """
-        self.assertEqual(bot._parse_gases_nauseas('si, 99999'), (None, None))
-        self.assertEqual(bot._parse_gases_nauseas('si, 21'), (None, None))
+        self.assertIsNone(bot._parse_nauseas('99999'))
+        self.assertIsNone(bot._parse_nauseas('21'))
 
     def test_nauseas_dentro_de_rango_siguen_pasando(self):
         """La otra dirección: el techo no puede comerse los valores reales."""
-        self.assertEqual(bot._parse_gases_nauseas('si, 0'), (True, 0))
-        self.assertEqual(bot._parse_gases_nauseas('no, 20'), (False, 20))
+        self.assertEqual(bot._parse_nauseas('0'), 0)
+        self.assertEqual(bot._parse_nauseas('20'), 20)
 
     # --- D21: palabra de auxilio ---
 
@@ -911,7 +923,8 @@ class BugsDelPacienteTests(TestCase):
         bot.procesar_mensaje(self.WA, '37.0')
         bot.procesar_mensaje(self.WA, '3')
         bot.procesar_mensaje(self.WA, 'no')
-        bot.procesar_mensaje(self.WA, 'si, 0')
+        bot.procesar_mensaje(self.WA, 'si')
+        bot.procesar_mensaje(self.WA, '0')
         respuesta = bot.procesar_mensaje(
             self.WA, 'estoy sangrando mucho, necesito ayuda')
 
@@ -992,3 +1005,152 @@ class BugsDelPacienteTests(TestCase):
         self._abandonar_la_manana_y_dejar_que_venza(manana)
 
         self.assertEqual(bot.procesar_mensaje(self.WA, 'hola'), bot.MSG_SIN_CHECKIN)
+
+
+@freeze_time(ANCLA_MEDIANOCHE)
+class BotEntiendeAlPacienteTests(TestCase):
+    """Lo que el paciente escribe llega al sistema como lo dijo (loop 02/10/2026).
+
+    **UX-B03.** La pregunta 6 pedía dos datos en un mensaje y el parser buscaba
+    un «no» en cualquier parte: *«si, no tuve nauseas: 0»* —el paciente SÍ pasó
+    gases— se guardaba como **sin gases** y alimentaba la regla de íleo con un
+    hecho inventado. Decisión aprobada: partir la pregunta en dos mensajes.
+
+    **BE-04 / UX-B08.** Con un turno pendiente, *«tengo fiebre»* recibía la
+    respuesta de la FAQ y el reporte no arrancaba: si el paciente no volvía a
+    escribir, su turno acababa en SILENCIO en vez de pasar por la Regla 1.
+    Decisión aprobada: responder la duda y arrancar el reporte en el mismo
+    mensaje.
+    """
+
+    TELEFONO = '+573009990002'
+    WA = 'whatsapp:+573009990002'
+
+    def setUp(self):
+        self.paciente = Paciente.objects.create(
+            medico_responsable=medico_de_pruebas(),
+            nombre_completo='Paciente Entiende',
+            telefono_whatsapp=self.TELEFONO,
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),
+            consentimiento_informado=True,
+        )
+
+    def _checkin(self):
+        return CheckInProgramado.objects.create(
+            paciente=self.paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now(),
+        )
+
+    def _hasta_la_pregunta_de_gases(self):
+        for texto in ('hola', '37.0', '3', 'no'):   # sin drenaje
+            ultima = bot.procesar_mensaje(self.WA, texto)
+        return ultima
+
+    # --- UX-B03: la pregunta 6 ---
+
+    def test_la_frase_del_hallazgo_no_se_guarda_como_sin_gases(self):
+        """El caso exacto de UX-B03, sin suponer cómo se arregla.
+
+        Lo que no puede pasar es que quede anotado `False`: el paciente dijo
+        que sí. Vale volver a preguntar; no vale invertir el dato.
+        """
+        self._checkin()
+        self._hasta_la_pregunta_de_gases()
+        bot.procesar_mensaje(self.WA, 'si, no tuve nauseas: 0')
+        conv = ConversacionWhatsApp.objects.get()
+        self.assertIsNot(conv.temp_presencia_gases, False)
+
+    def test_gases_y_nauseas_se_preguntan_por_separado(self):
+        self._checkin()
+        self.assertEqual(self._hasta_la_pregunta_de_gases(), bot.MSG_PREGUNTA_GASES)
+        self.assertEqual(bot.procesar_mensaje(self.WA, 'sí'), bot.MSG_PREGUNTA_NAUSEAS)
+        self.assertEqual(bot.procesar_mensaje(self.WA, '0'), bot.MSG_PREGUNTA_HINCHAZON)
+        conv = ConversacionWhatsApp.objects.get()
+        self.assertIs(conv.temp_presencia_gases, True)
+        self.assertEqual(conv.temp_episodios_nauseas, 0)
+
+    def test_la_frase_que_mezcla_las_dos_respuestas_vuelve_a_preguntar(self):
+        """Con «sí» y «no» en el mismo mensaje no se adivina: se pregunta."""
+        self._checkin()
+        self._hasta_la_pregunta_de_gases()
+        respuesta = bot.procesar_mensaje(self.WA, 'no tuve náuseas, sí pasé gases')
+        self.assertEqual(respuesta, bot.MSG_REINTENTO_GASES)
+        conv = ConversacionWhatsApp.objects.get()
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_GASES)
+        self.assertIsNone(conv.temp_presencia_gases)
+
+    def test_respuestas_naturales_a_la_pregunta_de_gases(self):
+        casos = {
+            'sí': True, 'si': True, 'Sí, pasé gases': True, 'si fui al baño': True,
+            'no': False, 'No he podido': False, 'no, nada': False,
+            # Ambiguas: se vuelve a preguntar, nunca se adivina.
+            'no sé': None, 'si, no tuve nauseas: 0': None,
+            'no tuve náuseas, sí pasé gases': None, 'tal vez': None,
+        }
+        for texto, esperado in casos.items():
+            with self.subTest(texto=texto):
+                self.assertIs(bot._parse_gases(texto), esperado)
+
+    def test_respuestas_naturales_a_la_pregunta_de_nauseas(self):
+        casos = {
+            '0': 0, '3': 3, '2 veces': 2, 'ninguna': 0, 'Ninguno': 0,
+            'nada': 0, 'no': 0, 'cero': 0, '20': 20,
+            # DB-01: el techo sigue en pie, y un decimal no se trunca.
+            '21': None, '99999': None, '1.5': None,
+            'no sé': None, 'muchas': None,
+        }
+        for texto, esperado in casos.items():
+            with self.subTest(texto=texto):
+                self.assertEqual(bot._parse_nauseas(texto), esperado)
+
+    def test_el_flujo_completo_registra_gases_y_nauseas_como_se_dijeron(self):
+        self._checkin()
+        self._hasta_la_pregunta_de_gases()
+        for texto in ('no', '2', 'nada', '78', '16'):
+            bot.procesar_mensaje(self.WA, texto)
+        bot.procesar_mensaje(self.WA, 'si')
+        registro = RegistroDiario.objects.get()
+        self.assertIs(registro.presencia_gases, False)
+        self.assertEqual(registro.episodios_nauseas, 2)
+        self.assertEqual(registro.hinchazon_abdominal, 'nada')
+
+    # --- BE-04 / UX-B08: la duda con un turno pendiente ---
+
+    def test_una_duda_con_turno_pendiente_arranca_el_reporte(self):
+        """«tengo fiebre» ya no deja el reporte sin empezar (BE-04)."""
+        self._checkin()
+        respuesta = bot.procesar_mensaje(self.WA, 'tengo fiebre')
+        self.assertTrue(respuesta.startswith(bot.RESP_FIEBRE))
+        self.assertIn('1. ¿Cuál es tu temperatura corporal?', respuesta)
+        conv = ConversacionWhatsApp.objects.get()
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_TEMPERATURA)
+        self.assertIsNotNone(conv.checkin_actual)
+
+    def test_el_paciente_con_dolor_tambien_entra_al_reporte(self):
+        self._checkin()
+        respuesta = bot.procesar_mensaje(self.WA, 'hoy tengo mucho dolor')
+        self.assertTrue(respuesta.startswith(bot.RESP_DOLOR))
+        self.assertEqual(ConversacionWhatsApp.objects.get().estado,
+                         ConversacionWhatsApp.ESTADO_TEMPERATURA)
+
+    def test_la_siguiente_respuesta_ya_es_la_temperatura(self):
+        """Encadenar sirve si el mensaje siguiente se anota como respuesta."""
+        self._checkin()
+        bot.procesar_mensaje(self.WA, 'tengo fiebre')
+        eco = bot.procesar_mensaje(self.WA, '38.4')
+        self.assertTrue(eco.startswith('Anoté: 38.4 °C.'))
+
+    def test_la_duda_encadenada_conserva_la_palabra_de_auxilio(self):
+        """El aviso de AYUDA va en el primer mensaje del reporte (D21)."""
+        self._checkin()
+        self.assertIn('AYUDA', bot.procesar_mensaje(self.WA, 'tengo fiebre'))
+
+    def test_sin_turno_pendiente_la_duda_se_responde_igual_que_antes(self):
+        """La otra dirección: sin reporte que hacer, solo la FAQ."""
+        respuesta = bot.procesar_mensaje(self.WA, 'tengo fiebre')
+        self.assertEqual(respuesta, bot.RESP_FIEBRE)
+        conv = ConversacionWhatsApp.objects.get()
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_INICIO)

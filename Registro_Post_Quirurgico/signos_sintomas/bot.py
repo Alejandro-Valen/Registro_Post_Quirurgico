@@ -10,7 +10,7 @@ Diseño:
 - El bot NO diagnostica ni muestra alertas al paciente. Solo captura telemetría,
   ejecuta el motor con estado persistente y responde una confirmación neutra.
 
-Máquina de estados (10 preguntas):
+Máquina de estados (11 preguntas):
     [AUXILIO — se mira ANTES que el estado, decisión D21]
       Si el mensaje trae ayuda / auxilio / socorro / emergencia como palabra
       suelta, en CUALQUIER estado incluido a mitad del cuestionario: se
@@ -18,6 +18,10 @@ Máquina de estados (10 preguntas):
       alerta AUXILIO / ALTA. Va primero a propósito: el caso que originó la
       decisión ocurre a mitad del cuestionario, y mirarlo después dejaría
       "necesito ayuda" guardado como hinchazón.
+    [DUDA — fuera del cuestionario, BE-04 / UX-B08]
+      Una palabra de la FAQ recibe su respuesta predefinida. Si hay un turno
+      pendiente, el mismo mensaje arranca el reporte en vez de dejarlo sin
+      empezar: la respuesta va seguida de la pregunta 1.
     INICIO
       -> ESPERANDO_TEMPERATURA      admite "saltar" (D20) -> temperatura=None
                                     y responde con el eco: "Anoté: 37.5 °C."
@@ -25,7 +29,8 @@ Máquina de estados (10 preguntas):
       -> ESPERANDO_TIENE_DRENAJE
       -> ESPERANDO_ASPECTO_DRENAJE    (se omite si tiene_drenaje=False)
       -> ESPERANDO_CANTIDAD_DRENAJE   (se omite si tiene_drenaje=False)
-      -> ESPERANDO_GASES_NAUSEAS
+      -> ESPERANDO_GASES              sí/no; si trae los dos, se repregunta (UX-B03)
+      -> ESPERANDO_NAUSEAS            número de episodios, 0 = ninguno
       -> ESPERANDO_HINCHAZON
       -> ESPERANDO_FRECUENCIA_CARDIACA
       -> ESPERANDO_FRECUENCIA_RESPIRATORIA
@@ -127,11 +132,22 @@ MSG_ABANDONO_REINICIO = (
     "1. ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5"
 )
 
-MSG_PREGUNTA_TEMPERATURA = (
-    "¡Hola! Vamos con tu reporte de hoy.\n\n"
-    "Si en algún momento te sientes en peligro, escribe *AYUDA*.\n\n"
+# El arranque del reporte se compone de piezas porque se dice de dos maneras:
+# como saludo, y pegado a la respuesta de una duda (BE-04). Las dos llevan el
+# aviso de AYUDA — es el primer mensaje del cuestionario en ambos casos (D21).
+_AVISO_AYUDA = "Si en algún momento te sientes en peligro, escribe *AYUDA*.\n\n"
+_PREGUNTA_1 = (
     "1. ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5\n"
     "(si hoy no tienes termómetro, responde *saltar*)"
+)
+MSG_PREGUNTA_TEMPERATURA = (
+    "¡Hola! Vamos con tu reporte de hoy.\n\n" + _AVISO_AYUDA + _PREGUNTA_1
+)
+# BE-04 / UX-B08 (02/10/2026): se pega DESPUÉS de la respuesta de la FAQ cuando
+# hay un turno pendiente. Antes la duda contestaba y el reporte no arrancaba:
+# «tengo fiebre» acababa en SILENCIO si el paciente no volvía a escribir.
+MSG_ARRANQUE_TRAS_DUDA = (
+    "\n\nAprovechemos para hacer tu reporte de hoy.\n\n" + _AVISO_AYUDA + _PREGUNTA_1
 )
 MSG_REINTENTO_TEMPERATURA = (
     "No logré entender la temperatura.\n\n"
@@ -180,15 +196,25 @@ MSG_REINTENTO_CANTIDAD = (
     "(y si quieres, los ml, ej: 'normal, 50ml')."
 )
 
-MSG_PREGUNTA_GASES_NAUSEAS = (
+# UX-B03 (02/10/2026): gases y náuseas se preguntan por separado. Juntas, la
+# respuesta «si, no tuve nauseas: 0» —el paciente SÍ pasó gases— se guardaba
+# como sin gases, porque el «no» de las náuseas ganaba. Una pregunta, un dato.
+MSG_PREGUNTA_GASES = (
     "6. Ya casi terminamos.\n"
-    "¿Has podido pasar gases o ir al baño hoy? (sí/no)\n"
-    "Y ¿cuántas veces has tenido náuseas o vómito hoy? (si ninguna, 0)\n"
-    "Puedes responder así: 'sí, 0'"
+    "¿Has podido pasar gases o ir al baño hoy? Responde *sí* o *no*."
 )
-MSG_REINTENTO_GASES_NAUSEAS = (
-    "Por favor dime si pasaste gases (sí/no) y cuántas veces tuviste náuseas. "
-    "Ejemplo: 'sí, 0' o 'no, 2'."
+MSG_REINTENTO_GASES = (
+    "Para esta pregunta necesito solo un *sí* o un *no*: "
+    "¿has podido pasar gases o ir al baño hoy?\n"
+    "(las náuseas te las pregunto justo después)"
+)
+MSG_PREGUNTA_NAUSEAS = (
+    "7. ¿Cuántas veces has tenido náuseas o vómito hoy?\n"
+    "Escribe el número. Si ninguna, responde 0."
+)
+MSG_REINTENTO_NAUSEAS = (
+    "Por favor envíame un número: cuántas veces tuviste náuseas o vómito hoy. "
+    "Si ninguna, responde 0."
 )
 MSG_TURNO_SIGUIENTE = (
     "El reporte anterior se cerró, pero todavía tienes uno pendiente de hoy. "
@@ -198,7 +224,7 @@ MSG_TURNO_SIGUIENTE = (
 )
 
 MSG_PREGUNTA_HINCHAZON = (
-    "7. ¿Cómo siente la hinchazón o distensión de su abdomen hoy?\n"
+    "8. ¿Cómo siente la hinchazón o distensión de su abdomen hoy?\n"
     "Responda: *nada*, *algo* o *mucho*."
 )
 MSG_REINTENTO_HINCHAZON = (
@@ -207,7 +233,7 @@ MSG_REINTENTO_HINCHAZON = (
 )
 
 MSG_PREGUNTA_FRECUENCIA_CARDIACA = (
-    "8. ¿Cuál es su frecuencia cardíaca (pulso) en este momento?\n"
+    "9. ¿Cuál es su frecuencia cardíaca (pulso) en este momento?\n"
     "Escriba el número de latidos por minuto, por ejemplo: 78.\n"
     "Si no puede medirla ahora, responda con alguna de estas palabras:\n"
     "*saltar · omitir · no sé · no tengo · sin dato*"
@@ -218,7 +244,7 @@ MSG_REINTENTO_FRECUENCIA_CARDIACA = (
 )
 
 MSG_PREGUNTA_FRECUENCIA_RESPIRATORIA = (
-    "9. ¿Cuál es su frecuencia respiratoria?\n"
+    "10. ¿Cuál es su frecuencia respiratoria?\n"
     "Escriba el número de respiraciones por minuto, por ejemplo: 16.\n"
     "Si no puede medirla ahora, responda con alguna de estas palabras:\n"
     "*saltar · omitir · no sé · no tengo · sin dato*"
@@ -229,7 +255,7 @@ MSG_REINTENTO_FRECUENCIA_RESPIRATORIA = (
 )
 
 MSG_PREGUNTA_TOLERANCIA_LIQUIDOS = (
-    "10. Última pregunta.\n"
+    "11. Última pregunta.\n"
     "¿Ha podido tomar líquidos (agua, caldo, jugo) sin vomitar? "
     "Responda *sí* o *no*."
 )
@@ -387,8 +413,6 @@ def _procesar_con_conv(conv, paciente, texto, hoy):
 
     # Fuera del flujo (INICIO o COMPLETADO): FAQ disponible siempre.
     respuesta_duda = _responder_duda(texto)
-    if respuesta_duda is not None:
-        return respuesta_duda
 
     # Buscar el CheckInProgramado PENDIENTE de hoy.
     checkin = CheckInProgramado.objects.select_for_update().filter(
@@ -401,7 +425,18 @@ def _procesar_con_conv(conv, paciente, texto, hoy):
         conv.checkin_actual = checkin
         conv.estado = ConversacionWhatsApp.ESTADO_TEMPERATURA
         conv.save()
+        # BE-04 / UX-B08 — la duda se contesta Y el reporte arranca. Hasta el
+        # 02/10/2026 la FAQ se consultaba antes que el turno y devolvía su
+        # respuesta sola: justo el paciente que escribe «tengo fiebre» se
+        # quedaba sin reporte, y su turno acababa en SILENCIO en vez de pasar
+        # por la Regla 1. La palabra de la FAQ NO crea ninguna alerta: eso
+        # sería clasificar síntomas desde el chat (mismo criterio que D21).
+        if respuesta_duda is not None:
+            return respuesta_duda + MSG_ARRANQUE_TRAS_DUDA
         return MSG_PREGUNTA_TEMPERATURA
+
+    if respuesta_duda is not None:
+        return respuesta_duda
 
     # No hay check-in pendiente — ¿completó alguno hoy?
     if CheckInProgramado.objects.filter(
@@ -457,9 +492,9 @@ def _procesar_respuesta_flujo(conv, paciente, texto, checkin):
             conv.temp_tiene_drenaje = False
             conv.temp_aspecto_drenaje = 'sin_drenaje'
             conv.temp_cantidad_drenaje = 'sin_drenaje'
-            conv.estado = ConversacionWhatsApp.ESTADO_GASES_NAUSEAS
+            conv.estado = ConversacionWhatsApp.ESTADO_GASES
             conv.save()
-            return MSG_PREGUNTA_GASES_NAUSEAS
+            return MSG_PREGUNTA_GASES
         return MSG_REINTENTO_TIENE_DRENAJE
 
     if estado == ConversacionWhatsApp.ESTADO_ASPECTO_DRENAJE:
@@ -471,9 +506,9 @@ def _procesar_respuesta_flujo(conv, paciente, texto, checkin):
         if aspecto == 'sin_drenaje':
             conv.temp_cantidad_drenaje = 'sin_drenaje'
             conv.temp_volumen_drenaje_ml = None
-            conv.estado = ConversacionWhatsApp.ESTADO_GASES_NAUSEAS
+            conv.estado = ConversacionWhatsApp.ESTADO_GASES
             conv.save()
-            return MSG_PREGUNTA_GASES_NAUSEAS
+            return MSG_PREGUNTA_GASES
         conv.estado = ConversacionWhatsApp.ESTADO_CANTIDAD_DRENAJE
         conv.save()
         return MSG_PREGUNTA_CANTIDAD
@@ -484,15 +519,23 @@ def _procesar_respuesta_flujo(conv, paciente, texto, checkin):
             return MSG_REINTENTO_CANTIDAD
         conv.temp_cantidad_drenaje = cantidad
         conv.temp_volumen_drenaje_ml = ml  # puede ser None
-        conv.estado = ConversacionWhatsApp.ESTADO_GASES_NAUSEAS
+        conv.estado = ConversacionWhatsApp.ESTADO_GASES
         conv.save()
-        return MSG_PREGUNTA_GASES_NAUSEAS
+        return MSG_PREGUNTA_GASES
 
-    if estado == ConversacionWhatsApp.ESTADO_GASES_NAUSEAS:
-        gases, nauseas = _parse_gases_nauseas(texto)
-        if gases is None or nauseas is None:
-            return MSG_REINTENTO_GASES_NAUSEAS
+    if estado == ConversacionWhatsApp.ESTADO_GASES:
+        gases = _parse_gases(texto)
+        if gases is None:
+            return MSG_REINTENTO_GASES
         conv.temp_presencia_gases = gases
+        conv.estado = ConversacionWhatsApp.ESTADO_NAUSEAS
+        conv.save()
+        return MSG_PREGUNTA_NAUSEAS
+
+    if estado == ConversacionWhatsApp.ESTADO_NAUSEAS:
+        nauseas = _parse_nauseas(texto)
+        if nauseas is None:
+            return MSG_REINTENTO_NAUSEAS
         conv.temp_episodios_nauseas = nauseas
         conv.estado = ConversacionWhatsApp.ESTADO_HINCHAZON
         conv.save()
@@ -851,40 +894,45 @@ def _parse_hinchazon(texto):
     return None
 
 
-def _parse_gases_nauseas(texto):
-    """Devuelve (presencia_gases_bool_o_None, episodios_nauseas_int_o_None).
+def _parse_gases(texto):
+    """True / False si el paciente pasó gases; None si hay que volver a preguntar.
 
-    Si la respuesta es ambigua ("no sé") o falta el número de náuseas, devuelve
-    (None, None) para que el bot pida un reintento en vez de interpretar mal.
+    UX-B03 (02/10/2026). El parser anterior recibía gases y náuseas en el mismo
+    mensaje y buscaba un «no» en CUALQUIER parte: en «si, no tuve nauseas: 0»
+    ese «no» era de las náuseas, y el paciente que sí pasó gases quedaba
+    registrado sin gases — un dato falso para la regla de íleo.
+
+    La pregunta ya llega sola, pero el paciente puede seguir contestando las
+    dos cosas a la vez por costumbre. Por eso un mensaje que trae un «sí» y un
+    «no» se considera ambiguo y se repregunta: **nunca se elige uno de los dos**.
     """
     t = _sin_acentos(texto.lower())
-
-    # Respuesta ambigua: "no sé" contiene "no" pero NO afirma ausencia de gases.
-    # Con límite de palabra, "no sentí náuseas" sí se considera respuesta válida.
+    # «no sé» contiene un «no» que no niega nada.
     if re.search(r'\bno se\b', t):
-        return None, None
+        return None
+    dice_si = re.search(r'\b(si|s|claro|yes)\b', t) is not None
+    dice_no = re.search(r'\b(no|n)\b', t) is not None
+    if dice_si == dice_no:   # los dos, o ninguno
+        return None
+    return dice_si
 
-    # Sin número de náuseas no se puede completar la respuesta.
-    match = re.search(r'\d+', t)
-    if match is None:
-        return None, None
-    nauseas = int(match.group(0))
 
-    # DB-01 — techo. Sin esto, "si, 99999" llegaba tal cual a la base, reventaba
+_PALABRAS_CERO_NAUSEAS = frozenset({'ninguna', 'ninguno', 'nada', 'no', 'cero'})
+
+
+def _parse_nauseas(texto):
+    """Episodios de náuseas o vómito como entero, o None si no se entiende.
+
+    Acepta el número («2 veces») y las formas de decir ninguna. Rechaza el
+    decimal en vez de truncarlo, igual que el resto de preguntas numéricas.
+    """
+    t = _sin_acentos(texto.strip().lower()).strip(' .!')
+    if t in _PALABRAS_CERO_NAUSEAS:
+        return 0
+    # DB-01 — techo. Sin él, "si, 99999" llegaba tal cual a la base, reventaba
     # el PositiveSmallIntegerField con un DataError, el webhook devolvía 500 y
-    # el paciente NO recibía ninguna respuesta: no podía saber si su reporte
-    # había entrado. Reproducido el 08/09/2026.
-    minimo, maximo = RANGOS_CLINICOS['episodios_nauseas']
-    if not (minimo <= nauseas <= maximo):
-        return None, None
-
-    gases = None
-    if re.search(r'\bno\b', t):
-        gases = False
-    elif re.search(r'\bsi\b', t):
-        gases = True
-
-    return gases, nauseas
+    # el paciente NO recibía ninguna respuesta. Reproducido el 08/09/2026.
+    return _parse_entero_rango(t, *RANGOS_CLINICOS['episodios_nauseas'])
 
 
 # ---------------------------------------------------------------------------
