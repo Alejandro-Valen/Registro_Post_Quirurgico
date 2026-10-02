@@ -9,11 +9,14 @@
 > **Loop E el 07/08/2026**, el **reparto de `tests.py` + la guardia de secretos
 > el 10/08/2026** y **D15 · `crear_medico` el 12/08/2026**; **umbrales
 > anclados con pruebas de frontera el 08/09/2026** y **los bugs que tocan al
-> paciente corregidos (D19-D23) el 08/09/2026**, 420 tests OK)
+> paciente corregidos (D19-D23) el 08/09/2026**; **el bot deja de invertir el
+> dato de gases y de frenar el reporte por una duda (UX-B03, BE-04) el
+> 02/10/2026**, 433 tests OK)
 > **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026 —
-> **nueve comprobaciones** desde el 07/09/2026 (siete hasta entonces; se sumaron
-> el linter `ruff` y `pip-audit`, y `check --deploy` recuperó la capacidad de
-> fallar con `--fail-level WARNING`)
+> **diez comprobaciones** desde el 09/09/2026 (siete hasta el 07/09; se sumaron
+> el linter `ruff` y `pip-audit`, `check --deploy` recuperó la capacidad de
+> fallar con `--fail-level WARNING`, y el 09/09 el barrido de veracidad). Hasta
+> el 02/10/2026 esta línea decía «nueve», un mes después de que fueran diez
 > **⚠️ No hay producción viva desde el 07/08/2026** — venció la prueba de Railway.
 > Mergear a `produccion` no despliega nada. Ver `docs/railway_deploy.md`.
 
@@ -114,7 +117,7 @@ Registro_Post_Quirurgico/                    ← raíz del repositorio
         ├── admin.py                         ← panel del médico: scoping, badges severidad, historial, filtros
         ├── alert_engine.py                  ← motor clínico + unicidad concurrente de alertas
         ├── evaluacion_alertas.py            ← estado auditable y reintentos del motor
-        ├── bot.py                           ← máquina de estados WhatsApp (10 preguntas, 2×/día)
+        ├── bot.py                           ← máquina de estados WhatsApp (11 preguntas, 2×/día)
         ├── signals.py                       ← crea outbox durable para alertas ALTA
         ├── views.py                         ← webhook Twilio (firma + SID durable en PostgreSQL)
         ├── urls.py
