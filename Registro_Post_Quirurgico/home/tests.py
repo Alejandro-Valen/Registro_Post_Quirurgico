@@ -558,6 +558,169 @@ class BloqueoDeAccesoTests(TestCase):
         self.assertEqual(get_client_ip_address(peticion), _get_client_ip(peticion))
 
 
+def _parrafo_que_contiene(html, texto):
+    """El párrafo entero (`<p ...>…</p>`) que contiene `texto`.
+
+    Sirve para preguntar por UN aviso concreto y no por cualquiera de la
+    página: el de autorización ya llevaba `role="alert"`, y buscar el atributo
+    en todo el HTML habría dado por bueno el de otro aviso.
+    """
+    posicion = html.index(texto)
+    inicio = html.rindex('<p', 0, posicion)
+    return html[inicio:html.index('</p>', posicion) + len('</p>')]
+
+
+def _apertura(parrafo):
+    """La etiqueta de apertura de un párrafo: donde viven sus atributos."""
+    return parrafo.split('>', 1)[0]
+
+
+class FormularioDeContactoTests(TestCase):
+    """UX-L02 a UX-L05 — lo que el formulario público le dice a quien lo usa.
+
+    Los cuatro son el mismo defecto visto desde lados distintos: el formulario
+    **callaba**. Un campo con solo espacios no creaba nada y no decía nada
+    (UX-L02); un error borraba lo escrito (UX-L03); un mensaje largo se
+    recortaba y se respondía «enviado correctamente» (UX-L04); y un lector de
+    pantalla no anunciaba ni el éxito ni los errores (UX-L05).
+    """
+
+    DATOS = {
+        'nombre': 'Ana Conservada',
+        'telefono': '+573001234567',
+        'mensaje': 'Quiero información sobre el programa de seguimiento.',
+        'autorizacion_datos': '1',
+    }
+
+    def setUp(self):
+        # Mismo motivo que en `AutorizacionHabeasDataTests`: el rate limit vive
+        # en el cache y el cache no se limpia solo entre pruebas.
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def _enviar(self, **cambios):
+        datos = {**self.DATOS, **cambios}
+        return self.client.post(
+            reverse('contacto'), {k: v for k, v in datos.items() if v is not None})
+
+    def _con_cache_caido(self):
+        from unittest.mock import MagicMock, patch
+
+        cache_caido = MagicMock()
+        cache_caido.incr.side_effect = ConnectionError('redis inalcanzable')
+        return patch('home.views.cache', cache_caido)
+
+    # --- UX-L02: un campo con solo espacios ---
+
+    def test_un_campo_solo_con_espacios_muestra_un_error(self):
+        """Antes no entraba en ninguna rama: ni éxito ni error, solo silencio."""
+        respuesta = self._enviar(mensaje='     ')
+        self.assertEqual(MensajeContacto.objects.count(), 0)
+        html = respuesta.content.decode()
+        self.assertIn('Falta completar', html)
+        self.assertIn('role="alert"', _apertura(_parrafo_que_contiene(html, 'Falta completar')))
+
+    def test_el_error_nombra_el_campo_que_falta(self):
+        for campo, nombre_visible in (('nombre', 'tu nombre'),
+                                      ('telefono', 'tu teléfono'),
+                                      ('mensaje', 'el motivo de tu contacto')):
+            with self.subTest(campo=campo):
+                cache.clear()
+                html = self._enviar(**{campo: '   '}).content.decode()
+                self.assertIn('Falta completar', html)
+                self.assertIn(nombre_visible, _parrafo_que_contiene(html, 'Falta completar'))
+
+    # --- UX-L03: un error no borra lo escrito ---
+
+    def test_si_salta_el_rate_limit_se_conserva_lo_escrito(self):
+        with self._con_cache_caido():
+            respuesta = self._enviar()
+        self.assertTrue(respuesta.context['error_rate_limit'])
+        self.assertContains(respuesta, 'value="Ana Conservada"')
+        self.assertContains(respuesta, 'value="+573001234567"')
+        self.assertContains(
+            respuesta, '>Quiero información sobre el programa de seguimiento.</textarea>')
+
+    def test_si_falta_la_autorizacion_se_conserva_lo_escrito(self):
+        respuesta = self._enviar(autorizacion_datos=None)
+        self.assertTrue(respuesta.context['error_autorizacion'])
+        self.assertContains(respuesta, 'value="Ana Conservada"')
+
+    def test_lo_que_se_conserva_se_escapa(self):
+        """La otra dirección: devolver lo escrito no puede abrir una inyección.
+
+        Lo que escribe un desconocido vuelve a la página, así que tiene que
+        volver ESCAPADO. Si alguien pusiera `|safe` en la plantilla, esto cae.
+        """
+        respuesta = self._enviar(
+            nombre='"><script>alert(1)</script>', autorizacion_datos=None)
+        self.assertNotContains(respuesta, '<script>alert(1)</script>')
+        self.assertContains(respuesta, '&lt;script&gt;alert(1)&lt;/script&gt;')
+
+    def test_tras_un_envio_correcto_el_formulario_queda_vacio(self):
+        """La otra dirección: conservar lo escrito es para los errores."""
+        respuesta = self._enviar()
+        self.assertTrue(respuesta.context['mensaje_enviado'])
+        self.assertNotContains(respuesta, 'value="Ana Conservada"')
+
+    def test_tras_un_error_la_casilla_no_vuelve_marcada(self):
+        """Se conserva lo escrito, pero NO la autorización (D23).
+
+        Una casilla que aparece marcada sin que la persona la marque es una
+        casilla premarcada, aunque la hubiera marcado en el envío anterior: la
+        autorización se da en el envío que guarda los datos.
+        """
+        html = self._enviar(mensaje='   ').content.decode()
+        marca = html.split('name="autorizacion_datos"')[1].split('>')[0]
+        self.assertNotIn('checked', marca)
+
+    # --- UX-L04: nada se recorta en silencio ---
+
+    def test_un_mensaje_demasiado_largo_no_se_recorta_en_silencio(self):
+        """Antes se guardaban los primeros 2000 caracteres y se respondía
+        «enviado correctamente»: la persona no sabía que faltaba el final."""
+        respuesta = self._enviar(mensaje='a' * 2001)
+        self.assertEqual(MensajeContacto.objects.count(), 0)
+        self.assertFalse(respuesta.context['mensaje_enviado'])
+        aviso = _parrafo_que_contiene(respuesta.content.decode(), 'demasiado largo')
+        self.assertIn('2000', aviso)
+        self.assertIn('role="alert"', _apertura(aviso))
+
+    def test_un_mensaje_en_el_limite_se_guarda_entero(self):
+        """La frontera: 2000 caracteres caben, y caben enteros."""
+        self._enviar(mensaje='a' * 2000)
+        self.assertEqual(len(MensajeContacto.objects.get().mensaje), 2000)
+
+    def test_los_saltos_de_linea_cuentan_como_los_cuenta_el_navegador(self):
+        """El `maxlength` del navegador cuenta un salto de línea como UN
+        carácter, pero el envío lo manda como dos (`\\r\\n`). Sin normalizarlo,
+        un texto que el navegador dejó escribir entero sería «demasiado largo»
+        para el servidor."""
+        texto = 'a' * 1998 + '\r\nb'   # 2000 para el navegador, 2001 enviados
+        self._enviar(mensaje=texto)
+        self.assertEqual(MensajeContacto.objects.count(), 1)
+        self.assertEqual(MensajeContacto.objects.get().mensaje, 'a' * 1998 + '\nb')
+
+    def test_nombre_y_telefono_tampoco_se_recortan(self):
+        for campo, maximo in (('nombre', 100), ('telefono', 30)):
+            with self.subTest(campo=campo):
+                cache.clear()
+                MensajeContacto.objects.all().delete()
+                self._enviar(**{campo: '9' * (maximo + 1)})
+                self.assertEqual(MensajeContacto.objects.count(), 0)
+                self._enviar(**{campo: '9' * maximo})
+                self.assertEqual(len(getattr(MensajeContacto.objects.get(), campo)), maximo)
+
+    def test_los_campos_declaran_su_maximo(self):
+        """Que el navegador avise ANTES de enviar, además del servidor."""
+        html = self.client.get(reverse('contacto')).content.decode()
+        for nombre, maximo in (('nombre', 100), ('telefono', 30), ('mensaje', 2000)):
+            with self.subTest(campo=nombre):
+                inicio = html.index(f'name="{nombre}"')
+                etiqueta = html[html.rindex('<', 0, inicio):html.index('>', inicio)]
+                self.assertIn(f'maxlength="{maximo}"', etiqueta)
+
+
 class MenuDelMovilTests(TestCase):
     """UX-L01 — en el móvil desaparecían los cuatro enlaces del menú.
 
