@@ -334,24 +334,61 @@ class AlertaEmailNotificacionTests(TestCase):
         self.assertEqual(notificacion.estado, NotificacionAlerta.ESTADO_PENDIENTE)
         self.assertEqual(notificacion.ultimo_error, 'ProveedorEmailNoConfigurado')
 
-    def test_notificacion_solo_al_alcanzar_alta_no_en_recurrencia(self):
-        def _reg(fc):
-            return RegistroDiario.objects.create(
-                paciente=self.paciente,
-                temperatura=Decimal('37.0'), dolor_eva=2,
-                aspecto_drenaje='sin_drenaje', presencia_gases=True,
-                episodios_nauseas=0, frecuencia_cardiaca=fc,
-            )
+    def _registro_con_fc(self, fc):
+        return RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('37.0'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True,
+            episodios_nauseas=0, frecuencia_cardiaca=fc,
+        )
 
-        evaluar_registro(_reg(120))
+    def test_notificacion_solo_al_alcanzar_alta_no_en_recurrencia(self):
+        """MEDIA no encola; la escalada a ALTA encola una; la recurrencia, ninguna.
+
+        TEST-12 (02/10/2026) — qué protege cada paso, dicho con honestidad. Los
+        dos primeros fijan la guarda de `signals.py`: sin `escalo_a_alta`, la
+        escalada de MEDIA a ALTA no avisaría al médico. El tercero NO la fija:
+        `NotificacionAlerta.alerta` es uno a uno y la señal usa `get_or_create`,
+        así que sin la guarda el conteo seguiría en 1 de todos modos. Lo que la
+        guarda hace en la recurrencia lo fija la prueba siguiente.
+        """
+        evaluar_registro(self._registro_con_fc(120))
         self.assertEqual(NotificacionAlerta.objects.count(), 0)
 
-        evaluar_registro(_reg(150))
+        evaluar_registro(self._registro_con_fc(150))
         self.assertEqual(NotificacionAlerta.objects.count(), 1)
 
-        evaluar_registro(_reg(155))
+        evaluar_registro(self._registro_con_fc(155))
         self.assertEqual(NotificacionAlerta.objects.count(), 1)
         self.assertEqual(Alerta.objects.filter(tipo='TAQUICARDIA').count(), 1)
+
+    def test_la_recurrencia_de_una_alta_no_toca_la_bandeja_de_correo(self):
+        """TEST-12: lo que la guarda `escalo_a_alta` hace de verdad, y nada más.
+
+        Que una alerta que ya era ALTA y vuelve a detectarse no lea ni escriba la
+        bandeja de correo. No es lo que impide un segundo correo —eso lo
+        garantiza la relación uno a uno alerta ↔ notificación—, sino que la
+        recurrencia no consulte la bandeja ni vuelva a evaluar el destinatario en
+        cada reporte del paciente. Esta prueba no pretende distinguir más que eso.
+        """
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        evaluar_registro(self._registro_con_fc(150))   # ALTA nueva: encola 1
+        self.assertEqual(NotificacionAlerta.objects.count(), 1)
+        recurrencia = self._registro_con_fc(155)
+
+        with CaptureQueriesContext(connection) as consultas:
+            evaluar_registro(recurrencia)
+
+        tabla = NotificacionAlerta._meta.db_table
+        tocadas = [q['sql'] for q in consultas.captured_queries if tabla in q['sql']]
+        self.assertEqual(
+            tocadas, [],
+            'La recurrencia de una alerta ALTA consultó la bandeja de correo.',
+        )
+        # Y la recurrencia sí se registró: no es una prueba que pase en vacío.
+        self.assertEqual(Alerta.objects.get(tipo='TAQUICARDIA').veces, 2)
 
 class NotificacionConcurrenciaTests(TransactionTestCase):
     def setUp(self):
