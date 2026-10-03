@@ -230,3 +230,89 @@ class FirmaTwilioNoDependeDelEntornoTests(SimpleTestCase):
         produccion = cargar_produccion_sobre_base_fresca(entorno)
 
         self.assertTrue(produccion.TWILIO_VALIDATE_SIGNATURE)
+
+
+class ArranqueSinVariableFallaCerradoTests(SimpleTestCase):
+    """SEC-04 — sin `DJANGO_SETTINGS_MODULE`, el servidor arranca con producción.
+
+    `wsgi.py` y `asgi.py` hacían `setdefault` con la configuración BASE. El
+    `Dockerfile` fija la variable, pero `nixpacks.toml` la tiene comentada: un
+    despliegue por esa vía arrancaba con la configuración de desarrollo, sin
+    HSTS, sin redirección HTTPS, sin cookies seguras y sin CSP, y sin decir
+    nada. Producción, en cambio, se detiene si le falta una variable: falla
+    cerrado. `manage.py` sigue eligiendo la base, así que el desarrollo local
+    no cambia.
+
+    Cada caso EJECUTA el archivo real con la fábrica de la aplicación
+    sustituida, en un entorno sin la variable, y mira qué configuración eligió.
+    """
+
+    PRODUCCION = 'Registro_Post_Quirurgico.settings_production'
+
+    def _ejecutar(self, archivo, fabrica, entorno_extra=None, como_principal=False):
+        import runpy
+
+        entorno = {
+            clave: valor for clave, valor in os.environ.items()
+            if clave != 'DJANGO_SETTINGS_MODULE'
+        }
+        entorno.update(entorno_extra or {})
+        ruta = (_RUTA_PAQUETE / archivo) if not como_principal else (
+            _RUTA_PAQUETE.parent / archivo)
+        with mock.patch.dict(os.environ, entorno, clear=True), mock.patch(fabrica):
+            runpy.run_path(
+                str(ruta), run_name='__main__' if como_principal else 'arranque')
+            return os.environ.get('DJANGO_SETTINGS_MODULE')
+
+    def test_wsgi_sin_variable_arranca_con_produccion(self):
+        elegido = self._ejecutar('wsgi.py', 'django.core.wsgi.get_wsgi_application')
+        self.assertEqual(elegido, self.PRODUCCION)
+
+    def test_asgi_sin_variable_arranca_con_produccion(self):
+        elegido = self._ejecutar('asgi.py', 'django.core.asgi.get_asgi_application')
+        self.assertEqual(elegido, self.PRODUCCION)
+
+    def test_la_variable_puesta_a_mano_sigue_mandando(self):
+        """La otra dirección: el valor por defecto no pisa una decisión explícita."""
+        local = 'Registro_Post_Quirurgico.settings_local'
+        elegido = self._ejecutar(
+            'wsgi.py', 'django.core.wsgi.get_wsgi_application',
+            entorno_extra={'DJANGO_SETTINGS_MODULE': local},
+        )
+        self.assertEqual(elegido, local)
+
+    def test_manage_py_sigue_arrancando_con_la_base(self):
+        """El desarrollo local no cambia: `runserver` y la suite usan la base."""
+        elegido = self._ejecutar(
+            'manage.py', 'django.core.management.execute_from_command_line',
+            como_principal=True,
+        )
+        self.assertEqual(elegido, 'Registro_Post_Quirurgico.settings')
+
+
+class SesionDelPanelCaducaTests(SimpleTestCase):
+    """SEC-15 — la sesión del panel caduca a las 8 horas y al cerrar el navegador.
+
+    Decisión de León del 02/10/2026. Hasta entonces regía el valor por defecto
+    de Django: 14 días, y la sesión sobrevivía a cerrar el navegador. En un
+    equipo compartido de una clínica, eso es un panel con datos de pacientes
+    abierto dos semanas. 8 horas es un turno de médico.
+
+    Lo que NO decide esta prueba: la caducidad por inactividad. Las 8 horas
+    cuentan desde el inicio de sesión.
+    """
+
+    def test_la_base_fija_ocho_horas_y_cierre_con_el_navegador(self):
+        base = _cargar_settings_base({})
+
+        self.assertEqual(getattr(base, 'SESSION_COOKIE_AGE', None), 8 * 60 * 60)
+        self.assertIs(getattr(base, 'SESSION_EXPIRE_AT_BROWSER_CLOSE', None), True)
+
+    def test_produccion_hereda_la_caducidad(self):
+        produccion = cargar_produccion_sobre_base_fresca(
+            dict(ENTORNO_PRODUCCION_VALIDO))
+
+        self.assertEqual(
+            getattr(produccion, 'SESSION_COOKIE_AGE', None), 8 * 60 * 60)
+        self.assertIs(
+            getattr(produccion, 'SESSION_EXPIRE_AT_BROWSER_CLOSE', None), True)
