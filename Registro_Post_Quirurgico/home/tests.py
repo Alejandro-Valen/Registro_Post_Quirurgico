@@ -556,3 +556,58 @@ class BloqueoDeAccesoTests(TestCase):
         # respalda; el `ipware` que trae axes de fábrica no la mira.
         self.assertEqual(_get_client_ip(peticion), '198.51.100.20')
         self.assertEqual(get_client_ip_address(peticion), _get_client_ip(peticion))
+
+
+class MenuDelMovilTests(TestCase):
+    """UX-L01 — en el móvil desaparecían los cuatro enlaces del menú.
+
+    Bajo 900 px, `site.css` tenía `.navlinks a:not(.cta) { display: none }`: el
+    único enlace visible era «Acceso médico», que lleva al login del Admin. Un
+    paciente que abría la página en el teléfono no podía llegar a Contacto.
+
+    **Qué mide esta prueba, y qué no.** Es una guarda sobre el CSS, no una
+    prueba de pantalla: lee la hoja de estilos y comprueba que ninguna regla
+    dentro de un `@media` de ancho máximo vuelva a esconder los enlaces, y que
+    el bloque del móvil los deje acomodarse en varias filas. No ve la página
+    renderizada; eso se comprobó aparte.
+    """
+
+    def _bloques_media(self, css):
+        """Pares (condición, cuerpo) de cada `@media`, con llaves anidadas."""
+        bloques, posicion = [], 0
+        while (inicio := css.find('@media', posicion)) != -1:
+            abre = css.index('{', inicio)
+            profundidad, cursor = 1, abre + 1
+            while profundidad:
+                profundidad += {'{': 1, '}': -1}.get(css[cursor], 0)
+                cursor += 1
+            bloques.append((css[inicio:abre], css[abre + 1:cursor - 1]))
+            posicion = cursor
+        return bloques
+
+    def _reglas(self, cuerpo):
+        import re
+        return re.findall(r'([^{}]+)\{([^{}]*)\}', cuerpo)
+
+    def test_el_menu_del_movil_no_esconde_los_enlaces(self):
+        import re
+
+        from django.contrib.staticfiles import finders
+
+        with open(finders.find('home/css/site.css'), encoding='utf-8') as hoja:
+            css = re.sub(r'/\*.*?\*/', '', hoja.read(), flags=re.S)
+
+        moviles = [(cond, cuerpo) for cond, cuerpo in self._bloques_media(css)
+                   if 'max-width' in cond]
+        self.assertTrue(moviles, 'site.css no tiene ningún bloque para pantallas pequeñas')
+        for condicion, cuerpo in moviles:
+            for selector, declaraciones in self._reglas(cuerpo):
+                if '.navlinks' in selector:
+                    with self.subTest(media=condicion.strip(), selector=selector.strip()):
+                        self.assertNotRegex(declaraciones, r'display\s*:\s*none')
+
+        cuerpo_900 = next(c for cond, c in moviles if '900px' in cond)
+        self.assertTrue(
+            any('.navlinks' in sel and re.search(r'flex-wrap\s*:\s*wrap', dec)
+                for sel, dec in self._reglas(cuerpo_900)),
+            'Bajo 900 px los enlaces tienen que poder acomodarse en varias filas.')
