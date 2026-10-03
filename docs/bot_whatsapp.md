@@ -89,7 +89,9 @@ que dejó `urgencias` fuera de la palabra de auxilio (D21).
    tranquilizadora: BAJA/sin alertas → `MSG_CONFIRMACION` (neutro); MEDIA
    → `MSG_CIERRE_ALERTA_MEDIA` ("contacta a tu médico en las próximas
    horas"); ALTA → `MSG_CIERRE_ALERTA_ALTA` ("comunícate con tu médico o
-   ve a urgencias"). Ninguno menciona el tipo de alerta ni valores.
+   ve a urgencias"). Ninguno menciona el tipo de alerta ni valores. Su
+   recomendación clínica la fija `test_los_cierres_conservan_su_indicacion_clinica`:
+   el 02/10/2026 (D26) solo cambiaron su última línea y sus tildes.
    Implementación: `evaluar_registro` corre de forma síncrona dentro de
    `_crear_registro` (en un savepoint defensivo) para conocer la severidad
    antes de responder; ver `_mensaje_cierre`.
@@ -127,6 +129,21 @@ que dejó `urgencias` fuera de la palabra de auxilio (D21).
    completar un check-in pendiente cuando el paciente escribe. El inicio
    proactivo por WhatsApp sigue pendiente en `enviar_recordatorios`; hoy el
    sistema es reactivo.
+6b. **El bot no promete lo que el sistema no hace (D26, 02/10/2026).** Como
+    nadie le escribe al paciente, ningún mensaje puede decirle «te escribiré»,
+    «te escribiremos», «te avisaremos» ni nada de esa familia: lo vigila
+    `test_ningun_mensaje_promete_que_se_le_escribira`, que recorre todos los
+    `MSG_*` y `RESP_*`. Lo que se le dice es la verdad: `MSG_SIN_CHECKIN` le pide
+    que escriba él, el reporte de la mañana desde las 7:00 y el de la tarde
+    desde las 2:00 (las horas salen de `crear_checkins_diarios`). Los cierres
+    MEDIA y ALTA terminan en «Escríbeme en tu próximo turno para seguir con tu
+    reporte». Cuando se implemente el envío saliente, esta regla se revisa en
+    el mismo PR.
+
+    De la misma familia: el aviso de un reporte abandonado dice «la última
+    vez», y no «ayer», porque puede ser de cualquier día anterior. Y si hoy no
+    hay turno, va seguido de `MSG_SIN_CHECKIN` en lugar de una pregunta que
+    después se ignoraría (DB-12).
 7. **Dudas (FAQ) fuera del flujo de registro:** respuestas predefinidas
    conservadoras (fiebre / alimentación / dolor / fallback a "contacta a tu
    médico"). Esto es un espejo temporal de `knowledge_base.md` mientras no

@@ -48,6 +48,7 @@ from django.utils import timezone
 
 from .alert_engine import registrar_alerta_auxilio
 from .evaluacion_alertas import evaluar_registro_con_estado, registrar_fallo_evaluacion
+from .management.commands.crear_checkins_diarios import HORA_MANANA, HORA_TARDE
 from .models import (
     RANGOS_CLINICOS,
     CheckInProgramado,
@@ -76,9 +77,17 @@ MSG_YA_REGISTRADO = (
     "¡Tus datos de hoy ya están registrados! "
     "Si tienes alguna duda sobre tu recuperación, puedes escribirme aquí."
 )
+# D26 (02/10/2026) — ningún mensaje promete que el bot le escribirá al paciente.
+# Decía «Te escribiré cuando sea la hora», y el envío saliente es un stub
+# (`enviar_recordatorios`): nadie le escribía nunca, el paciente esperaba, y el
+# sistema acababa anotando su silencio como SILENCIO. El sistema es reactivo:
+# se le dice la verdad, que es él quien escribe, y a partir de qué hora. Las
+# horas salen del comando que crea los turnos, no de un literal.
 MSG_SIN_CHECKIN = (
     "Por ahora no tienes un reporte pendiente. "
-    "Te escribiré cuando sea la hora. "
+    "Escríbeme cuando quieras hacer tu reporte: "
+    f"el de la mañana desde las {HORA_MANANA}:00 "
+    f"y el de la tarde desde las {HORA_TARDE - 12}:00. "
     "Si tienes alguna duda sobre tu recuperación, puedes preguntarme aquí."
 )
 MSG_CONFIRMACION = (
@@ -90,22 +99,28 @@ MSG_CONFIRMACION = (
 # Nunca mencionan el tipo de alerta ni valores específicos (regla del bot:
 # el paciente jamás ve la clasificación clínica). BAJA no lleva mensaje
 # adicional; usa MSG_CONFIRMACION.
+#
+# D26 (02/10/2026): solo cambian la última línea —«Te escribiremos en tu
+# próximo turno» prometía un envío que no existe— y las tildes, que eran las
+# únicas que faltaban en todo el bot (UX-B10). La recomendación clínica queda
+# intacta: es la decidida el 02/07/2026.
+_ULTIMA_LINEA_CIERRE = "Escríbeme en tu próximo turno para seguir con tu reporte."
 MSG_CIERRE_ALERTA_MEDIA = (
     "Hemos registrado tu reporte de hoy.\n\n"
     "Hemos notado algunos valores que vale la pena revisar. "
-    "Te recomendamos contactar a tu medico en las proximas "
-    "horas para contarle como te has sentido. No es urgente, "
-    "pero es importante que este al tanto.\n\n"
-    "Te escribiremos en tu proximo turno."
+    "Te recomendamos contactar a tu médico en las próximas "
+    "horas para contarle cómo te has sentido. No es urgente, "
+    "pero es importante que esté al tanto.\n\n"
+    + _ULTIMA_LINEA_CIERRE
 )
 MSG_CIERRE_ALERTA_ALTA = (
     "Hemos registrado tu reporte de hoy.\n\n"
-    "Algunos de tus valores de hoy necesitan atencion pronto. "
-    "Te recomendamos comunicarte con tu medico o dirigirte "
-    "al servicio de urgencias mas cercano. Esto es por "
-    "precaucion — ve con calma y cuentale al medico como "
-    "te has sentido estos dias.\n\n"
-    "Te escribiremos en tu proximo turno."
+    "Algunos de tus valores de hoy necesitan atención pronto. "
+    "Te recomendamos comunicarte con tu médico o dirigirte "
+    "al servicio de urgencias más cercano. Esto es por "
+    "precaución — ve con calma y cuéntale al médico cómo "
+    "te has sentido estos días.\n\n"
+    + _ULTIMA_LINEA_CIERRE
 )
 # --- Palabra de auxilio (decisión D21, 08/09/2026) ---
 #
@@ -125,10 +140,15 @@ MSG_AUXILIO = (
     "Cuando estés en un lugar seguro, escríbeme y retomamos tu reporte."
 )
 
-MSG_ABANDONO_REINICIO = (
-    "Hola, parece que ayer no pudimos terminar tu reporte. "
+# UX-B11 (02/10/2026): decía «parece que ayer no pudimos terminar», pero la
+# condición es CUALQUIER día anterior: pudo ser hace una semana.
+_AVISO_ABANDONO = (
+    "Hola, la última vez no pudimos terminar tu reporte. "
     "Esos datos quedaron sin registrar.\n\n"
-    "¡Empecemos el reporte de hoy!\n\n"
+)
+MSG_ABANDONO_REINICIO = (
+    _AVISO_ABANDONO
+    + "¡Empecemos el reporte de hoy!\n\n"
     "1. ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5"
 )
 
@@ -362,6 +382,13 @@ def _procesar_con_conv(conv, paciente, texto, hoy):
             else ConversacionWhatsApp.ESTADO_INICIO
         )
         conv.save()
+        if checkin_hoy is None:
+            # DB-12 / UX-B07 (02/10/2026): sin turno hoy, el mensaje de abandono
+            # decía «¡Empecemos el reporte de hoy!» y preguntaba la temperatura,
+            # pero la conversación quedaba en INICIO y la respuesta caía en «no
+            # tienes un reporte pendiente». Se le avisaba del abandono y se le
+            # dice la verdad: hoy no hay reporte que hacer.
+            return _AVISO_ABANDONO + MSG_SIN_CHECKIN
         return MSG_ABANDONO_REINICIO
 
     # Si ya estamos en mitad del flujo de hoy, continuar respondiendo.

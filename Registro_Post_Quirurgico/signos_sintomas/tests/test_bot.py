@@ -3,6 +3,7 @@
 Extraido de signos_sintomas/tests.py sin cambiar una sola prueba
 (refactor del 10/08/2026)."""
 
+import re
 from datetime import timedelta
 from decimal import Decimal
 from io import StringIO
@@ -570,7 +571,9 @@ class BotAbandonoConversacionTests(TestCase):
 
         respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
 
-        self.assertIn("ayer no pudimos terminar", respuesta)
+        # Hasta el 02/10/2026 decía «ayer no pudimos terminar», aunque la
+        # condición es cualquier día anterior (UX-B11).
+        self.assertIn("la última vez no pudimos terminar", respuesta)
         self.assertEqual(RegistroDiario.objects.count(), 0)
         conv.refresh_from_db()
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_TEMPERATURA)
@@ -587,7 +590,7 @@ class BotAbandonoConversacionTests(TestCase):
         respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, "hola")
 
         self.assertEqual(respuesta, bot.MSG_PREGUNTA_TEMPERATURA)
-        self.assertNotIn("ayer no pudimos terminar", respuesta)
+        self.assertNotIn("no pudimos terminar", respuesta)
 
     def test_despues_de_aviso_flujo_normal_continua(self):
         # Después del reinicio con aviso, el bot espera temperatura.
@@ -1153,4 +1156,115 @@ class BotEntiendeAlPacienteTests(TestCase):
         respuesta = bot.procesar_mensaje(self.WA, 'tengo fiebre')
         self.assertEqual(respuesta, bot.RESP_FIEBRE)
         conv = ConversacionWhatsApp.objects.get()
+        self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_INICIO)
+
+
+class ElBotNoPrometeTests(TestCase):
+    """Ningún mensaje del bot afirma algo que el sistema no hace (loop 02/10/2026).
+
+    **UX-B02 / BE-05.** El bot decía «Te escribiré cuando sea la hora» y «Te
+    escribiremos en tu próximo turno», pero el envío saliente es un stub: nadie
+    le escribe nunca. El paciente esperaba, y el sistema lo acababa anotando
+    como SILENCIO. **UX-B11.** «parece que ayer no pudimos terminar» podía ser
+    de hace una semana. **UX-B10.** Los dos mensajes que mandan a urgencias iban
+    sin tildes. Decisión D26.
+    """
+
+    # La PROMESA del sistema, no la invitación al paciente: «escríbeme» es
+    # legítimo (es el paciente quien escribe); «te escribiré» no lo es.
+    PROMESA = re.compile(
+        r'\b(te|le) (escribire|escribiremos|enviare|enviaremos|recordare|'
+        r'recordaremos|avisare|avisaremos|llamare|llamaremos|contactare|'
+        r'contactaremos|contactara|contactaran)\b'
+    )
+
+    def _mensajes(self):
+        return {
+            nombre: valor for nombre, valor in vars(bot).items()
+            if nombre.startswith(('MSG_', 'RESP_')) and isinstance(valor, str)
+        }
+
+    def test_ningun_mensaje_promete_que_se_le_escribira(self):
+        mensajes = self._mensajes()
+        self.assertGreater(len(mensajes), 20)   # que no pase en vacío
+        for nombre, texto in mensajes.items():
+            with self.subTest(mensaje=nombre):
+                encontrado = self.PROMESA.search(bot._sin_acentos(texto.lower()))
+                self.assertIsNone(
+                    encontrado,
+                    f'{nombre} promete un contacto que ningún código realiza: '
+                    f'{encontrado.group(0) if encontrado else ""!r}',
+                )
+
+    def test_el_patron_si_atrapa_la_promesa_y_deja_pasar_la_invitacion(self):
+        """La otra dirección: el detector no puede ser ciego ni paranoico."""
+        for promesa in ('Te escribiré cuando sea la hora.',
+                        'Te escribiremos en tu proximo turno.'):
+            with self.subTest(texto=promesa):
+                self.assertIsNotNone(self.PROMESA.search(bot._sin_acentos(promesa.lower())))
+        for invitacion in ('Escríbeme cuando quieras.', 'puedes escribirme aquí'):
+            with self.subTest(texto=invitacion):
+                self.assertIsNone(self.PROMESA.search(bot._sin_acentos(invitacion.lower())))
+
+    def test_sin_turno_se_le_dice_cuando_escribir(self):
+        """El sistema es reactivo: se le dice al paciente cuándo escribir él.
+
+        Las horas salen del comando que crea los turnos, no de un literal: si
+        cambian, el mensaje cambia con ellas.
+        """
+        from ..management.commands.crear_checkins_diarios import (
+            HORA_MANANA,
+            HORA_TARDE,
+        )
+        self.assertIn(f'{HORA_MANANA}:00', bot.MSG_SIN_CHECKIN)
+        self.assertIn(f'{HORA_TARDE - 12}:00', bot.MSG_SIN_CHECKIN)
+        self.assertIn('Escríbeme', bot.MSG_SIN_CHECKIN)
+
+    def test_los_cierres_conservan_su_indicacion_clinica(self):
+        """Solo cambia la última línea: la recomendación decidida el 02/07/2026
+        queda intacta. Vigila que este loop no toque más de lo aprobado."""
+        self.assertIn('contactar a tu médico en las próximas', bot.MSG_CIERRE_ALERTA_MEDIA)
+        self.assertIn('No es urgente', bot.MSG_CIERRE_ALERTA_MEDIA)
+        self.assertIn('comunicarte con tu médico o dirigirte', bot.MSG_CIERRE_ALERTA_ALTA)
+        self.assertIn('servicio de urgencias más cercano', bot.MSG_CIERRE_ALERTA_ALTA)
+        for nombre in ('MSG_CIERRE_ALERTA_MEDIA', 'MSG_CIERRE_ALERTA_ALTA'):
+            with self.subTest(mensaje=nombre):
+                self.assertTrue(getattr(bot, nombre).endswith(
+                    'Escríbeme en tu próximo turno para seguir con tu reporte.'))
+
+    def test_los_mensajes_que_mandan_a_urgencias_llevan_tildes(self):
+        """UX-B10: eran los únicos dos sin tildes, y son los más serios."""
+        sin_tilde = re.compile(
+            r'\b(medico|atencion|precaucion|proximas|proximo|cuentale|mas|este)\b')
+        for nombre in ('MSG_CIERRE_ALERTA_MEDIA', 'MSG_CIERRE_ALERTA_ALTA'):
+            with self.subTest(mensaje=nombre):
+                self.assertIsNone(sin_tilde.search(getattr(bot, nombre)))
+
+    def test_el_reinicio_no_dice_que_fue_ayer(self):
+        """UX-B11: la condición es «cualquier día anterior», no «ayer»."""
+        self.assertNotIn('ayer', bot.MSG_ABANDONO_REINICIO.lower())
+
+    def test_abandono_sin_turno_hoy_no_pregunta_lo_que_va_a_ignorar(self):
+        """DB-12 / UX-B07: con un reporte abandonado otro día y SIN turno hoy, el
+        bot decía «¡Empecemos el reporte de hoy!» y preguntaba la temperatura;
+        la respuesta caía después en «no tienes un reporte pendiente». Le hacía
+        una pregunta para ignorarla."""
+        paciente = Paciente.objects.create(
+            medico_responsable=medico_de_pruebas(),
+            nombre_completo='Paciente Sin Turno',
+            telefono_whatsapp='+573009990003',
+            fecha_cirugia=timezone.localdate() - timedelta(days=5),
+            consentimiento_informado=True,
+        )
+        conv = ConversacionWhatsApp.objects.create(
+            paciente=paciente, estado=ConversacionWhatsApp.ESTADO_DOLOR)
+        ConversacionWhatsApp.objects.filter(pk=conv.pk).update(
+            fecha_actualizacion=timezone.now() - timedelta(days=1))
+
+        respuesta = bot.procesar_mensaje('whatsapp:+573009990003', 'hola')
+
+        self.assertNotIn('¿Cuál es tu temperatura', respuesta)
+        self.assertNotIn('Empecemos el reporte de hoy', respuesta)
+        self.assertIn('no tienes un reporte pendiente', respuesta)
+        conv.refresh_from_db()
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_INICIO)
