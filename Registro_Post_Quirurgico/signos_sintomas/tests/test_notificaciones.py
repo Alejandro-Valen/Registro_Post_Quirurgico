@@ -10,6 +10,7 @@ from django.contrib.auth import get_user_model
 from django.db import close_old_connections, transaction
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
+from freezegun import freeze_time
 
 from ..alert_engine import evaluar_registro
 from ..models import (
@@ -99,7 +100,13 @@ class AlertaEmailNotificacionTests(TestCase):
         from django.core.management import CommandError, call_command
 
         alerta = self._crear_alerta_alta()
-        with patch(
+        # TEST-06 (02/10/2026): hasta esta fecha se comprobaba solo que el
+        # reintento quedara «después de ahora», y cualquier backoff positivo
+        # —un minuto, un día— pasaba. Con el reloj congelado, el primero cae
+        # exactamente a los 5 minutos (D6). El segundo de margen deja el
+        # instante por delante de la creación de la fila, que ya está vencida.
+        instante = timezone.now().replace(microsecond=0) + timedelta(seconds=1)
+        with freeze_time(instante), patch(
             'signos_sintomas.notificaciones.send_mail',
             side_effect=TimeoutError('detalle que no debe persistirse'),
         ), self.assertRaises(CommandError):
@@ -109,8 +116,45 @@ class AlertaEmailNotificacionTests(TestCase):
         self.assertEqual(notificacion.estado, NotificacionAlerta.ESTADO_PENDIENTE)
         self.assertEqual(notificacion.intentos, 1)
         self.assertEqual(notificacion.ultimo_error, 'TimeoutError')
-        self.assertGreater(notificacion.proximo_intento, timezone.now())
+        self.assertEqual(
+            notificacion.proximo_intento, instante + timedelta(minutes=5)
+        )
         self.assertNotIn('detalle', notificacion.ultimo_error)
+
+    def test_backoff_sigue_la_escalera_de_d6(self):
+        """TEST-06: 5, 15, 45 y 135 minutos, y desde ahí cada 6 horas (D6).
+
+        Cada reintento se procesa justo cuando vence, con el reloj congelado, y
+        se fija el minuto exacto del siguiente. La cifra no es cosmética: con
+        esta escalera, el tope de 10 intentos son unas 39 horas, que es lo que
+        D6 decidió que tarde un correo de alerta ALTA en declararse FALLIDO.
+        El quinto intento es la frontera del tope: 5·3⁴ = 405 min se recorta a 360.
+        """
+        from unittest.mock import patch
+
+        from ..notificaciones import procesar_notificaciones_pendientes
+
+        alerta = self._crear_alerta_alta()
+        notificacion = NotificacionAlerta.objects.get(alerta=alerta)
+        instante = timezone.now().replace(microsecond=0) + timedelta(seconds=1)
+        NotificacionAlerta.objects.filter(pk=notificacion.pk).update(
+            proximo_intento=instante,
+        )
+
+        with patch(
+            'signos_sintomas.notificaciones._enviar',
+            side_effect=TimeoutError('proveedor caído'),
+        ):
+            for intento, minutos in enumerate([5, 15, 45, 135, 360, 360], start=1):
+                with self.subTest(intento=intento), freeze_time(instante):
+                    procesar_notificaciones_pendientes()
+                    notificacion.refresh_from_db()
+                    self.assertEqual(notificacion.intentos, intento)
+                    self.assertEqual(
+                        notificacion.proximo_intento,
+                        instante + timedelta(minutes=minutos),
+                    )
+                instante = notificacion.proximo_intento
 
     def test_notificacion_se_marca_fallida_tras_agotar_reintentos(self):
         """D6: el correo de alerta ALTA no se reintenta para siempre. Tras 10
