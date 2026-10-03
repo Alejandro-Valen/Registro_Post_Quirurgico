@@ -26,6 +26,24 @@ from ..models import (
 from .soporte import ANCLA_MEDIANOCHE, EspiaDeTareasCronMixin, medico_de_pruebas
 
 
+def correr_cron_con_salida_real(comando):
+    """Corre un cron SIN espiar sus tareas y devuelve todo lo que escribieron.
+
+    `cron_runner` invoca cada tarea con `call_command(nombre)`, sin pasarle un
+    stdout, así que cada comando escribe en el `sys.stdout` que encuentra al
+    crearse. Por eso se redirige `sys.stdout` además de pasar el buffer: sin lo
+    primero, solo se capturarían las líneas del runner y no los resúmenes de
+    las tareas, que son la prueba de que corrieron de verdad.
+    """
+    import contextlib
+    import io
+
+    salida = io.StringIO()
+    with contextlib.redirect_stdout(salida):
+        call_command(comando, stdout=salida, stderr=io.StringIO())
+    return salida.getvalue()
+
+
 class ReintentarEvaluacionesAlertasCommandTests(TestCase):
     def _registro(self, telefono):
         paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
@@ -664,9 +682,29 @@ class CronMatutinoCommandTests(EspiaDeTareasCronMixin, TestCase):
         ])
 
     def test_corre_sin_error_con_bd_vacia(self):
-        from django.core.management import call_command
-        # Con 0 pacientes las tareas deben correr sin lanzar excepción.
-        call_command('cron_matutino', verbosity=0)
+        """Con 0 pacientes, las seis tareas corren DE VERDAD y terminan limpias.
+
+        TEST-08 (02/10/2026): hasta esta fecha no tenía ninguna aserción.
+        Atrapaba una tarea que reventara, pero no una que dejara de hacer su
+        trabajo en silencio: la prueba de orden de arriba espía el `handle` de
+        cada comando, así que no ve qué hace por dentro. Aquí no se espía nada,
+        y cada comando real tiene que dejar su propio resumen, en cero.
+        """
+        salida = correr_cron_con_salida_real('cron_matutino')
+
+        for esperado in (
+            r'desactivar_pacientes_vencidos \d{4}-\d\d-\d\d: 0 paciente\(s\) desactivados\.',
+            r'crear_checkins_diarios \d{4}-\d\d-\d\d: 0 creados, 0 ya existían',
+            r'cerrar_checkins_vencidos \d{4}-\d\d-\d\d: 0 check-ins cerrados',
+            r'enviar_recordatorios \d{4}-\d\d-\d\d: 0 check-ins procesados',
+            r'Evaluaciones procesadas: 0 completadas, 0 con error\.',
+            r'Notificaciones: 0 candidatas, 0 enviadas, 0 con reintento pendiente\.',
+            r'cron_matutino: todas las tareas completadas\.',
+        ):
+            with self.subTest(esperado=esperado):
+                self.assertRegex(salida, esperado)
+        self.assertEqual(CheckInProgramado.objects.count(), 0)
+        self.assertEqual(Alerta.objects.count(), 0)
 
     def test_fallo_de_desactivar_omite_crear_checkins_pero_no_el_resto(self):
         """Dependencia clínica declarada — D14, la excepción a la regla.
@@ -762,9 +800,19 @@ class CronOperativoCommandTests(EspiaDeTareasCronMixin, TestCase):
         ])
 
     def test_corre_sin_error_con_bd_vacia(self):
-        from django.core.management import call_command
+        """Lo mismo que en cron_matutino (TEST-08): las tres tareas reales
+        corren y lo dicen, y no basta con que la corrida no reviente."""
+        salida = correr_cron_con_salida_real('cron_operativo')
 
-        call_command('cron_operativo', verbosity=0)
+        for esperado in (
+            r'cerrar_checkins_vencidos \d{4}-\d\d-\d\d: 0 check-ins cerrados',
+            r'Evaluaciones procesadas: 0 completadas, 0 con error\.',
+            r'Notificaciones: 0 candidatas, 0 enviadas, 0 con reintento pendiente\.',
+            r'cron_operativo: todas las tareas completadas\.',
+        ):
+            with self.subTest(esperado=esperado):
+                self.assertRegex(salida, esperado)
+        self.assertEqual(Alerta.objects.count(), 0)
 
     def test_fallo_de_la_primera_no_impide_entregar_las_alertas(self):
         """Un fallo operativo no puede costar los correos de alerta ALTA — D14.

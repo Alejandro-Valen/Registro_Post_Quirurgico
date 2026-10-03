@@ -298,22 +298,44 @@ class PacienteCedulaTests(TestCase):
         self.assertIn('cedula', ctx.exception.message_dict)
 
     def test_full_clean_con_cedula_en_paciente_nuevo_no_lanza_error(self):
+        """La otra dirección de la anterior: con cédula, un paciente nuevo es válido.
+
+        TEST-08 (02/10/2026): hasta esta fecha no tenía ninguna aserción. La
+        protección existía —una excepción la tumbaba— pero no se veía, y nada
+        comprobaba que el escenario fuera el que el nombre dice: un paciente
+        NUEVO (sin pk) y CON cédula. Si el fixture cambiara, pasaría por otra razón.
+        """
         paciente = Paciente(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Nuevo Con Cedula",
             cedula="999888777",
             telefono_whatsapp="+573001112228",
             fecha_cirugia=timezone.localdate(),
         )
-        paciente.full_clean()  # no debe lanzar
+        self.assertIsNone(paciente.pk)
+        self.assertTrue(paciente.cedula)
+        try:
+            paciente.full_clean()
+        except ValidationError as error:
+            self.fail(f'Un paciente nuevo con cédula no pasa la validación: {error.message_dict}')
 
     def test_full_clean_paciente_existente_sin_cedula_no_lanza_error(self):
-        """Pacientes migrados (ya tienen pk) no se les exige cédula retroactivamente."""
+        """Pacientes migrados (ya tienen pk) no se les exige cédula retroactivamente.
+
+        TEST-08: la misma corrección que la anterior. El escenario —con pk y SIN
+        cédula— se fija antes de validar, para que la prueba no pueda pasar por
+        un fixture que, sin querer, ya trajera una.
+        """
         paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
             nombre_completo="Paciente Legado Existente",
             telefono_whatsapp="+573001112229",
             fecha_cirugia=timezone.localdate(),
         )
-        paciente.full_clean()  # no debe lanzar — ya tiene pk
+        self.assertIsNotNone(paciente.pk)
+        self.assertIsNone(paciente.cedula)
+        try:
+            paciente.full_clean()
+        except ValidationError as error:
+            self.fail(f'Se le exigió cédula a un paciente que ya existía: {error.message_dict}')
 
 class PacienteActivoExigeMedicoTests(TestCase):
     """D12 — todo paciente ACTIVO tiene un médico que puede atenderlo.
