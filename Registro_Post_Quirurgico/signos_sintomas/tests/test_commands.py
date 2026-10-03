@@ -263,6 +263,66 @@ class SchedulerTests(TestCase):
         self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
         self.assertEqual(Alerta.objects.filter(tipo='SILENCIO').count(), 1)
 
+    # --- TEST-07: la frontera exacta de la gracia de 10 horas ---
+    #
+    # Las pruebas de arriba miran 5 h y 11 h, lejos de la frontera: una gracia
+    # de 9 h o de 10,5 h, o un `<` en lugar de `<=`, las dejaba pasar en verde.
+    # Estos pares fijan el valor que cierra y el inmediatamente anterior. La
+    # clase congela el reloj (ANCLA_MEDIANOCHE), así que la resta es exacta.
+
+    def _checkin_con_edad(self, paciente, edad):
+        return CheckInProgramado.objects.create(
+            paciente=paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now() - edad,
+        )
+
+    def test_checkin_con_exactamente_10_horas_se_cierra(self):
+        checkin = self._checkin_con_edad(self._paciente(), timedelta(hours=10))
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
+        self.assertEqual(Alerta.objects.filter(tipo='SILENCIO').count(), 1)
+
+    def test_checkin_un_segundo_antes_de_10_horas_no_se_cierra(self):
+        checkin = self._checkin_con_edad(
+            self._paciente(), timedelta(hours=10) - timedelta(seconds=1))
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_PENDIENTE)
+        self.assertEqual(Alerta.objects.count(), 0)
+
+    def _conversacion_tocada_hace(self, paciente, checkin, edad):
+        conversacion = ConversacionWhatsApp.objects.create(
+            paciente=paciente,
+            checkin_actual=checkin,
+            estado=ConversacionWhatsApp.ESTADO_DOLOR,
+        )
+        ConversacionWhatsApp.objects.filter(pk=conversacion.pk).update(
+            fecha_actualizacion=timezone.now() - edad,
+        )
+
+    def test_conversacion_tocada_hace_exactamente_10_horas_ya_no_protege_el_turno(self):
+        """La misma gracia decide si el paciente «sigue contestando»."""
+        paciente = self._paciente()
+        checkin = self._checkin_con_edad(paciente, timedelta(hours=11))
+        self._conversacion_tocada_hace(paciente, checkin, timedelta(hours=10))
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
+
+    def test_conversacion_tocada_un_segundo_antes_de_10_horas_protege_el_turno(self):
+        paciente = self._paciente()
+        checkin = self._checkin_con_edad(paciente, timedelta(hours=11))
+        self._conversacion_tocada_hace(
+            paciente, checkin, timedelta(hours=10) - timedelta(seconds=1))
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_PENDIENTE)
+        self.assertEqual(Alerta.objects.count(), 0)
+
     def test_silencios_repetidos_actualizan_una_sola_alerta_abierta(self):
         from django.core.management import call_command
 
@@ -1164,6 +1224,28 @@ class DesactivarPacientesVencidosTests(TestCase):
         from django.core.management import call_command
         paciente = self._paciente_con_fecha_registro(
             dias_cirugia=8, dias_en_sistema=5, tel="+573002220009"
+        )
+        call_command('desactivar_pacientes_vencidos', verbosity=0)
+        paciente.refresh_from_db()
+        self.assertTrue(paciente.activo)
+
+    # --- TEST-07: la frontera exacta del ingreso tardío (DIAS_GRACIA_INGRESO = 2) ---
+    #
+    # Las dos de arriba miran 0 y 3 días en el sistema: una gracia de 1 o de 3
+    # días, o un `>` en lugar de `>=`, las dejaba pasar. Este par fija el valor
+    # que desactiva (2) y el inmediatamente anterior (1).
+
+    def test_pod12_con_2_dias_en_el_sistema_se_desactiva(self):
+        paciente = self._paciente_con_fecha_registro(
+            dias_cirugia=12, dias_en_sistema=2, tel="+573002220010"
+        )
+        call_command('desactivar_pacientes_vencidos', verbosity=0)
+        paciente.refresh_from_db()
+        self.assertFalse(paciente.activo)
+
+    def test_pod12_con_1_dia_en_el_sistema_no_se_desactiva(self):
+        paciente = self._paciente_con_fecha_registro(
+            dias_cirugia=12, dias_en_sistema=1, tel="+573002220011"
         )
         call_command('desactivar_pacientes_vencidos', verbosity=0)
         paciente.refresh_from_db()
