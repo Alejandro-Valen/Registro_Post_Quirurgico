@@ -114,9 +114,16 @@ UTC); mínimo de intervalo 5 min. Cambiar el Custom Start Command exige
   placeholders `<...>` pegados literalmente fueron la causa raíz del 403 de
   Twilio y de los login fallidos al Admin (detalle en la bitácora, 06/07/2026).
 - El superusuario en producción se gestiona con el comando **`crear_admin`**
-  (idempotente, desde `DJANGO_SUPERUSER_*`), no con `createsuperuser` (que no
-  actualiza usuarios existentes). El interruptor `RESET_AXES=1` corre
-  `axes_reset` al arranque para desbloquear axes; se quita tras usarlo.
+  (idempotente, desde `DJANGO_SUPERUSER_*`), no con `createsuperuser`. El
+  interruptor `RESET_AXES=1` corre `axes_reset` al arranque para desbloquear
+  axes; se quita tras usarlo.
+- **`crear_admin` ya no reescribe nada en cada arranque** (D27, desde el
+  02/10/2026, gemela de D15). Crea la cuenta si no existe. Si existe y es
+  superusuario, **no toca la contraseña**: para rotarla, se pone
+  `DJANGO_SUPERUSER_RESET=1`, se reinicia y se quita. Si existe y **no** es
+  superusuario, falla sin tocarla, cuando antes la promovía sin preguntar. En
+  el Dockerfile lleva `|| true`, así que el arranque sigue y el log lo dice; en
+  `nixpacks.toml` no lo lleva, y ahí aborta el arranque igual que `crear_medico`.
 
 **Todo el arranque va encadenado con `&&`: si un eslabón falla, no hay error en
 el log — hay contenedor que no arranca.** El `CMD` del Dockerfile es

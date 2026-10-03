@@ -47,6 +47,7 @@
 | [D24](#d24) | Por qué se bloquea el acceso, y a quién | SEC-02 | Cerrar lo no clínico | **Implementada** (09/09/2026) |
 | [D25](#d25) | Una pregunta, un dato; y la duda que arranca el reporte | UX-B03 · BE-04 · UX-B08 | El bot entiende al paciente | **Implementada** (02/10/2026, PR #37) |
 | [D26](#d26) | El bot no le promete al paciente lo que el sistema no hace | UX-B02 · BE-05 · UX-B10 · UX-B11 · DB-12 | El bot no promete | **Implementada** (02/10/2026) |
+| [D27](#d27) | Qué reescribe `crear_admin` en cada arranque | SEC-05 | Comandos de operación | **Implementada** (03/10/2026) |
 
 Los hallazgos 2, 6, 7, 8, 9, 11 y 14 son correcciones técnicas sin decisión de
 producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
@@ -2242,6 +2243,61 @@ escribe. Es el mismo criterio con que la prueba de D4 vigila los umbrales.
 en `MSG_SIN_CHECKIN`, la promesa en los cierres, una tilde, la recomendación
 clínica del cierre ALTA, «ayer», la pregunta sin turno y la hora escrita a
 mano— y los 7 cayeron.
+
+---
+
+## D27 — Qué reescribe `crear_admin` en cada arranque
+
+**Hallazgo:** auditoría de seis frentes del 07/09/2026, SEC-05 · **Loop:**
+Comandos de operación · **Estado:** **Implementada** (03/10/2026). Aprobada por
+el Arquitecto el 02/10/2026 como «igual que D15».
+
+### Problema
+
+`crear_admin` corre en cada arranque del servicio web y, sobre una cuenta que
+ya existía, hacía siempre tres cosas sin condición: `is_staff = True`,
+`is_superuser = True` y `set_password(...)`.
+
+1. **La contraseña del superusuario volvía en cada despliegue a la de la
+   variable de entorno.** La que eligiera el administrador no sobrevivía, y el
+   operador tenía que conocerla para siempre. Es el defecto que D15 corrigió en
+   `crear_medico` el 12/08/2026 y que quedó vivo en su gemelo.
+2. **Cualquier cuenta con ese nombre se convertía en superusuario**, fuera quien
+   fuera: un médico con privilegio mínimo, por ejemplo.
+
+Y una prueba lo exigía: `test_actualiza_password_de_usuario_existente` fijaba la
+reescritura como requisito.
+
+### Decisión
+
+La misma que D15, con su misma variable de escape:
+
+1. **La contraseña se fija solo al crear la cuenta.** Para rotarla:
+   `DJANGO_SUPERUSER_RESET=1`, reiniciar y quitarla.
+2. **Una cuenta existente que no es superusuario no se promueve:** el comando
+   falla sin tocarla. En el Dockerfile lleva `|| true`, así que el arranque sigue
+   y el log lo dice; en `nixpacks.toml` aborta, igual que `crear_medico`.
+3. **El correo solo se escribe si la variable trae valor**, como ya hacía.
+
+### Por qué esta decisión y no otra
+
+**Por qué fallar y no saltarse la cuenta en silencio.** Un nombre de
+superusuario que choca con una cuenta existente es un error de configuración, y
+en una cuenta con acceso a todo lo clínico un error así tiene que verse. Saltarlo
+callado dejaría al operador creyendo que tiene un superusuario que no existe.
+
+**Por qué no se aprovechó para quitar `|| true` del Dockerfile.** Porque cambiaría
+el arranque, y sin producción no hay forma de verificar ese tramo (lo mismo que
+dejó escrito D15). Queda la divergencia con `nixpacks.toml`, ya documentada en
+`docs/trampas_conocidas.md`.
+
+### Verificación
+
+La prueba que exigía el defecto se reemplazó, diciendo por qué. Hay 3 pruebas,
+2 en rojo antes del cambio: la contraseña elegida no sobrevivía, y la cuenta del
+médico se promovía sin error. La del reset pasaba **por la razón equivocada**
+—reescribía siempre—, igual que pasó en D15. 3 reversiones, las 3 atrapadas,
+incluida la que anula el reset.
 
 ## Método de trabajo acordado
 
