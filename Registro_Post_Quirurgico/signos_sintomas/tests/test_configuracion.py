@@ -54,3 +54,42 @@ class CacheProductionConfigTests(TestCase):
             settings_production.SECURE_CSP['script-src'],
         )
         self.assertEqual(settings_production.EMAIL_TIMEOUT, 10)
+
+
+class SesionDelPanelTrasUnLoginRealTests(TestCase):
+    """SEC-15 visto desde fuera: lo que recibe el navegador tras entrar al panel.
+
+    La prueba de configuración (`tests_configuracion.SesionDelPanelCaducaTests`)
+    mira los valores. Esta mira el EFECTO, con un inicio de sesión real por el
+    formulario del Admin: que la cookie sea de sesión, sin fecha (muere al
+    cerrar el navegador), y que el servidor guarde la caducidad a las 8 horas.
+    """
+
+    def test_la_cookie_muere_con_el_navegador_y_el_servidor_corta_a_las_ocho_horas(self):
+        from datetime import timedelta
+
+        from django.conf import settings
+        from django.contrib.auth import get_user_model
+        from django.contrib.sessions.models import Session
+        from django.urls import reverse
+        from django.utils import timezone
+
+        get_user_model().objects.create_user(
+            'medico_sesion', password='clave-de-prueba-larga-1', is_staff=True)
+
+        respuesta = self.client.post(reverse('admin:login'), {
+            'username': 'medico_sesion',
+            'password': 'clave-de-prueba-larga-1',
+            'next': reverse('admin:index'),
+        })
+
+        self.assertEqual(respuesta.status_code, 302)   # entró
+        cookie = respuesta.cookies[settings.SESSION_COOKIE_NAME]
+        self.assertEqual(cookie['max-age'], '')        # sin fecha: cookie de sesión
+        self.assertEqual(cookie['expires'], '')
+        restante = (
+            Session.objects.get(session_key=cookie.value).expire_date
+            - timezone.now()
+        )
+        self.assertLessEqual(restante, timedelta(hours=8))
+        self.assertGreater(restante, timedelta(hours=7, minutes=59))
