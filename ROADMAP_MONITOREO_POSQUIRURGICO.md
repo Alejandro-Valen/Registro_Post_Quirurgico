@@ -12,7 +12,7 @@
 > paciente corregidos (D19-D23) el 08/09/2026**; **el bot deja de invertir el
 > dato de gases y de frenar el reporte por una duda (UX-B03, BE-04) y **de
 > prometerle al paciente un mensaje que nadie envía (UX-B02, D26)**, los dos el
-> 02/10/2026, 464 tests OK)
+> 02/10/2026, 471 tests OK)
 > **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026 —
 > **diez comprobaciones** desde el 09/09/2026 (siete hasta el 07/09; se sumaron
 > el linter `ruff` y `pip-audit`, `check --deploy` recuperó la capacidad de

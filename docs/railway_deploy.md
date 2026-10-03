@@ -104,7 +104,7 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 
 | Variable | Valor / de dónde sale |
 |----------|----------------------|
-| `DJANGO_SETTINGS_MODULE` | `Registro_Post_Quirurgico.settings_production` |
+| `DJANGO_SETTINGS_MODULE` | `Registro_Post_Quirurgico.settings_production`. **En el servicio web, si falta, `wsgi.py` elige producción igual** (SEC-04, desde el 02/10/2026): antes caía a la configuración de desarrollo sin HSTS, sin HTTPS forzado, sin cookies seguras y sin CSP, y sin avisar. **En los servicios cron sigue siendo obligatoria:** arrancan con `manage.py`, que elige la base a propósito para que el desarrollo local no cambie. |
 | `SECRET_KEY` | Clave nueva y larga, **distinta** a la de desarrollo. Generar con `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` |
 | `ALLOWED_HOSTS` | El dominio de Railway, ej. `mi-app.up.railway.app` (sin `https://`). **Ojo:** la variable se llama `ALLOWED_HOSTS`, no `DJANGO_ALLOWED_HOSTS`. |
 | `CSRF_TRUSTED_ORIGINS` | El mismo dominio **con** esquema: `https://mi-app.up.railway.app`. **Obligatoria: si falta o queda vacía, el contenedor no arranca.** Vacía, el POST del login del médico devolvía 403 sin explicación. |

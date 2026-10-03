@@ -125,6 +125,21 @@ AXES_LOCKOUT_PARAMETERS = [['username', 'ip_address']]
 # circular al cargar la configuración.
 AXES_CLIENT_IP_CALLABLE = 'home.ip_cliente._get_client_ip'
 
+# --- SEC-15 (auditoría del 07/09/2026) — cuánto vive la sesión del panel -----
+#
+# Decisión de León del 02/10/2026: 8 horas, un turno de médico, y se cierra al
+# cerrar el navegador. Hasta entonces regía el valor por defecto de Django: 14
+# días, con una cookie que sobrevivía al navegador. En un equipo compartido de
+# una clínica eso era el panel, con los datos de los pacientes, abierto dos
+# semanas para quien se sentara después.
+#
+# Las 8 horas cuentan desde el inicio de sesión, NO desde el último clic: la
+# caducidad por inactividad es otra decisión, con otro coste para el médico, y
+# sigue abierta. Va en la base y no solo en producción para que el desarrollo
+# local se comporte igual que lo que verá el médico.
+SESSION_COOKIE_AGE = 8 * 60 * 60
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
 ROOT_URLCONF = 'Registro_Post_Quirurgico.urls'
 
 TEMPLATES = [
