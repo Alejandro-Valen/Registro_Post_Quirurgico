@@ -16,9 +16,22 @@
   resize();
   window.addEventListener('resize', resize);
 
-  function color() {
+  function leerColor() {
     return getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#0E5A54';
   }
+
+  // UX-L06 (02/10/2026): el color se leía con getComputedStyle en CADA
+  // fotograma, unas 60 veces por segundo, y cada lectura obliga al navegador a
+  // resolver los estilos de la página. El color solo cambia si cambia el tema:
+  // se lee una vez y se vuelve a leer únicamente entonces.
+  var trazo = leerColor();
+  var temaOscuro = window.matchMedia('(prefers-color-scheme: dark)');
+  function alCambiarTema() {
+    trazo = leerColor();
+    if (reduce) draw(0);   // sin animación no hay otro fotograma que lo repinte
+  }
+  if (temaOscuro.addEventListener) temaOscuro.addEventListener('change', alCambiarTema);
+  else if (temaOscuro.addListener) temaOscuro.addListener(alCambiarTema);
 
   // Forma de un latido tipo ECG, repetida horizontalmente.
   function beatY(x, phase) {
@@ -42,7 +55,7 @@
       var y = beatY(x, phase);
       if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
-    ctx.strokeStyle = color();
+    ctx.strokeStyle = trazo;
     ctx.globalAlpha = 0.7;
     ctx.lineWidth = 2;
     ctx.lineJoin = 'round';

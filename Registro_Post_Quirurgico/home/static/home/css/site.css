@@ -321,11 +321,22 @@ form.contacto { display: grid; gap: 15px; }
   .grid-3, .steps, .vitals { grid-template-columns: 1fr 1fr; }
   .steps::before { display: none; }
   .doc-photo { max-width: 260px; }
-  .navlinks a:not(.cta) { display: none; }
+  /* UX-L01 (02/10/2026): aquí se escondían los cuatro enlaces del menú
+     (`.navlinks a:not(.cta) { display: none }`) y en el móvil solo quedaba
+     «Acceso médico», que lleva al login del Admin: quien abría la página en
+     el teléfono no podía llegar a Contacto. Ahora el menú baja a su propia
+     fila bajo la marca y los enlaces se acomodan en dos filas si no caben en
+     una. Solo CSS, sin JavaScript. */
+  .nav { flex-wrap: wrap; row-gap: 8px; }
+  .navlinks { width: 100%; flex-wrap: wrap; gap: 2px 4px; }
+  .navlinks a { padding: 6px 10px; font-size: 14.5px; }
 }
 @media (max-width: 560px) {
   .grid-3, .vitals { grid-template-columns: 1fr; }
   .hero { padding-top: 44px; }
+  /* Con el menú en dos filas, una cabecera fija ocuparía casi un cuarto de
+     la pantalla de un teléfono: aquí deja de ser fija y sube con la página. */
+  header.top { position: static; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
