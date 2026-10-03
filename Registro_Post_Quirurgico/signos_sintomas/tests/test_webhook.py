@@ -25,6 +25,12 @@ from ..models import (
 )
 from .soporte import medico_de_pruebas
 
+# Límite de mensajes por número y por hora, decidido en D2 (corrección
+# post-auditoría): un cuestionario completo son ~11 mensajes y un paciente
+# confundido no pasa de ~40. Se escribe aquí a propósito y NO se importa de
+# `views`: una prueba que lee la constante que vigila cambia con ella (TEST-10).
+LIMITE_MENSAJES_HORA_D2 = 60
+
 
 class WebhookWhatsAppTests(TestCase):
     def setUp(self):
@@ -316,12 +322,20 @@ class WebhookWhatsAppTests(TestCase):
         el SID, de modo que un mensaje limitado no debe dejar fila alguna. La
         aserción sobre la fila se invirtió para reflejarlo; las de la respuesta
         al paciente no cambian.
+
+        TEST-10 (02/10/2026): hasta esta fecha la prueba importaba
+        `_LIMITE_MENSAJES_HORA` de producción y ponía el contador en ese valor.
+        Si alguien cambiaba el límite —a 6 o a 6000—, la prueba cambiaba con él
+        y seguía en verde. Ahora el límite decidido en D2 (60) está escrito
+        aquí: el mensaje 61 de la hora se limita, y su pareja de abajo fija que
+        el 60 todavía se procesa.
         """
-        from signos_sintomas.views import _LIMITE_MENSAJES_HORA, _MSG_RATE_LIMIT
+        from signos_sintomas.views import _MSG_RATE_LIMIT
         telefono = 'whatsapp:+573005556677'
-        # Forzar el contador de cache directamente al límite
+        # El contador ya va en 60: este es el mensaje 61 de la hora.
         clave = 'rl_wh_{}'.format(telefono.replace('+', '').replace(':', ''))
-        cache.set(clave, _LIMITE_MENSAJES_HORA, 3600)
+        cache.set(clave, LIMITE_MENSAJES_HORA_D2, 3600)
+        self.addCleanup(cache.delete, clave)
 
         respuesta = self.client.post(
             self.url,
@@ -339,6 +353,39 @@ class WebhookWhatsAppTests(TestCase):
                 message_sid='SMratelimit0001',
             ).exists()
         )
+
+    @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
+    def test_el_mensaje_60_de_la_hora_todavia_se_procesa(self):
+        """TEST-10: la otra mitad del par de frontera.
+
+        Un límite de 59, o un `>=` donde va `>`, cortarían al paciente un
+        mensaje antes de lo decidido en D2. Con la prueba de arriba sola, eso
+        pasaba en verde.
+        """
+        from unittest.mock import patch
+
+        telefono = 'whatsapp:+573005556688'
+        # El contador va en 59: este es el mensaje 60 de la hora.
+        clave = 'rl_wh_{}'.format(telefono.replace('+', '').replace(':', ''))
+        cache.set(clave, LIMITE_MENSAJES_HORA_D2 - 1, 3600)
+        self.addCleanup(cache.delete, clave)
+
+        with patch(
+            'signos_sintomas.views.procesar_mensaje',
+            return_value='respuesta del bot',
+        ) as procesar:
+            respuesta = self.client.post(
+                self.url,
+                {
+                    'From': telefono,
+                    'Body': 'hola',
+                    'MessageSid': 'SMratelimit0060',
+                },
+            )
+
+        self.assertEqual(respuesta.status_code, 200)
+        procesar.assert_called_once()
+        self.assertIn(b'respuesta del bot', respuesta.content)
 
     @override_settings(TWILIO_VALIDATE_SIGNATURE=False)
     def test_webhook_falla_abierto_si_el_cache_no_responde(self):
