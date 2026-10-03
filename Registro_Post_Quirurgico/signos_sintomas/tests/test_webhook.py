@@ -426,7 +426,7 @@ class WebhookFlujoCompletoTests(TestCase):
     def test_recorrido_completo_por_webhook_crea_registro_alerta_y_outbox(self):
         respuestas = [
             'hola', '38.5', '3', 'sí', '1', 'normal',
-            'sí, 0', 'nada', '78', '16', 'sí',
+            'sí', '0', 'nada', '78', '16', 'sí',
         ]
 
         ultima_respuesta = None
@@ -532,7 +532,7 @@ class WebhookCargaTests(TransactionTestCase):
         barrera = Barrier(self.PACIENTES)
         respuestas = [
             'hola', '37.0', '3', 'sí', '1', 'normal',
-            'sí, 0', 'nada', '78', '16', 'sí',
+            'sí', '0', 'nada', '78', '16', 'sí',
         ]
         for indice in range(self.PACIENTES):
             telefono = f'+5730077{indice:05d}'

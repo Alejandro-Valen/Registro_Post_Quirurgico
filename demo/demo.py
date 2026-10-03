@@ -138,7 +138,7 @@ def escenario_normal():
               'Paciente en el día 5. Todo dentro de lo esperado.')
     p = entorno.crear_paciente('Ana Restrepo', '+573001110001', 5)
     entorno.abrir_turno(p)
-    for m in ['hola', '36.8', '2', 'no', 'si, 0', 'nada', '76', '16', 'si']:
+    for m in ['hola', '36.8', '2', 'no', 'si', '0', 'nada', '76', '16', 'si']:
         turno_del_paciente(p, m, mostrar_panel=False)
     panel(p)
     escribir()
@@ -168,7 +168,8 @@ def escenario_fuga():
 
     turno_del_paciente(p, '5', mostrar_panel=False)
     turno_del_paciente(p, 'mucho', mostrar_panel=False)
-    turno_del_paciente(p, 'no, 3', mostrar_panel=False)
+    turno_del_paciente(p, 'no', mostrar_panel=False)
+    turno_del_paciente(p, '3', mostrar_panel=False)
     turno_del_paciente(p, 'mucho', mostrar_panel=False)
     turno_del_paciente(p, '118', mostrar_panel=False)
     turno_del_paciente(p, '20', mostrar_panel=False)
@@ -230,7 +231,7 @@ def escenario_auxilio():
     entorno.abrir_turno(p)
     for m in ['hola', '37.2', '4', 'no']:
         turno_del_paciente(p, m, mostrar_panel=False)
-    escribir(f'{GRIS_OSC}  ── Toca la pregunta de gases y náuseas. Pero el'
+    escribir(f'{GRIS_OSC}  ── Toca la pregunta de gases. Pero el'
              f' paciente escribe otra cosa.{RESET}')
     escribir()
     pausa(1.2)

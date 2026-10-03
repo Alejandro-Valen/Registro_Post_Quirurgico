@@ -199,7 +199,12 @@ checkin_actual            OneToOneField(CheckInProgramado, SET_NULL, null=True,
 estado                     CharField choices=[INICIO, ESPERANDO_TEMPERATURA,
                            ESPERANDO_DOLOR, ESPERANDO_TIENE_DRENAJE,
                            ESPERANDO_ASPECTO_DRENAJE,
-                           ESPERANDO_CANTIDAD_DRENAJE, ESPERANDO_GASES_NAUSEAS,
+                           ESPERANDO_CANTIDAD_DRENAJE, ESPERANDO_GASES,
+                           ESPERANDO_NAUSEAS,
+                           # Migración 0031 (UX-B03, 02/10/2026): eran un solo
+                           # ESPERANDO_GASES_NAUSEAS que pedía los dos datos en
+                           # un mensaje. Las conversaciones en el estado viejo
+                           # pasan a ESPERANDO_GASES; el reverso las devuelve.
                            ESPERANDO_HINCHAZON, ESPERANDO_FRECUENCIA_CARDIACA,
                            ESPERANDO_FRECUENCIA_RESPIRATORIA,
                            ESPERANDO_TOLERANCIA_LIQUIDOS, COMPLETADO]

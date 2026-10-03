@@ -21,7 +21,7 @@ Esto permite testear el bot completo sin mockear peticiones web.
 > cada sesión y ya lo hizo una vez (decía 69 con la suite en 319). La cifra
 > vigente sale de `python manage.py test --noinput`.
 
-**Máquina de estados (10 preguntas):**
+**Máquina de estados (11 preguntas; 9 si el paciente no tiene drenaje):**
 ```
 [Palabra de auxilio — D21, se mira ANTES que el estado]
   Si el mensaje contiene ayuda / auxilio / socorro / emergencia (palabra suelta,
@@ -30,6 +30,9 @@ Esto permite testear el bot completo sin mockear peticiones web.
       alerta AUXILIO / ALTA para el médico.
 [Guard de consentimiento informado — Bloque 7]
   Si paciente.consentimiento_informado es False: mensaje neutro, no entra a INICIO.
+[Duda de la FAQ fuera del cuestionario — BE-04 / UX-B08]
+  Con un turno pendiente: respuesta de la FAQ + MSG_ARRANQUE_TRAS_DUDA, y la
+  conversación pasa a ESPERANDO_TEMPERATURA. Sin turno pendiente: solo la FAQ.
 INICIO
   → ESPERANDO_TEMPERATURA       "¿Cuál es tu temperatura? ej: 37.5"
                                 admite "saltar" (D20) → temperatura = null
@@ -38,7 +41,10 @@ INICIO
   → ESPERANDO_TIENE_DRENAJE     "¿Tienes drenaje activo? sí/no"
   → ESPERANDO_ASPECTO_DRENAJE   menú 1-5 en lenguaje no médico — se OMITE si tiene_drenaje=False
   → ESPERANDO_CANTIDAD_DRENAJE  poco/normal/mucho (+ ml opcional) — se OMITE si tiene_drenaje=False
-  → ESPERANDO_GASES_NAUSEAS     "¿pasaste gases? (sí/no), ¿náuseas? (número)" en un solo mensaje
+  → ESPERANDO_GASES             "¿Has podido pasar gases o ir al baño? sí/no" (pregunta 6)
+                                un mensaje con «sí» Y «no» se repregunta (UX-B03)
+  → ESPERANDO_NAUSEAS           "¿Cuántas veces náuseas o vómito?" número, 0-20 (pregunta 7)
+                                acepta «ninguna», «nada», «no», «cero» como 0
   → ESPERANDO_HINCHAZON         "¿cómo siente la hinchazón del abdomen? nada/algo/mucho"
   → ESPERANDO_FRECUENCIA_CARDIACA "¿cuál es tu frecuencia cardíaca? (lpm)"
   → ESPERANDO_FRECUENCIA_RESPIRATORIA "¿cuál es tu frecuencia respiratoria? (rpm)"
@@ -53,6 +59,26 @@ pregunta 2. No es cosmético: el parser rechaza lo ambiguo (`379`, `37 9`,
 `375`), pero **no puede detectar un dedazo válido**. Quien quiso escribir 37.5
 y escribió 38.5 pasa todos los filtros, porque es una temperatura posible. El
 eco es lo único que se lo enseña.
+
+**Una pregunta, un dato (UX-B03, 02/10/2026).** Hasta esa fecha la pregunta 6
+pedía gases y náuseas en el mismo mensaje, y el parser buscaba un «no» en
+cualquier parte: *«sí, no tuve náuseas: 0»* —el paciente SÍ pasó gases— se
+guardaba como **sin gases** y alimentaba la Regla 3 (íleo) con un hecho falso.
+Ahora son las preguntas 6 y 7. Y como el paciente puede seguir contestando las
+dos cosas por costumbre, un mensaje a la pregunta de gases que trae un «sí» y un
+«no» **se repregunta: el bot nunca elige uno de los dos.** La migración 0031 lleva
+a la pregunta de gases cualquier conversación que estuviera en el estado viejo.
+
+**La duda no deja el reporte sin empezar (BE-04 / UX-B08, 02/10/2026).** La FAQ
+se consultaba antes que el turno pendiente y devolvía su respuesta sola: el
+paciente que escribía *«tengo fiebre»* recibía la respuesta enlatada, el
+cuestionario no arrancaba y, si no volvía a escribir, su turno acababa en
+SILENCIO en vez de pasar por la Regla 1. Ahora, con un turno pendiente, la
+respuesta de la FAQ va seguida de *«Aprovechemos para hacer tu reporte de
+hoy»*, el aviso de AYUDA y la pregunta 1. El texto de las respuestas no cambia
+(sigue pendiente de validación médica), y **una palabra de la FAQ no crea
+ninguna alerta**: sería clasificar síntomas desde el chat, el mismo criterio
+que dejó `urgencias` fuera de la palabra de auxilio (D21).
 
 **Reglas de diseño no negociables:**
 1. **El paciente nunca ve el tipo de alerta ni los valores que la
