@@ -720,6 +720,19 @@ class FormularioDeContactoTests(TestCase):
                 etiqueta = html[html.rindex('<', 0, inicio):html.index('>', inicio)]
                 self.assertIn(f'maxlength="{maximo}"', etiqueta)
 
+    # --- UX-L05: los avisos se anuncian ---
+
+    def test_el_exito_se_anuncia_como_estado(self):
+        html = self._enviar().content.decode()
+        aviso = _parrafo_que_contiene(html, 'Tu mensaje fue enviado correctamente')
+        self.assertIn('role="status"', _apertura(aviso))
+
+    def test_el_rate_limit_se_anuncia_como_alerta(self):
+        with self._con_cache_caido():
+            html = self._enviar().content.decode()
+        aviso = _parrafo_que_contiene(html, 'Has enviado demasiados mensajes')
+        self.assertIn('role="alert"', _apertura(aviso))
+
 
 class MenuDelMovilTests(TestCase):
     """UX-L01 — en el móvil desaparecían los cuatro enlaces del menú.

@@ -62,14 +62,16 @@
             <form class="contacto" method="POST" action="{% url 'contacto' %}">
                 {% csrf_token %}
 
+                {# UX-L05 — los avisos se anuncian a quien usa lector de pantalla: #}
+                {# el éxito como estado, los errores como alerta.                 #}
                 {% if mensaje_enviado %}
-                    <p class="notice-ok">
+                    <p class="notice-ok" role="status">
                         Tu mensaje fue enviado correctamente. El equipo médico revisará la solicitud.
                     </p>
                 {% endif %}
 
                 {% if error_rate_limit %}
-                    <p class="notice-err">
+                    <p class="notice-err" role="alert">
                         Has enviado demasiados mensajes en poco tiempo. Espera un momento antes de intentarlo de nuevo.
                     </p>
                 {% endif %}
