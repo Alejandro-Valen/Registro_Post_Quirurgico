@@ -45,6 +45,8 @@
 | [D22](#d22) | Revocar el consentimiento detiene la generación de datos | — | Bugs del paciente | **Decidida** (08/09/2026) |
 | [D23](#d23) | Autorización de habeas data en el formulario público | SEC-03 | Bugs del paciente | **Decidida** (08/09/2026), parte bloqueada |
 | [D24](#d24) | Por qué se bloquea el acceso, y a quién | SEC-02 | Cerrar lo no clínico | **Implementada** (09/09/2026) |
+| [D25](#d25) | Una pregunta, un dato; y la duda que arranca el reporte | UX-B03 · BE-04 · UX-B08 | El bot entiende al paciente | **Implementada** (02/10/2026, PR #37) |
+| [D26](#d26) | El bot no le promete al paciente lo que el sistema no hace | UX-B02 · BE-05 · UX-B10 · UX-B11 · DB-12 | El bot no promete | **Implementada** (02/10/2026) |
 
 Los hallazgos 2, 6, 7, 8, 9, 11 y 14 son correcciones técnicas sin decisión de
 producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
@@ -2105,6 +2107,141 @@ las dos por el mismo defecto que persigue la ficha D16: una prueba leía el
 propio ajuste que debía denunciar (`range(AXES_FAILURE_LIMIT)`, que se
 adaptaba al sabotaje), y otra comparaba dos implementaciones en el único
 escenario en el que coinciden por casualidad. Corregidas.
+
+---
+
+## D25 — Una pregunta, un dato; y la duda que arranca el reporte
+
+**Hallazgo:** auditoría de seis frentes del 07/09/2026, UX-B03, BE-04 y UX-B08 ·
+**Loop:** El bot entiende al paciente · **Estado:** **Implementada**
+(02/10/2026, PR #37). Ficha escrita después del merge, a petición del
+Arquitecto: la decisión se tomó y aprobó **antes** del código, en la nota del
+loop, y aquí queda para quien revise el repositorio sin acceso a ella.
+
+### Problema
+
+Reproducidos ejecutando el código el 02/10/2026:
+
+```
+_parse_gases_nauseas("si, no tuve nauseas: 0")  ->  (False, 0)   # gases = NO
+_responder_duda("tengo fiebre")                  ->  RESP_FIEBRE  # y el reporte no arranca
+```
+
+1. **UX-B03.** La pregunta 6 pedía dos datos en un mensaje, y el parser buscaba
+   un «no» en cualquier parte. El paciente que **sí** pasó gases quedaba
+   registrado sin gases, y eso alimentaba la Regla 3 (íleo) con un hecho falso.
+2. **BE-04 / UX-B08.** La FAQ se consultaba antes que el turno pendiente y
+   devolvía su respuesta sola. Justo el paciente con un síntoma —«tengo
+   fiebre», «tengo mucho dolor»— se quedaba sin reporte; si no volvía a
+   escribir, su turno acababa en SILENCIO en vez de pasar por la Regla 1.
+
+Los dos fallan en la misma dirección: **el paciente con un síntoma real es el
+que peor queda registrado.**
+
+### Decisión
+
+1. **Gases y náuseas son dos preguntas** (la 6 y la 7). Un mensaje a la
+   pregunta de gases que trae un «sí» **y** un «no» se repregunta: el bot
+   **nunca elige uno de los dos**. La migración 0031 parte el estado de la
+   conversación, con un reverso real.
+2. **Con un turno pendiente, la duda se contesta y el reporte arranca en el
+   mismo mensaje**, con el aviso de AYUDA (D21) y la pregunta 1. Sin turno, nada
+   cambia. El texto de la FAQ no se toca (D4), y una palabra de la FAQ **no crea
+   ninguna alerta**.
+
+### Por qué esta decisión y no otra
+
+**Por qué partir la pregunta y no endurecer el parser.** Un parser más estricto
+arregla la frase del hallazgo, pero «no tuve náuseas, sí pasé gases» seguiría
+invertida: depende de que la gente escriba con formato, y desde el teclado de un
+celular no lo hace. Partir la pregunta quita la ambigüedad de raíz, a cambio de
+un mensaje más. Es el mismo criterio que D19: **un mensaje extra cuesta menos que
+un dato clínico equivocado.**
+
+**Por qué arrancar el reporte y no preguntar «¿quieres reportar?».** Ese paso
+extra es exactamente donde se pierde el paciente con síntomas. E ignorar la duda
+para arrancar el reporte lo dejaría sin respuesta a lo que preguntó.
+
+**Por qué la palabra de la FAQ no alerta.** Convertir «fiebre» escrito en el
+chat en una alerta sería clasificar síntomas desde el texto libre, que es lo que
+el bot promete no hacer. Es el razonamiento que dejó `urgencias` fuera de la
+palabra de auxilio (D21). La fiebre le llega al médico por donde debe: por el
+reporte, que es lo que esta decisión deja de bloquear.
+
+### Verificación
+
+13 pruebas nuevas, en rojo antes del arreglo. Se revirtió el arreglo de 8
+maneras —el «no» que vuelve a ganar, la ambigüedad a favor del «sí», la FAQ
+antes del turno, el reporte sin la respuesta, el arranque sin AYUDA, la duda que
+arrancaría sin turno, el techo de náuseas y el reverso de la migración como
+`noop`— y las 8 cayeron.
+
+---
+
+## D26 — El bot no le promete al paciente lo que el sistema no hace
+
+**Hallazgo:** auditoría de seis frentes del 07/09/2026, UX-B02 y BE-05 (más
+UX-B10, UX-B11 y DB-12 / UX-B07, que viven en las mismas líneas) · **Loop:** El
+bot no promete · **Estado:** **Implementada** (02/10/2026).
+
+### Problema
+
+El bot decía *«Te escribiré cuando sea la hora»* (`MSG_SIN_CHECKIN`) y cerraba
+los reportes MEDIA y ALTA con *«Te escribiremos en tu próximo turno»*. El envío
+saliente es un stub (`enviar_recordatorios`): **nadie le escribe nunca**. El
+paciente esperaba, y el sistema terminaba anotando su silencio como SILENCIO:
+le reprochaba haber callado cuando el propio bot le había pedido esperar.
+
+En las mismas líneas había tres fallos más del mismo tipo:
+
+- **UX-B11.** *«parece que ayer no pudimos terminar»* cuando la condición es
+  cualquier día anterior.
+- **DB-12 / UX-B07.** Con un reporte abandonado y **sin turno hoy**, el bot
+  decía *«¡Empecemos el reporte de hoy!»*, preguntaba la temperatura y después
+  ignoraba la respuesta.
+- **UX-B10.** Los dos mensajes que mandan al paciente a urgencias eran los
+  únicos del bot sin tildes.
+
+### Decisión
+
+1. **El bot dice la verdad sobre quién escribe.** En vez de la promesa:
+   *«Escríbeme cuando quieras hacer tu reporte: el de la mañana desde las 7:00 y
+   el de la tarde desde las 2:00.»* Las horas salen de
+   `crear_checkins_diarios.HORA_MANANA` y `HORA_TARDE`, no de un literal.
+2. **Los cierres MEDIA y ALTA cambian solo en su última línea** —*«Escríbeme en
+   tu próximo turno para seguir con tu reporte»*— y recuperan las tildes. **La
+   recomendación clínica, decidida el 02/07/2026, queda intacta**, y una prueba
+   la fija.
+3. **«ayer» pasa a «la última vez».** Y si no hay turno hoy, el aviso de
+   abandono va seguido de la verdad —hoy no hay reporte— en vez de una pregunta
+   que se iba a ignorar.
+4. **El envío saliente por Twilio no se implementa.** Sigue diferido: necesita
+   producción y Twilio, y hoy no existen.
+
+### Por qué esta decisión y no otra
+
+**Por qué decir la hora y no solo «escríbeme».** Sin hora, el paciente no sabe
+cuándo escribir y el silencio sigue igual. Con la hora, el sistema reactivo
+funciona como de verdad funciona.
+
+**Una precisión que no es una mentira.** El bot no bloquea por hora (regla 6 de
+`docs/bot_whatsapp.md`): el turno de la tarde se puede responder antes de las
+2:00 si ya está creado. El mensaje dice desde cuándo **conviene** escribir para
+cada turno, que son las horas programadas, y no afirma que antes esté cerrado.
+
+**Por qué una prueba sobre la promesa y no sobre una frase.** La prueba recorre
+**todos** los `MSG_*` y `RESP_*` del bot y falla si alguno promete que el
+sistema le escribirá, le avisará, le llamará o le contactará. Una redacción
+futura que vuelva a prometer cae, aunque use otras palabras de esa familia. Y
+deja pasar la invitación —«escríbeme»—, que es legítima: es el paciente quien
+escribe. Es el mismo criterio con que la prueba de D4 vigila los umbrales.
+
+### Verificación
+
+7 pruebas nuevas, en rojo antes del cambio. Se revirtió cada cambio —la promesa
+en `MSG_SIN_CHECKIN`, la promesa en los cierres, una tilde, la recomendación
+clínica del cierre ALTA, «ayer», la pregunta sin turno y la hora escrita a
+mano— y los 7 cayeron.
 
 ## Método de trabajo acordado
 

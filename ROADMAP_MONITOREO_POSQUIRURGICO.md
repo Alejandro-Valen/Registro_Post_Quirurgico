@@ -10,8 +10,9 @@
 > el 10/08/2026** y **D15 · `crear_medico` el 12/08/2026**; **umbrales
 > anclados con pruebas de frontera el 08/09/2026** y **los bugs que tocan al
 > paciente corregidos (D19-D23) el 08/09/2026**; **el bot deja de invertir el
-> dato de gases y de frenar el reporte por una duda (UX-B03, BE-04) el
-> 02/10/2026**, 433 tests OK)
+> dato de gases y de frenar el reporte por una duda (UX-B03, BE-04) y **de
+> prometerle al paciente un mensaje que nadie envía (UX-B02, D26)**, los dos el
+> 02/10/2026, 440 tests OK)
 > **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026 —
 > **diez comprobaciones** desde el 09/09/2026 (siete hasta el 07/09; se sumaron
 > el linter `ruff` y `pip-audit`, `check --deploy` recuperó la capacidad de
