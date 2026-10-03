@@ -62,26 +62,46 @@
             <form class="contacto" method="POST" action="{% url 'contacto' %}">
                 {% csrf_token %}
 
+                {# UX-L05 — los avisos se anuncian a quien usa lector de pantalla: #}
+                {# el éxito como estado, los errores como alerta.                 #}
                 {% if mensaje_enviado %}
-                    <p class="notice-ok">
+                    <p class="notice-ok" role="status">
                         Tu mensaje fue enviado correctamente. El equipo médico revisará la solicitud.
                     </p>
                 {% endif %}
 
                 {% if error_rate_limit %}
-                    <p class="notice-err">
+                    <p class="notice-err" role="alert">
                         Has enviado demasiados mensajes en poco tiempo. Espera un momento antes de intentarlo de nuevo.
                     </p>
                 {% endif %}
 
+                {# UX-L02 — un campo con solo espacios ya no se rechaza en silencio. #}
+                {% if aviso_campos_faltantes %}
+                    <p class="notice-err" role="alert">
+                        Falta completar {{ aviso_campos_faltantes }}.
+                    </p>
+                {% endif %}
+
+                {# UX-L04 — lo que no cabe no se recorta: se dice cuánto sobra. #}
+                {% for campo in campos_largos %}
+                    <p class="notice-err" role="alert">
+                        {{ campo.visible|capfirst }} es demasiado largo: tiene {{ campo.largo }}
+                        caracteres y el máximo es {{ campo.maximo }}. Acórtalo y vuelve a enviarlo.
+                    </p>
+                {% endfor %}
+
+                {# UX-L03 — un error no borra lo escrito. `valores` vuelve con el  #}
+                {# autoescape de Django: lo escribe cualquiera desde internet, y   #}
+                {# aquí no puede haber nunca un |safe.                             #}
                 <div class="field">
                     <label for="nombre">Nombre completo</label>
-                    <input type="text" id="nombre" name="nombre" placeholder="Escribe tu nombre…" autocomplete="name" required>
+                    <input type="text" id="nombre" name="nombre" placeholder="Escribe tu nombre…" autocomplete="name" maxlength="{{ maximos.nombre }}" value="{{ valores.nombre|default:'' }}" required>
                 </div>
 
                 <div class="field">
                     <label for="telefono">Teléfono</label>
-                    <input type="tel" id="telefono" name="telefono" placeholder="+57 300 000 0000" autocomplete="tel" inputmode="tel" required>
+                    <input type="tel" id="telefono" name="telefono" placeholder="+57 300 000 0000" autocomplete="tel" inputmode="tel" maxlength="{{ maximos.telefono }}" value="{{ valores.telefono|default:'' }}" required>
                 </div>
 
                 {% if error_autorizacion %}
@@ -99,7 +119,7 @@
                     {# estado de salud. Recoger con permiso es legal; recoger     #}
                     {# menos es mejor, y este canal no tiene ni el control de     #}
                     {# acceso ni la retención del resto del sistema.              #}
-                    <textarea id="mensaje" name="mensaje" placeholder="Por ejemplo: quiero información sobre el programa de seguimiento" required></textarea>
+                    <textarea id="mensaje" name="mensaje" placeholder="Por ejemplo: quiero información sobre el programa de seguimiento" maxlength="{{ maximos.mensaje }}" required>{{ valores.mensaje|default:'' }}</textarea>
                     <p class="ayuda-campo">
                         No escribas aquí síntomas ni datos clínicos: este no es un
                         canal de atención médica. Si tienes una urgencia, acude a
