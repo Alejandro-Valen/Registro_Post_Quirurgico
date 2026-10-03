@@ -71,7 +71,7 @@ def ejecutar_tareas(comando, etiqueta, tareas):
         comando.stdout.write(f'--- {etiqueta}: {tarea.nombre} ---')
         try:
             call_command(tarea.nombre)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  (D14: el fallo de una tarea no detiene a las demás; se registra abajo sin el mensaje, SEC-10)
             # Se captura Exception, no BaseException: una interrupción del
             # proceso (Ctrl-C, SystemExit) debe seguir cortando la corrida.
             fallidas.append(tarea)

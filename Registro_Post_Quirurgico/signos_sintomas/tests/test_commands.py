@@ -870,7 +870,6 @@ class CronSinDatosDelPacienteEnLaSalidaTests(TestCase):
             if nombre == 'cerrar_checkins_vencidos':
                 raise ValueError(
                     f'llave duplicada: Key (cedula)=({self.CEDULA}) already exists')
-            return None
 
         salida, errores = io.StringIO(), io.StringIO()
         with patch('signos_sintomas.cron_runner.call_command', side_effect=falla_cerrar), \
