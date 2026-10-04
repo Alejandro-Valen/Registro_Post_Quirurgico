@@ -5,10 +5,12 @@ Envía (o registra como pendiente de envío) el mensaje de inicio del
 check-in diario a cada paciente con CheckInProgramado PENDIENTE cuya
 hora_programada ya pasó.
 
-FASE 4 (Sprint 4): este command loguea el intento pero no envía nada
-por WhatsApp — la integración Twilio saliente se implementa en Sprint 5
-(FASE 4 técnica). Para cada check-in pendiente, el médico puede igualmente
-usar el dashboard para ver quién no ha respondido.
+Es un STUB: loguea el intento pero no envía nada por WhatsApp. La
+integración Twilio saliente está diferida sin fecha —el Sprint 5 cerró sin
+ella— y necesita WhatsApp Business API, que es requisito del piloto real
+(ver ROADMAP, «Requisitos para un PILOTO REAL»). Mientras tanto el sistema
+es reactivo: el paciente escribe primero, y el médico ve en el panel quién
+no ha respondido.
 
 Idempotente: solo procesa check-ins PENDIENTE — los COMPLETADO y
 NO_RESPONDIDO ya fueron procesados.
