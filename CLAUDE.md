@@ -125,13 +125,12 @@ anotada para después.
 - **Rama de despliegue:** `produccion` — la miran los tres servicios de Railway.
   Nadie trabaja aquí; solo recibe merges desde `Desarrollo`. Ver
   `docs/railway_deploy.md` §4.1.
-- **Ramas, al cerrar la sesión del 02 al 04/10/2026.** En el remoto solo quedan
+- **Ramas, al cerrar la sesión del 04/10/2026.** En el remoto solo quedan
   `Desarrollo` y `produccion`: el 02/10 se borraron 20 ramas ya mergeadas.
-  Mergeados en esa sesión: el PR #36 (Dependabot), el #37 (`8961036`), el #38
-  (`7383b00`), el #39 (`b89c1d1`), el #40 (`82fe8ef`), el #41 (`55e1369`) y el
-  #42 (`3974b2c`). **Quedan dos cosas sin mergear:**
-  - **`carril-a-panel`:** el panel del médico, con un PR abierto o en camino.
-    Ver «Próximo paso exacto».
+  Mergeados del 02 al 04/10: el PR #36 (Dependabot), el #37 (`8961036`), el #38
+  (`7383b00`), el #39 (`b89c1d1`), el #40 (`82fe8ef`), el #41 (`55e1369`), el
+  #42 (`3974b2c`), el #44 (carril A, `f22dc3a`) y el #45 (la documentación que
+  no miente). **Queda una sola cosa sin mergear:**
   - **`ci-no-cancela-tras-merge`:** solo existe **en local**, en la máquina de
     León (REPO-20). GitHub rechaza cualquier push que cambie `.github/workflows/` si el
     token de `gh` no tiene el permiso `workflow`. Hay que darlo con
@@ -270,6 +269,7 @@ evidencia disponible, no decisiones ya tomadas.
 | Loop de bugs del paciente | Los ocho fallos que llegan a la persona: parser de temperatura, rangos, salto, palabra de auxilio, turno de la tarde, tablero que miente, consentimiento revocado y habeas data del formulario | ✅ **Completado y mergeado** (PR #29, merge commit `6580996`, 09/09/2026). Fichas **D19-D23**, 3 migraciones, **43 pruebas nuevas** y un arnés de **17 reversiones, las 17 atrapadas**. **409 tests OK** |
 | Loop de umbrales | Anclar los umbrales clínicos con pruebas de frontera | ✅ **Completado y mergeado** (08/09/2026, PR #28, merge commit `21105a2`). **22 pruebas nuevas** —el valor que dispara y el inmediatamente inferior— y un arnés re-ejecutable de **21 sabotajes, los 21 atrapados**. Cierra TEST-01 a TEST-05. **366 tests OK** |
 | Reverificación y siete PR (02-04/10/2026) | Volver a comprobar los hallazgos contra el código, y corregir lo que se puede corregir sin el médico | ✅ **PR #36 a #42 mergeados.** Fichas **D25-D27**, primera ola de carriles en paralelo. **475 tests OK**. Detalle y próximo paso, abajo |
+| Carril A, etapa 1, y la documentación que no miente (04/10/2026) | El panel ordena por gravedad y deja de consultar por fila; la documentación deja de afirmar lo que no es cierto | ✅ **PR #44 y #45 mergeados.** UX-P02, UX-P03, DB-05, TEST-09; DB-06, REPO-05 a 09, BE-12. **484 tests OK** |
 
 **Qué pasó (22/07/2026).** Una auditoría independiente sobre `fbf62a8` confirmó
 las cuatro cifras que se reportaban (280 tests, `check --deploy`, `pip-audit`,
@@ -376,7 +376,7 @@ control» con una ALTA sin resolver, y ve a quien tiene el seguimiento detenido.
 **Estado de la auditoría del 07/09/2026, al 04/10/2026.** El 02/10 se volvieron
 a comprobar contra el código los 69 hallazgos que no estaban cerrados, y todos
 recibieron severidad (antes solo 3 la tenían). De los 101:
-**54 cerrados**, **45 abiertos confirmados**, **1 descartado** (BE-13: se
+**65 cerrados** (once el 04/10, con los PR #44 y #45), **34 abiertos confirmados**, **1 descartado** (BE-13: se
 comprobó y no era un defecto) y **1 sin verificar** (TEST-11: hace falta correr
 la suite con el reloj en las 23:59 de Bogotá). Cinco afirmaciones del informe
 original resultaron falsas; la más seria, que **BE-02 estaba cerrado a medias**:
@@ -400,24 +400,18 @@ mergeó el agente principal.
 
 **Próximo paso exacto (al retomar):**
 
-1. **El carril A, el panel del médico.** Su PR (`carril-a-panel`) lleva la
-   primera parte: orden de alertas por severidad, fecha de la última detección
-   y consultas de más (UX-P02, UX-P03, DB-05) según lo que alcanzó. Revisarlo,
-   repetir sus reversiones y mergearlo. Lo que dejó fuera lo dice su PR en «Lo
-   que NO resuelve»: probablemente UX-P04 a P11, la mitad JS de BE-02 (con su
-   extensión del barrido) y la frontera del aviso del Admin (TEST-07).
-2. **REPO-20**, que está listo pero solo en local: darle al token el permiso
-   `workflow` y subir `ci-no-cancela-tras-merge`.
-3. **La documentación que miente** (REPO-05 a 09, DB-06): el ROADMAP duplica
-   las tablas de modelos y su árbol de archivos está desfasado.
-   `docs/modelos_datos.md` no tiene sección para `NotificacionAlerta`,
-   `DeteccionAlerta` ni `MensajeContacto`, le faltan los cuatro campos de
-   evaluación de `RegistroDiario`, y no menciona el tipo `AUXILIO` ni el
-   estado `SIN_CONSENTIMIENTO`.
-4. **El barrido de veracidad lee `.claude/worktrees/`**: recorre el sistema de
-   archivos en vez de lo que git rastrea, y con carriles abiertos da falsos rojos
-   en local (en la CI no). Esperar a que mergee el carril A, que también toca el
-   barrido.
+1. **REPO-20**, que está listo pero solo en local: darle al token el permiso
+   `workflow` (`gh auth refresh -h github.com -s workflow`) y subir
+   `ci-no-cancela-tras-merge` con su PR. Está 20+ commits detrás de
+   `Desarrollo`: traerlo antes del push.
+2. **El carril A, etapa 2**, lo que su PR #44 dejó en «Lo que NO resuelve»:
+   UX-P04 a UX-P11, la mitad JS de BE-02 (los umbrales de la gráfica leídos de
+   `alert_engine`, y el barrido que detecte uno escrito a mano) y la frontera
+   del aviso del Admin de TEST-07. Lo de BE-02 toca el barrido: hacerlo junto
+   con el punto 3.
+3. **El barrido de veracidad lee `.claude/worktrees/`**: recorre el sistema de
+   archivos en vez de lo que git rastrea (`git ls-files`), y con carriles
+   abiertos da falsos rojos en local (en la CI no).
 
 **Lo que necesita a alguien, no a una sesión técnica:**
 
