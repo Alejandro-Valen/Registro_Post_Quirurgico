@@ -334,6 +334,9 @@ class PacienteAdmin(admin.ModelAdmin):
                      'medico_responsable__last_name',
                      'medico_responsable__username']
     readonly_fields = ['fecha_consentimiento', 'grafica_signos_vitales', 'historial_paciente']
+    # DB-05 (02/10/2026): la columna del médico y `Paciente.__str__` pedían el
+    # médico de cada fila por separado: una consulta por paciente listado.
+    list_select_related = ('medico_responsable',)
 
     class Media:
         js = (
@@ -482,6 +485,8 @@ class RegistroDiarioAdmin(admin.ModelAdmin):
         'presencia_gases',
     ]
     search_fields = ['paciente__nombre_completo']
+    # DB-05: la columna del paciente es `Paciente.__str__`, que lee su médico.
+    list_select_related = ('paciente__medico_responsable',)
 
     def get_queryset(self, request):
         """B6: solo registros de pacientes propios del médico. Superuser ve todos."""
@@ -624,6 +629,9 @@ class AlertaAdmin(admin.ModelAdmin):
         'cobertura_detecciones',
     ]
     inlines = [DeteccionAlertaInline]
+    # DB-05: el paciente (y su médico, que sale en `Paciente.__str__`) y quien
+    # resolvió se pedían fila por fila: ~201 consultas por página.
+    list_select_related = ('paciente__medico_responsable', 'resuelta_por')
 
     def has_add_permission(self, request):
         # Las alertas son resultados del motor clínico, no entradas manuales.
@@ -821,6 +829,8 @@ class CheckInProgramadoAdmin(admin.ModelAdmin):
     search_fields = ['paciente__nombre_completo']
     readonly_fields = ['hora_programada', 'fecha_respuesta', 'fecha_dia',
                        'orden', 'etiqueta', 'registro']
+    # DB-05: la columna del paciente es `Paciente.__str__`, que lee su médico.
+    list_select_related = ('paciente__medico_responsable',)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)

@@ -9,8 +9,9 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import RequestFactory, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -1358,3 +1359,81 @@ class ListadoDeAlertasOrdenTests(_AlertasDelListadoMixin, TestCase):
         self.assertIn('Última detección', contenido)
         self.assertIn(como_la_pinta_el_admin(ahora), contenido)
         self.assertNotIn(como_la_pinta_el_admin(primera), contenido)
+
+
+class ListadosSinConsultaPorFilaTests(TestCase):
+    """DB-05 — ningún listado del Admin hace una consulta por fila.
+
+    `PacienteAdmin` pedía el médico de cada paciente fila por fila (la columna
+    del médico y `Paciente.__str__`), y `AlertaAdmin` además el paciente y quien
+    resolvió: ~101 y ~201 consultas por página. Se comprueba que el número de
+    consultas no crece al pasar de una fila a cuatro.
+    """
+
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username='super_consultas', password='pass')
+        self.client.force_login(self.superuser)
+        self.n = 0
+
+    def _sembrar(self, filas):
+        usuarios = get_user_model().objects
+        for _ in range(filas):
+            self.n += 1
+            # Un médico distinto por paciente: así cada fila necesita su propio
+            # médico y la consulta por fila no se esconde detrás de una caché.
+            medico = usuarios.create_user(
+                username=f'dr_consultas_{self.n}', password='pass', is_staff=True,
+                first_name='Médico', last_name=str(self.n),
+            )
+            paciente = Paciente.objects.create(
+                medico_responsable=medico,
+                nombre_completo=f'Paciente Consultas {self.n}',
+                telefono_whatsapp=f'+57305100{self.n:04d}',
+                fecha_cirugia=timezone.localdate() - timedelta(days=3),
+            )
+            registro = RegistroDiario.objects.create(
+                paciente=paciente, temperatura=Decimal('37.0'), dolor_eva=2,
+                aspecto_drenaje='sin_drenaje', presencia_gases=True,
+                episodios_nauseas=0,
+            )
+            Alerta.objects.create(
+                paciente=paciente, registro_origen=registro, tipo='SEPSIS',
+                severidad='BAJA', mensaje='Alerta de consultas',
+                resuelta=True, resuelta_por=medico,
+                fecha_resolucion=timezone.now(),
+                motivo_resolucion=Alerta.MOTIVO_CONTACTO,
+            )
+            CheckInProgramado.objects.create(
+                paciente=paciente, fecha_dia=timezone.localdate(), orden=1,
+                etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+                hora_programada=timezone.now(),
+            )
+
+    def _consultas(self, url):
+        with CaptureQueriesContext(connection) as capturadas:
+            resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        return len(capturadas)
+
+    def _sin_consulta_por_fila(self, url):
+        self._sembrar(1)
+        con_una = self._consultas(url)
+        self._sembrar(3)
+        con_cuatro = self._consultas(url)
+        self.assertEqual(
+            con_una, con_cuatro,
+            f'{url}: {con_una} consultas con 1 fila y {con_cuatro} con 4',
+        )
+
+    def test_listado_de_pacientes(self):
+        self._sin_consulta_por_fila('/admin/signos_sintomas/paciente/')
+
+    def test_listado_de_alertas(self):
+        self._sin_consulta_por_fila('/admin/signos_sintomas/alerta/')
+
+    def test_listado_de_registros(self):
+        self._sin_consulta_por_fila('/admin/signos_sintomas/registrodiario/')
+
+    def test_listado_de_checkins(self):
+        self._sin_consulta_por_fila('/admin/signos_sintomas/checkinprogramado/')
