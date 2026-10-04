@@ -3,13 +3,15 @@
 Extraido de signos_sintomas/tests.py sin cambiar una sola prueba
 (refactor del 10/08/2026)."""
 
+import re
 from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import RequestFactory, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -389,12 +391,37 @@ class AlertaAdminAccionesTests(TestCase):
         )
 
     def test_changelist_contiene_badge_severidad(self):
-        """La lista de alertas renderiza el badge de severidad con HTML coloreado."""
+        """El badge de cada severidad lleva SU color y SU nombre (TEST-09).
+
+        Hasta el 02/10/2026 esta prueba buscaba la subcadena `border-radius`:
+        pasaba con los colores de ALTA y BAJA intercambiados, que es justo el
+        error que importa — una ALTA pintada de verde tranquiliza al médico.
+        Los colores van escritos aquí a propósito, y no leídos de
+        `_COLORES_SEVERIDAD`: una prueba que lee el valor que vigila se adapta
+        a cualquier cambio y no protege nada (TEST-10).
+        """
+        from django.contrib import admin as django_admin
+
+        from ..admin import AlertaAdmin
+
+        esperado = {
+            'ALTA': ('#fee2e2', '#7f1d1d', 'Alta — Ir a urgencias'),
+            'MEDIA': ('#fef3c7', '#78350f', 'Media — Llamar al médico'),
+            'BAJA': ('#dcfce7', '#14532d', 'Baja — Monitorear'),
+        }
+        modelo_admin = AlertaAdmin(Alerta, django_admin.site)
+        for severidad, (fondo, texto, etiqueta) in esperado.items():
+            with self.subTest(severidad=severidad):
+                self.alerta.severidad = severidad
+                badge = str(modelo_admin.severidad_badge(self.alerta))
+                self.assertIn(f'background:{fondo};color:{texto};', badge)
+                self.assertIn(f'>{etiqueta}</span>', badge)
+
+        # Y en el listado real, la ALTA de este setUp sale con el color de ALTA.
         self.client.force_login(self.superuser)
         resp = self.client.get('/admin/signos_sintomas/alerta/')
         self.assertEqual(resp.status_code, 200)
-        # El badge usa border-radius como parte del estilo — confirma que se renderizó HTML
-        self.assertContains(resp, 'border-radius')
+        self.assertContains(resp, 'background:#fee2e2;color:#7f1d1d;')
 
     def test_accion_marcar_resuelta(self):
         """Bloque A: marcar_resuelta con el paso 'aplicar' + motivo actualiza
@@ -1238,3 +1265,200 @@ class TableroQueNoSeContradiceTests(TestCase):
         """La otra dirección."""
         ctx = self._contexto()
         self.assertEqual(ctx['total_detenidos'], 0)
+
+
+# ===========================================================================
+# Carril A · panel del médico (02/10/2026)
+# Hallazgos de la auditoría de seis frentes: UX-P02, UX-P03 y DB-05. Cada
+# clase nació en rojo contra el código de `7383b00`.
+# ===========================================================================
+
+class _AlertasDelListadoMixin:
+    """Un paciente con alertas de severidades y fechas controladas."""
+
+    def _preparar_listado(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username='super_orden', password='pass')
+        self.client.force_login(self.superuser)
+        self.paciente = Paciente.objects.create(
+            medico_responsable=medico_de_pruebas(),
+            nombre_completo='Paciente Orden',
+            telefono_whatsapp='+573050000001',
+            fecha_cirugia=timezone.localdate() - timedelta(days=4),
+        )
+
+    def _alerta(self, tipo, severidad, mensaje, primera, ultima):
+        alerta = Alerta.objects.create(
+            paciente=self.paciente, tipo=tipo, severidad=severidad,
+            mensaje=mensaje, fecha_ultima_deteccion=ultima,
+        )
+        # `fecha_alerta` es auto_now_add: solo un update la puede fechar.
+        Alerta.objects.filter(pk=alerta.pk).update(fecha_alerta=primera)
+        return alerta
+
+    def _orden(self, url, *mensajes):
+        contenido = self.client.get(url).content.decode()
+        return sorted(mensajes, key=contenido.index)
+
+
+class ListadoDeAlertasOrdenTests(_AlertasDelListadoMixin, TestCase):
+    """UX-P02 / UX-P03 — la ALTA primero, y lo redetectado arriba.
+
+    El listado ordenaba por `-fecha_alerta`, la PRIMERA detección: una ALTA de
+    hace tres días quedaba debajo de las BAJA de hoy, y una alerta que se volvió
+    a detectar esta mañana se hundía con su fecha de creación. Ordenar por la
+    columna Severidad daba ALTA, BAJA, MEDIA: orden alfabético.
+    """
+
+    URL = '/admin/signos_sintomas/alerta/'
+
+    def setUp(self):
+        self._preparar_listado()
+
+    def test_la_alta_va_primero_aunque_sea_la_mas_vieja(self):
+        ahora = timezone.now()
+        self._alerta('SEPSIS', 'ALTA', 'MSG-ALTA', ahora - timedelta(days=3), ahora - timedelta(days=3))
+        self._alerta('TAQUICARDIA', 'MEDIA', 'MSG-MEDIA', ahora - timedelta(days=1), ahora - timedelta(days=1))
+        self._alerta('FUGA_ANASTOMOTICA', 'BAJA', 'MSG-BAJA', ahora, ahora)
+
+        self.assertEqual(self._orden(self.URL, 'MSG-ALTA', 'MSG-MEDIA', 'MSG-BAJA'),
+                         ['MSG-ALTA', 'MSG-MEDIA', 'MSG-BAJA'])
+
+    def test_dentro_de_la_severidad_va_primero_la_deteccion_mas_reciente(self):
+        ahora = timezone.now()
+        self._alerta('SEPSIS', 'ALTA', 'MSG-AYER', ahora - timedelta(days=1), ahora - timedelta(days=1))
+        # Nació hace cinco días, pero se volvió a detectar hoy.
+        self._alerta('TAQUICARDIA', 'ALTA', 'MSG-REDETECTADA', ahora - timedelta(days=5), ahora)
+
+        self.assertEqual(self._orden(self.URL, 'MSG-AYER', 'MSG-REDETECTADA'),
+                         ['MSG-REDETECTADA', 'MSG-AYER'])
+
+    def _columna(self, nombre):
+        """Posición de la columna en la cabecera que ve el médico.
+
+        Se lee del HTML y no de `list_display`: con acciones, Django antepone
+        la casilla de selección y todas las columnas se corren una. La primera
+        versión de esta prueba usó `?o=2` contando a mano, ordenó por el TIPO, y
+        caía en rojo por esa razón y no por la que debía.
+        """
+        cabecera = re.search(r'<thead>(.*?)</thead>',
+                             self.client.get(self.URL).content.decode(), re.S)
+        self.assertIsNotNone(cabecera, 'El listado no tiene cabecera')
+        columnas = re.findall(r'<th scope="col"([^>]*)>', cabecera.group(1))
+        indices = [i for i, attrs in enumerate(columnas) if f'column-{nombre}' in attrs]
+        self.assertEqual(len(indices), 1, f'No se encontró la columna {nombre}')
+        return indices[0]
+
+    def test_ordenar_por_la_columna_severidad_no_es_alfabetico(self):
+        ahora = timezone.now()
+        # Tipos elegidos para que su orden alfabético (FUGA, SEPSIS,
+        # TAQUICARDIA) no coincida con ninguno de los dos que se comprueban:
+        # ordenar por la columna equivocada no puede pasar por casualidad.
+        for tipo, severidad in (('SEPSIS', 'ALTA'), ('TAQUICARDIA', 'MEDIA'),
+                                ('FUGA_ANASTOMOTICA', 'BAJA')):
+            self._alerta(tipo, severidad, f'MSG-{severidad}', ahora, ahora)
+        mensajes = ('MSG-ALTA', 'MSG-MEDIA', 'MSG-BAJA')
+        columna = self._columna('severidad_badge')
+
+        self.assertEqual(self._orden(f'{self.URL}?o={columna}', *mensajes),
+                         ['MSG-ALTA', 'MSG-MEDIA', 'MSG-BAJA'])
+        self.assertEqual(self._orden(f'{self.URL}?o=-{columna}', *mensajes),
+                         ['MSG-BAJA', 'MSG-MEDIA', 'MSG-ALTA'])
+
+    def test_el_listado_muestra_la_ultima_deteccion(self):
+        """La fecha que se ve es la de la última detección, no la primera.
+
+        Las dos se formatean con la misma función que usa el Admin para una
+        fecha, así que la comparación no depende del idioma ni del formato.
+        """
+        from django.utils import formats
+
+        ahora = timezone.now()
+        primera = ahora - timedelta(days=5)
+        self._alerta('SEPSIS', 'ALTA', 'MSG-ALTA', primera, ahora)
+
+        def como_la_pinta_el_admin(fecha):
+            return formats.localize(timezone.template_localtime(fecha))
+
+        contenido = self.client.get(self.URL).content.decode()
+        self.assertIn('Última detección', contenido)
+        self.assertIn(como_la_pinta_el_admin(ahora), contenido)
+        self.assertNotIn(como_la_pinta_el_admin(primera), contenido)
+
+
+class ListadosSinConsultaPorFilaTests(TestCase):
+    """DB-05 — ningún listado del Admin hace una consulta por fila.
+
+    `PacienteAdmin` pedía el médico de cada paciente fila por fila (la columna
+    del médico y `Paciente.__str__`), y `AlertaAdmin` además el paciente y quien
+    resolvió: ~101 y ~201 consultas por página. Se comprueba que el número de
+    consultas no crece al pasar de una fila a cuatro.
+    """
+
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username='super_consultas', password='pass')
+        self.client.force_login(self.superuser)
+        self.n = 0
+
+    def _sembrar(self, filas):
+        usuarios = get_user_model().objects
+        for _ in range(filas):
+            self.n += 1
+            # Un médico distinto por paciente: así cada fila necesita su propio
+            # médico y la consulta por fila no se esconde detrás de una caché.
+            medico = usuarios.create_user(
+                username=f'dr_consultas_{self.n}', password='pass', is_staff=True,
+                first_name='Médico', last_name=str(self.n),
+            )
+            paciente = Paciente.objects.create(
+                medico_responsable=medico,
+                nombre_completo=f'Paciente Consultas {self.n}',
+                telefono_whatsapp=f'+57305100{self.n:04d}',
+                fecha_cirugia=timezone.localdate() - timedelta(days=3),
+            )
+            registro = RegistroDiario.objects.create(
+                paciente=paciente, temperatura=Decimal('37.0'), dolor_eva=2,
+                aspecto_drenaje='sin_drenaje', presencia_gases=True,
+                episodios_nauseas=0,
+            )
+            Alerta.objects.create(
+                paciente=paciente, registro_origen=registro, tipo='SEPSIS',
+                severidad='BAJA', mensaje='Alerta de consultas',
+                resuelta=True, resuelta_por=medico,
+                fecha_resolucion=timezone.now(),
+                motivo_resolucion=Alerta.MOTIVO_CONTACTO,
+            )
+            CheckInProgramado.objects.create(
+                paciente=paciente, fecha_dia=timezone.localdate(), orden=1,
+                etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+                hora_programada=timezone.now(),
+            )
+
+    def _consultas(self, url):
+        with CaptureQueriesContext(connection) as capturadas:
+            resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        return len(capturadas)
+
+    def _sin_consulta_por_fila(self, url):
+        self._sembrar(1)
+        con_una = self._consultas(url)
+        self._sembrar(3)
+        con_cuatro = self._consultas(url)
+        self.assertEqual(
+            con_una, con_cuatro,
+            f'{url}: {con_una} consultas con 1 fila y {con_cuatro} con 4',
+        )
+
+    def test_listado_de_pacientes(self):
+        self._sin_consulta_por_fila('/admin/signos_sintomas/paciente/')
+
+    def test_listado_de_alertas(self):
+        self._sin_consulta_por_fila('/admin/signos_sintomas/alerta/')
+
+    def test_listado_de_registros(self):
+        self._sin_consulta_por_fila('/admin/signos_sintomas/registrodiario/')
+
+    def test_listado_de_checkins(self):
+        self._sin_consulta_por_fila('/admin/signos_sintomas/checkinprogramado/')
