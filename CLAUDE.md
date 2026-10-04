@@ -125,12 +125,21 @@ anotada para después.
 - **Rama de despliegue:** `produccion` — la miran los tres servicios de Railway.
   Nadie trabaja aquí; solo recibe merges desde `Desarrollo`. Ver
   `docs/railway_deploy.md` §4.1.
-- **Rama activa de trabajo:** ninguna, y **cero PR abiertos**. Mergeadas el
-  09/09/2026: `pagina-para-la-reunion` (PR #34, `ffcc966`),
-  `cerrar-be02-y-verificar-hallazgos` (PR #33, `ad9f6ed`),
-  `dependabot-agrupar-menores` (PR #31) y `sec-02-bloqueo-acceso` (PR #30).
-  Antes: `bugs-del-paciente` (PR #29, `6580996`), `umbrales-frontera` (PR #28,
-  `21105a2`), `arnes-verificable` (PR #18) y `repositorio-profesional` (PR #19).
+- **Ramas, al cerrar la sesión del 02 al 04/10/2026.** En el remoto solo quedan
+  `Desarrollo` y `produccion`: el 02/10 se borraron 20 ramas ya mergeadas.
+  Mergeados en esa sesión: el PR #36 (Dependabot), el #37 (`8961036`), el #38
+  (`7383b00`), el #39 (`b89c1d1`), el #40 (`82fe8ef`), el #41 (`55e1369`) y el
+  #42 (`3974b2c`). **Quedan dos cosas sin mergear:**
+  - **`carril-a-panel`:** el panel del médico, con un PR abierto o en camino.
+    Ver «Próximo paso exacto».
+  - **`ci-no-cancela-tras-merge`:** solo existe **en local**, en la máquina de
+    León (REPO-20). GitHub rechaza cualquier push que cambie `.github/workflows/` si el
+    token de `gh` no tiene el permiso `workflow`. Hay que darlo con
+    `gh auth refresh -h github.com -s workflow`, y después push y PR.
+- **Borrar la rama al mergear:** se hace con `gh pr merge <n> --merge
+  --delete-branch`. El ajuste automático del repositorio («Automatically delete
+  head branches») solo lo puede activar el dueño de la cuenta: la API le
+  responde 404 a un colaborador.
 - **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **diez
   comprobaciones** en cada PR hacia `Desarrollo` y hacia `produccion`, y en cada
   push a esas dos ramas: la suite, `check`, `makemigrations --check`,
@@ -162,8 +171,10 @@ anotada para después.
   Pro, GitHub no ofrece protección de rama **a nadie, ni al dueño** — la API de
   rulesets responde *"Upgrade to GitHub Pro or make this repository public"*.
   Las tres salidas son: GitHub Pro (~4 USD/mes, en la cuenta del dueño), hacer
-  el repositorio público, o seguir con la compuerta humana de mirar los siete
-  checks antes de mergear. Hoy rige la tercera: **mirar antes de mergear**.
+  el repositorio público, o seguir con la compuerta humana de mirar las diez
+  comprobaciones antes de mergear. Hoy rige la tercera: **mirar antes de
+  mergear**. (Hasta el 04/10/2026 esta línea decía «los siete checks»: eran
+  diez desde el 09/09.)
 
 ---
 
@@ -258,6 +269,7 @@ evidencia disponible, no decisiones ya tomadas.
 | Loop del repositorio · D18 | Separar producto de cuaderno de trabajo, y que el repositorio se pueda instalar | ✅ **Completado y mergeado** (07/09/2026, PR #19, merge commit `591cd7c`). `README`, `LICENSE`, `CONTRIBUTING`, `SECURITY`, `pyproject.toml` en vez de tres `requirements`, plantillas de `.github/`, `CODEOWNERS`, `.mailmap`, y el proceso movido a `proceso/`. **344 tests OK** |
 | Loop de bugs del paciente | Los ocho fallos que llegan a la persona: parser de temperatura, rangos, salto, palabra de auxilio, turno de la tarde, tablero que miente, consentimiento revocado y habeas data del formulario | ✅ **Completado y mergeado** (PR #29, merge commit `6580996`, 09/09/2026). Fichas **D19-D23**, 3 migraciones, **43 pruebas nuevas** y un arnés de **17 reversiones, las 17 atrapadas**. **409 tests OK** |
 | Loop de umbrales | Anclar los umbrales clínicos con pruebas de frontera | ✅ **Completado y mergeado** (08/09/2026, PR #28, merge commit `21105a2`). **22 pruebas nuevas** —el valor que dispara y el inmediatamente inferior— y un arnés re-ejecutable de **21 sabotajes, los 21 atrapados**. Cierra TEST-01 a TEST-05. **366 tests OK** |
+| Reverificación y siete PR (02-04/10/2026) | Volver a comprobar los hallazgos contra el código, y corregir lo que se puede corregir sin el médico | ✅ **PR #36 a #42 mergeados.** Fichas **D25-D27**, primera ola de carriles en paralelo. **475 tests OK**. Detalle y próximo paso, abajo |
 
 **Qué pasó (22/07/2026).** Una auditoría independiente sobre `fbf62a8` confirmó
 las cuatro cifras que se reportaban (280 tests, `check --deploy`, `pip-audit`,
@@ -296,6 +308,17 @@ una ocurrencia que el informe no vio.
 implementar → verificación del Arquitecto → un loop por sesión. Nació de la
 lección que dejó el hallazgo bloqueante: *un test en verde no prueba nada si no
 se verifica por qué está verde.*
+
+**Desde el 02/10/2026, también en carriles paralelos:** varios loops a la vez,
+solo si ningún par toca los mismos archivos, y como máximo tres. Cada carril
+trabaja en su propia copia (worktree), con su rama, su PR y su propia base de
+pruebas (`$env:DB_NAME='registro_carril_x'` en cada corrida, porque con un
+nombre compartido una corrida con `--noinput` borra la base de la otra). Solo
+un carril crea migraciones a la vez. El conteo de pruebas del README y del
+ROADMAP choca en todos los PR y se recalcula al mergear en orden. **Lo clínico,
+el bot y lo legal no van en carriles.** Y cada carril hace commit por hallazgo,
+no al final: un corte por límite de uso dejó dos veces trabajo de un carril
+varado sin commit.
 
 **Producción: NO HAY, desde el 07/08/2026.** Venció el periodo de prueba de
 Railway. El endpoint de salud responde **404** y los dos servicios cron **no
@@ -350,58 +373,68 @@ control» con una ALTA sin resolver, y ve a quien tiene el seguimiento detenido.
 > dominados por `import-outside-top-level` y `relative-imports`, que son idioma
 > de Django y no defectos. **No hay cola de linter pendiente.**
 
-**Estado de la auditoría del 07/09/2026, al cierre del 09/09:** de sus 101
-hallazgos, **78 tienen estado comprobado** — 32 cerrados, 3 a medias, 44
-abiertos confirmados ejecutando comandos — y **23 siguen sin verificar**.
-Antes del 09/09 solo 26 tenían estado: los otros 75 eran un ⬜ que no distinguía
-«roto» de «nadie ha mirado».
+**Estado de la auditoría del 07/09/2026, al 04/10/2026.** El 02/10 se volvieron
+a comprobar contra el código los 69 hallazgos que no estaban cerrados, y todos
+recibieron severidad (antes solo 3 la tenían). De los 101:
+**54 cerrados**, **45 abiertos confirmados**, **1 descartado** (BE-13: se
+comprobó y no era un defecto) y **1 sin verificar** (TEST-11: hace falta correr
+la suite con el reloj en las 23:59 de Bogotá). Cinco afirmaciones del informe
+original resultaron falsas; la más seria, que **BE-02 estaba cerrado a medias**:
+la gráfica del panel dibuja los umbrales con números escritos a mano en el JS.
 
-**Próximo paso exacto (al retomar): los tres bugs VISIBLES.**
+**Lo que se hizo del 02 al 04/10/2026**, siete PR mergeados y **475 tests OK**:
 
-Se eligen por lo que se ve, no por lo que falta: son los únicos hallazgos
-abiertos que alguien puede encontrar **sin leer una línea de código**, y hay una
-reunión con el médico y un ingeniero externo.
+| PR | Qué cambió | Decisión |
+|---|---|---|
+| #37 | Gases y náuseas en dos preguntas (UX-B03); una duda con turno pendiente arranca el reporte (BE-04, UX-B08). Migración 0031 con reverso real | D25 |
+| #38 | El bot deja de prometer que le escribirá al paciente (UX-B02, BE-05); tildes de los cierres ALTA y MEDIA; «la última vez» en vez de «ayer»; abandono sin turno (DB-12, UX-B07) | D26 |
+| #39 | Página pública: menú en el móvil, errores visibles, lo escrito se conserva, nada se recorta en silencio, accesibilidad, animación (UX-L01 a L06) | — |
+| #40 | Pruebas que caen cuando se rompe lo que cuidan (TEST-06, 08, 10, 12 y la mitad del cron de TEST-07) | — |
+| #41 | `wsgi`/`asgi` sin la variable arrancan con producción (SEC-04); la sesión del panel caduca a las 8 h y al cerrar el navegador (SEC-15) | — |
+| #42 | `crear_admin` ya no reescribe ni promueve (SEC-05); `cron_runner` no vuelca el mensaje de la excepción (SEC-10) | D27 |
 
-1. **UX-B03** — *"si, no tuve nauseas: 0"* se registra como **sin gases**. El
-   paciente dice que sí pasó gases y el sistema anota lo contrario, alimentando
-   la regla de íleo con un dato falso. **Es el único de UX que no es cosmético:
-   corrompe un dato clínico.** Si solo hay tiempo para uno, este.
-2. **UX-P05** — la gráfica va de 35 a 40 °C y el bot acepta hasta 45: el valor
-   más grave es el único que no se dibuja.
-3. **UX-L01** — en móvil desaparecen los cuatro enlaces del menú y el único
-   visible lleva al login del Admin.
+Cada uno con sus pruebas en rojo primero y sus reversiones atrapadas. Los
+carriles B y C los hicieron agentes en paralelo, cada uno en su copia del
+repositorio y con su propia base de pruebas (`DB_NAME` distinto); los revisó y
+mergeó el agente principal.
 
-Después: **SEC-05** (barato, con precedente exacto en D15), las **22 ramas
-muertas**, y por último **los 23 hallazgos sin verificar** — que necesitan leer
-código con calma y **ninguno es visible al abrir la aplicación**.
+**Próximo paso exacto (al retomar):**
 
-Y **SEC-05**, el gemelo de la ficha D15: `crear_admin` sigue reescribiendo la
-contraseña del superusuario en cada arranque, y promoviendo a superusuario sin
-condición. No es clínico.
+1. **El carril A, el panel del médico.** Su PR (`carril-a-panel`) lleva la
+   primera parte: orden de alertas por severidad, fecha de la última detección
+   y consultas de más (UX-P02, UX-P03, DB-05) según lo que alcanzó. Revisarlo,
+   repetir sus reversiones y mergearlo. Lo que dejó fuera lo dice su PR en «Lo
+   que NO resuelve»: probablemente UX-P04 a P11, la mitad JS de BE-02 (con su
+   extensión del barrido) y la frontera del aviso del Admin (TEST-07).
+2. **REPO-20**, que está listo pero solo en local: darle al token el permiso
+   `workflow` y subir `ci-no-cancela-tras-merge`.
+3. **La documentación que miente** (REPO-05 a 09, DB-06): el ROADMAP duplica
+   las tablas de modelos y su árbol de archivos está desfasado.
+   `docs/modelos_datos.md` no tiene sección para `NotificacionAlerta`,
+   `DeteccionAlerta` ni `MensajeContacto`, le faltan los cuatro campos de
+   evaluación de `RegistroDiario`, y no menciona el tipo `AUXILIO` ni el
+   estado `SIN_CONSENTIMIENTO`.
+4. **El barrido de veracidad lee `.claude/worktrees/`**: recorre el sistema de
+   archivos en vez de lo que git rastrea, y con carriles abiertos da falsos rojos
+   en local (en la CI no). Esperar a que mergee el carril A, que también toca el
+   barrido.
 
-~~**Próximo paso exacto: el tratamiento D10 para lo clínico.**~~ Hecho el
-09/09/2026 (PR #33).
-**BE-08** y **BE-09** están reproducidos y son desviaciones reales entre el motor
-y `docs/reglas_clinicas.md`, las dos de **sobre-alerta** (nunca de falso
-negativo). El tratamiento es el que fijó la ficha **D10** y no otro: pruebas de
-caracterización que fijen el comportamiento actual, la rama escrita en el
-documento clínico, y marcado **«pendiente de validación médica»**. **Sin tocar
-cuándo dispara nada** — eso lo decide el médico, no una sesión técnica.
+**Lo que necesita a alguien, no a una sesión técnica:**
 
-Después, y sin autoridad clínica de por medio:
-
-- **SEC-05**, el gemelo de la ficha D15: `crear_medico` dejó de reescribir la
-  contraseña en cada arranque el 12/08/2026 y **`crear_admin` sigue haciéndolo**,
-  además de promover a superusuario sin condición.
-- Los hallazgos de calidad de pruebas que no son de frontera (**TEST-06 a
-  TEST-12**), el resto de la UX del panel y del bot (**UX-P02 a UX-P11**,
-  **UX-B06 a UX-B11**), y **BE-03 a BE-13**.
-- **20 ramas muertas** en el remoto, todas ya fusionadas en `Desarrollo`.
-
-**Qué está verificado y qué no.** Desde el 09/09/2026 el informe de la auditoría
-distingue las tres cosas en su sección «Estado de los hallazgos»: cerrado,
-confirmado abierto ejecutando comandos, y **sin verificar** — que no es lo mismo
-que «comprobado y sigue roto».
+- **El médico:** BE-08 y BE-09 (dos ramas de sobre-alerta, fijadas por pruebas
+  de caracterización; ficha D10) y la redacción de las respuestas de la FAQ (D4).
+- **León:**
+  - **BE-03:** si el cron arranca tarde, crea el turno de la mañana y lo cierra
+    en la misma corrida, lo que da SILENCIO a todos. Arreglarlo cambia qué
+    cuenta como turno no respondido (D1).
+  - **La caducidad de la sesión por inactividad:** hoy son 8 h desde que se
+    entra, no desde el último clic.
+  - **Arrancar Docker Desktop** para verificar SEC-13 (el contenedor como root).
+  - **Rotar las credenciales del `.env` de desarrollo** (SEC-09).
+  - **Lo legal:** SEC-07, SEC-08 y DB-11.
+- **Alejandro:** activar el borrado automático de ramas en GitHub; la historia
+  de git con datos de un tercero (REPO-01, D17).
+- **Los datos de P-12** para la política de datos y la landing (SEC-03, REPO-21).
 
 **Lo que este loop dejó abierto a propósito, y necesita datos tuyos:** la
 página `/politica-datos/` está publicada como **BORRADOR**. Le faltan
