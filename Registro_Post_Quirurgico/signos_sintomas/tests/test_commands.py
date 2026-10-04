@@ -845,6 +845,60 @@ class CronOperativoCommandTests(EspiaDeTareasCronMixin, TestCase):
         self.assertIsInstance(fallo, CommandError)
         self.assertIn('cerrar_checkins_vencidos', str(fallo))
 
+class CronSinDatosDelPacienteEnLaSalidaTests(TestCase):
+    """SEC-10 — la salida del cron nombra el fallo, nunca su mensaje (D11).
+
+    `cron_runner` escribía en stderr `({clase}: {mensaje})` y volcaba la traza
+    con `logger.exception`, mensaje incluido. Un `IntegrityError` de PostgreSQL
+    trae en su mensaje los valores de la fila —«Key (cedula)=(…) already
+    exists»—, así que una caída del cron podía dejar la cédula de un paciente
+    en el log de Railway. El propio proyecto ya lo prohíbe en
+    `registrar_fallo_evaluacion`: se guarda el NOMBRE de la excepción, no su
+    mensaje.
+    """
+
+    CEDULA = '1032456789'
+
+    def _correr_con_fallo(self):
+        import io
+        from unittest.mock import patch
+
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        def falla_cerrar(nombre, *args, **kwargs):
+            if nombre == 'cerrar_checkins_vencidos':
+                raise ValueError(
+                    f'llave duplicada: Key (cedula)=({self.CEDULA}) already exists')
+
+        salida, errores = io.StringIO(), io.StringIO()
+        with patch('signos_sintomas.cron_runner.call_command', side_effect=falla_cerrar), \
+                self.assertLogs('signos_sintomas.cron_runner', level='ERROR') as registro, \
+                self.assertRaises(CommandError):
+            call_command('cron_operativo', stdout=salida, stderr=errores)
+        return salida.getvalue(), errores.getvalue(), '\n'.join(registro.output)
+
+    def test_el_mensaje_de_la_excepcion_no_llega_a_ninguna_salida(self):
+        salida, errores, log = self._correr_con_fallo()
+
+        for nombre, texto in (('stdout', salida), ('stderr', errores), ('log', log)):
+            with self.subTest(salida=nombre):
+                self.assertNotIn(self.CEDULA, texto)
+
+    def test_la_salida_sigue_diciendo_que_fallo_que_tipo_y_donde(self):
+        """La otra dirección: sin el mensaje, el log no puede quedar inútil.
+
+        La tarea, el tipo de error y la traza —en qué función y en qué línea—
+        siguen ahí: con eso se diagnostica sin ver datos del paciente.
+        """
+        _, errores, log = self._correr_con_fallo()
+
+        self.assertIn('cerrar_checkins_vencidos', errores)
+        self.assertIn('ValueError', errores)
+        self.assertIn('ValueError', log)
+        self.assertIn('falla_cerrar', log)   # la traza llega hasta la función que falló
+
+
 class CrearAdminCommandTests(TestCase):
     """Comando crear_admin — superusuario idempotente desde variables de entorno."""
 
@@ -875,21 +929,76 @@ class CrearAdminCommandTests(TestCase):
         self.assertTrue(u.is_superuser)
         self.assertTrue(u.check_password('clave-limpia-123'))
 
-    def test_actualiza_password_de_usuario_existente(self):
+    def _entorno_admin(self, **extra):
+        """Las dos variables de siempre y, salvo que se pida, SIN la de reset."""
         import os
         from unittest.mock import patch
 
-        from django.core.management import call_command
-        User = get_user_model()
-        User.objects.create_user(username='jefe', password='vieja')
-        with patch.dict(os.environ, {
+        entorno = {
             'DJANGO_SUPERUSER_USERNAME': 'jefe',
-            'DJANGO_SUPERUSER_PASSWORD': 'nueva-clave-456',
-        }):
-            call_command('crear_admin', verbosity=0)
+            'DJANGO_SUPERUSER_PASSWORD': 'la-de-la-variable',
+            **extra,
+        }
+        parche = patch.dict(os.environ, entorno)
+        parche.start()
+        self.addCleanup(parche.stop)
+        if 'DJANGO_SUPERUSER_RESET' not in extra:
+            os.environ.pop('DJANGO_SUPERUSER_RESET', None)
+
+    def test_no_reescribe_la_password_de_un_superusuario_existente(self):
+        """SEC-05 (02/10/2026), el gemelo de D15.
+
+        Hasta esta fecha esta prueba se llamaba
+        `test_actualiza_password_de_usuario_existente` y EXIGÍA el defecto: cada
+        arranque devolvía la contraseña del superusuario a la de la variable de
+        entorno, así que la que eligiera el administrador no sobrevivía a un
+        despliegue, y el operador tenía que conocerla para siempre.
+        """
+        from django.core.management import call_command
+
+        User = get_user_model()
+        User.objects.create_superuser(
+            username='jefe', password='elegida-por-el-admin', email='')
+        self._entorno_admin()
+
+        call_command('crear_admin', verbosity=0)
+
         u = User.objects.get(username='jefe')
-        self.assertTrue(u.check_password('nueva-clave-456'))
+        self.assertTrue(u.check_password('elegida-por-el-admin'))
         self.assertTrue(u.is_superuser)
+
+    def test_reset_explicito_si_reescribe_la_password(self):
+        """La vía para rotarla existe, y hay que pedirla a propósito (D27)."""
+        from django.core.management import call_command
+
+        User = get_user_model()
+        User.objects.create_superuser(
+            username='jefe', password='elegida-por-el-admin', email='')
+        self._entorno_admin(DJANGO_SUPERUSER_RESET='1')
+
+        call_command('crear_admin', verbosity=0)
+
+        self.assertTrue(
+            User.objects.get(username='jefe').check_password('la-de-la-variable'))
+
+    def test_no_convierte_en_superusuario_una_cuenta_que_no_lo_era(self):
+        """SEC-05, la otra mitad: `crear_admin` promovía a superusuario, sin
+        preguntar, cualquier cuenta que existiera con ese nombre —un médico,
+        por ejemplo—. Ahora falla de forma visible y no toca la cuenta."""
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        User = get_user_model()
+        User.objects.create_user(username='jefe', password='la-del-medico')
+        self._entorno_admin()
+
+        with self.assertRaises(CommandError):
+            call_command('crear_admin', verbosity=0)
+
+        u = User.objects.get(username='jefe')
+        self.assertFalse(u.is_superuser)
+        self.assertFalse(u.is_staff)
+        self.assertTrue(u.check_password('la-del-medico'))
 
 class CrearMedicoCommandTests(TestCase):
     """El rol médico se crea de forma reproducible y con privilegio mínimo."""
