@@ -12,7 +12,9 @@
 > paciente corregidos (D19-D23) el 08/09/2026**; **el bot deja de invertir el
 > dato de gases y de frenar el reporte por una duda (UX-B03, BE-04) y **de
 > prometerle al paciente un mensaje que nadie envía (UX-B02, D26)**, los dos el
-> 02/10/2026, 483 tests OK)
+> 02/10/2026; **el panel del médico ordena por gravedad (UX-P02) y la
+> documentación deja de afirmar lo que no es cierto (DB-06, REPO-05 a 09)**,
+> los dos el 04/10/2026, 484 tests OK)
 > **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026 —
 > **diez comprobaciones** desde el 09/09/2026 (siete hasta el 07/09; se sumaron
 > el linter `ruff` y `pip-audit`, `check --deploy` recuperó la capacidad de
@@ -72,47 +74,57 @@ propósito, ver `CLAUDE.md` → "Roles del Equipo"):
 
 ## Estructura del Proyecto Django
 
-> Actualizada 01/07/2026 contra el árbol real del repositorio (post-merge Sprint 4).
+> Actualizada el 04/10/2026 contra el árbol real del repositorio. Hasta esa
+> fecha decía «01/07/2026» y listaba `BITACORA.md` y `AUDITORIA_SPRINT3_CIERRE.md`,
+> que ya no existen, y de `docs/` solo dibujaba `auditoria_literatura/` (REPO-08).
+> **No lleva cifras que se desfasan solas** —líneas por archivo, conteo de
+> pruebas, rango de migraciones—: el conteo vive en el README.
 
 ```
 Registro_Post_Quirurgico/                    ← raíz del repositorio
-├── CLAUDE.md                                ← contexto para agentes IA
-├── BITACORA.md                              ← historial del equipo
+├── CLAUDE.md                                ← contexto para agentes IA: estado y próximo paso
+├── README.md  LICENSE  CONTRIBUTING.md  SECURITY.md
 ├── ROADMAP_MONITOREO_POSQUIRURGICO.md       ← este archivo
-├── AUDITORIA_SPRINT3_CIERRE.md              ← detalle de hallazgos A/B/C/D del hardening
-├── .gitignore
-├── inicio_entornoR.bat
 ├── pyproject.toml                           ← dependencias (fuente única) + metadatos
 ├── ruff.toml                                ← reglas del linter y el porqué de cada excepción
-├── LICENSE  README.md  CONTRIBUTING.md  SECURITY.md
-├── docs/
-│   └── auditoria_literatura/                ← auditoría de evidencia ERAS (9 PDFs + transcripciones)
-│       ├── README.md
-│       ├── ANALISIS_INDIVIDUAL_9_PDFS_ERAS.md
-│       ├── ANALISIS_4_ARCHIVOS_RESTANTES.md
-│       ├── ANALISIS_TRANSCRIPCIONES_MEDICO.md
-│       └── SINTESIS_CRUZADA_UMBRALES.md
+├── Dockerfile  nixpacks.toml  .dockerignore ← despliegue (ver docs/railway_deploy.md)
+├── .gitleaks.toml  .gitleaksignore          ← guardia de secretos de la CI
+├── .gitignore  .mailmap  .python-version  inicio_entornoR.bat
+├── .github/                                 ← ci.yml (diez comprobaciones), dependabot.yml,
+│                                               CODEOWNERS, plantillas de PR e issues
+├── docs/                                    ← solo producto; docs/README.md es el índice
+│   ├── reglas_clinicas.md                   ← fuente única de las reglas del motor
+│   ├── modelos_datos.md                     ← fuente única de los modelos
+│   ├── bot_whatsapp.md                      ← máquina de estados y textos del bot
+│   ├── decisiones_correccion_auditoria.md   ← fichas D1 en adelante
+│   ├── trampas_conocidas.md  railway_deploy.md  cron_setup.md
+│   ├── arquitectura_documentacion.md  resumen_sprints.md  transferencia_cuentas.md
+│   ├── FORMATO_CONSENTIMIENTO_HABEAS_DATA.md
+│   ├── img/                                 ← capturas del panel para el README
+│   └── auditoria_literatura/                ← evidencia ERAS (9 PDFs + transcripciones)
+├── demo/                                    ← la demo de terminal de la reunión
+├── proceso/verificaciones/                  ← scripts que se corren a mano para
+│                                               comprobar el trabajo (y el barrido de la CI)
 └── Registro_Post_Quirurgico/                ← proyecto Django (manage.py aquí)
     ├── .env                                 ← secretos locales (NUNCA a GitHub)
     ├── .env.example                         ← plantilla de variables
     ├── manage.py
     ├── Registro_Post_Quirurgico/            ← configuración Django
     │   ├── settings.py                      ← base: PostgreSQL + decouple + Bogotá
-    │   ├── settings_local.py                ← dev: EMAIL_BACKEND=console (Sprint 4)
-    │   ├── settings_production.py           ← prod: DEBUG=False, HSTS, cookies seguras, cache Redis (Sprint 3-Hardening)
+    │   ├── settings_local.py                ← dev: EMAIL_BACKEND=console
+    │   ├── settings_production.py           ← prod: DEBUG=False, HSTS, cookies seguras, CSP, Redis
+    │   ├── tests_configuracion.py           ← pruebas de cómo se decide la configuración
     │   ├── urls.py
     │   ├── asgi.py
-    │   └── wsgi.py
+    │   └── wsgi.py                          ← sin variable, arranca con producción (SEC-04)
+    ├── templates/admin/                     ← cabecera del Admin y tablero de triage
     ├── home/                                ← app portal web
     │   ├── models.py                        ← MensajeContacto
-    │   ├── views.py                         ← index y contacto (rate limit)
-    │   ├── admin.py
-    │   ├── urls.py
-    │   ├── migrations/                    ← 0001 a 0002
-    │   ├── tests.py                       ← 22 tests
-    │   └── templates/home/
-    │       ├── index.html
-    │       └── contacto.html
+    │   ├── views.py                         ← inicio, contacto (rate limit), política de datos, /salud/
+    │   ├── ip_cliente.py                    ← la IP del cliente, una sola función para todo
+    │   ├── admin.py  urls.py  tests.py
+    │   ├── static/home/                     ← CSS y la animación del inicio
+    │   └── templates/home/                  ← base, index, contacto, politica_datos
     └── signos_sintomas/                     ← app núcleo clínico
         ├── models.py                        ← modelos clínicos + recibo técnico de Twilio
         ├── admin.py                         ← panel del médico: scoping, badges severidad, historial, filtros
@@ -120,6 +132,7 @@ Registro_Post_Quirurgico/                    ← raíz del repositorio
         ├── evaluacion_alertas.py            ← estado auditable y reintentos del motor
         ├── bot.py                           ← máquina de estados WhatsApp (11 preguntas, 2×/día)
         ├── signals.py                       ← crea outbox durable para alertas ALTA
+        ├── notificaciones.py                ← envía la bandeja de correo, con backoff y tope (D6)
         ├── views.py                         ← webhook Twilio (firma + SID durable en PostgreSQL)
         ├── urls.py
         ├── knowledge_base.md                ← placeholder (RAG diferido a Sprint 6)
@@ -138,7 +151,9 @@ Registro_Post_Quirurgico/                    ← raíz del repositorio
         │   └── seed_demo_produccion.py      ← demo reversible y confirmada
         ├── cron_runner.py                   ← runner compartido de los cron (Loop E, D14)
         ├── templatetags/                     ← panel_admin (tablero de triage)
-        ├── migrations/                      ← 0001 a 0028
+        ├── static/admin/                    ← CSS del panel y las gráficas (Chart.js en vendor/)
+        ├── templates/admin/                 ← formulario intermedio del motivo de resolución
+        ├── migrations/
         └── tests/                           ← paquete por tema desde el 10/08/2026
             ├── __init__.py                  ← OBLIGATORIO: sin él Django no
             │                                   recorre el paquete y el conteo
@@ -147,85 +162,27 @@ Registro_Post_Quirurgico/                    ← raíz del repositorio
             │                                   EspiaDeTareasCronMixin. NO se llama
             │                                   test_*.py a propósito: el
             │                                   descubridor no debe recorrerlo
-            ├── test_alert_engine.py         ← 1212 líneas
-            ├── test_admin.py                ← 1150
-            ├── test_commands.py             ← 1134
-            ├── test_bot.py                  ←  649
-            ├── test_webhook.py              ←  602
-            ├── test_models.py               ←  581
-            ├── test_alertas_persistencia.py ←  491
-            ├── test_notificaciones.py       ←  436
-            └── test_configuracion.py        ←   55
-                                                305 tests (340 total con home y
-                                                el módulo de configuración)
+            ├── test_alert_engine.py  test_admin.py  test_commands.py
+            ├── test_bot.py  test_webhook.py  test_models.py
+            └── test_alertas_persistencia.py  test_notificaciones.py  test_configuracion.py
 ```
 
 ---
 
 ## Modelos de Base de Datos
 
-### Paciente
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| nombre_completo | CharField(200) | Nombre del paciente |
-| telefono_whatsapp | CharField(20) unique | Formato: +573001234567 |
-| fecha_cirugia | DateField | Fecha de la cirugía a la que se le da seguimiento postoperatorio |
-| tipo_cirugia | CharField choices null=True | Dato descriptivo (sugarbaker_hipec/colectomia_electiva/otra) — no afecta alert_engine ni bot |
-| medico_responsable | ForeignKey(User, SET_NULL, null=True) | Médico a cargo — related_name='pacientes' |
-| activo | BooleanField | Desactivar al terminar seguimiento |
-| fecha_registro | DateTimeField auto | Timestamp automático |
-
-### RegistroDiario
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| paciente | ForeignKey(Paciente) PROTECT | No borrar paciente con registros |
-| temperatura | DecimalField(4,1) | °C — alerta ALTA si >= 37.9 |
-| dolor_eva | PositiveSmallIntegerField | Escala 1-10 |
-| volumen_drenaje_ml | PositiveIntegerField nullable | ml |
-| tiene_drenaje | BooleanField nullable | null=no capturado, False=sin drenaje, True=con drenaje |
-| aspecto_drenaje | CharField choices | seroso/hemático/turbio/purulento/fecaloide/sin_drenaje |
-| presencia_gases | BooleanField | Tránsito intestinal |
-| episodios_nauseas | PositiveSmallIntegerField | Episodios en 24h |
-| tolero_liquidos | BooleanField nullable | null=no capturado, False=no toleró, True=toleró |
-| hinchazon_abdominal | CharField choices nullable | nada/algo/mucho — evaluado por empeoramiento entre días |
-| frecuencia_cardiaca | PositiveSmallIntegerField nullable | lpm — alerta TAQUICARDIA por valor absoluto |
-| frecuencia_respiratoria | PositiveSmallIntegerField nullable | rpm — SOLO dashboard, sin alerta (Outersterp 2025) |
-| fecha_registro | DateTimeField auto | Timestamp automático |
-| dia_postoperatorio | PositiveSmallIntegerField | Calculado con la fecha del registro al crear y luego congelado |
-| estado_evaluacion_alertas | CharField choices | PENDIENTE/PROCESANDO/COMPLETADA/ERROR; indexado |
-| intentos_evaluacion_alertas | PositiveSmallIntegerField | Número de intentos del motor |
-| fecha_ultima_evaluacion_alertas | DateTimeField nullable | Auditoría técnica del último intento |
-| ultimo_error_evaluacion_alertas | CharField(100) | Solo clase del error; nunca respuestas del paciente |
-
-### Alerta
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| paciente | ForeignKey(Paciente) PROTECT | — |
-| registro_origen | ForeignKey(RegistroDiario) PROTECT | Registro que disparó la alerta |
-| tipo | CharField choices | SEPSIS/FUGA_ANASTOMOTICA/ILEO_PARALITICO/DOLOR_AGUDO/INTOLERANCIA_ORAL/TAQUICARDIA/SILENCIO |
-| severidad | CharField choices | ALTA/MEDIA/BAJA |
-| mensaje | TextField | Descripción generada por alert_engine |
-| resuelta | BooleanField | El oncólogo marca cuando atiende |
-| fecha_alerta | DateTimeField auto | Timestamp automático |
-| fecha_resolucion | DateTimeField nullable | Cuándo fue atendida |
-| veces | PositiveSmallIntegerField | Cantidad de detecciones mientras permanece abierta |
-
-Restricción: como máximo una alerta abierta por `(paciente, tipo)`.
-
-### DeteccionAlerta
-- Modelo hijo de solo lectura creado en el Loop 3 (migración 0022).
-- Cada fila conserva exactamente una fuente: `RegistroDiario` para una
-  detección clínica o `CheckInProgramado` para SILENCIO.
-- Guarda fecha, severidad y mensaje de esa detección; las restricciones de BD
-  impiden duplicar la misma fuente dentro de una alerta.
-- Empieza a registrar desde esta versión. El contador histórico `veces` se
-  conserva, pero no se reconstruyen eventos que nunca fueron almacenados.
-
-### ConversacionWhatsApp / RecepcionWebhookTwilio
-- `ConversacionWhatsApp.checkin_actual` fija el evento exacto que el paciente
-  está respondiendo y permite coordinar el bot con el cron.
-- `RecepcionWebhookTwilio` conserva solo `MessageSid`, token idempotente,
-  estado, intentos y timestamps. No guarda teléfono ni cuerpo del mensaje.
+> **Movidos a `docs/modelos_datos.md` (04/10/2026).** Este archivo conservaba su
+> propia copia de las tablas de modelos, y se había desviado del código: decía
+> que `medico_responsable` usa `SET_NULL` cuando desde julio es `PROTECT`
+> (REPO-05), que el dolor va de 1 a 10 cuando desde D20 admite 0, y no
+> nombraba `AUXILIO` ni a `NotificacionAlerta`. Es la divergencia que predice
+> la regla de «cada hecho vive en un solo archivo» (REPO-09), la misma que llevó
+> las reglas clínicas a su propio documento el 24/07/2026.
+>
+> `docs/modelos_datos.md` es la **fuente única** de los modelos, sus campos,
+> sus choices y sus restricciones. Una prueba de la suite
+> (`ModelosDatosDocumentaCadaCampoTests`, en `tests/test_models.py`) cae si un
+> modelo, un campo o un choice real no aparece en él.
 
 ---
 

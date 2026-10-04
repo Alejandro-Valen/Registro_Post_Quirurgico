@@ -1,9 +1,11 @@
 # Modelos de datos
 
-> **Fuente única.** Describe los modelos de `signos_sintomas/models.py`: qué
-> guarda cada campo y **por qué**, que es lo que el código no puede contar
-> solo. Al cambiar un modelo, este archivo se actualiza en el mismo lote de
-> commits.
+> **Fuente única.** Describe los modelos de `signos_sintomas/models.py` y de
+> `home/models.py`: qué guarda cada campo y **por qué**, que es lo que el
+> código no puede contar solo. Al cambiar un modelo, este archivo se actualiza
+> en el mismo lote de commits. **Desde el 04/10/2026 lo vigila una prueba**
+> (`ModelosDatosDocumentaCadaCampoTests`): un modelo, un campo o un choice que
+> no aparezca aquí la pone en rojo.
 >
 > Las reglas que consumen estos datos viven en `docs/reglas_clinicas.md`.
 
@@ -100,6 +102,18 @@ frecuencia_cardiaca   PositiveSmallIntegerField null=True  # lpm — alerta TAQU
 frecuencia_respiratoria PositiveSmallIntegerField null=True  # rpm — SOLO dashboard, sin alerta (Outersterp 2025)
 fecha_registro        DateTimeField default=timezone.now, editable=False
 dia_postoperatorio    PositiveSmallIntegerField  # calculado al crear y luego inmutable
+
+# --- Estado de la evaluación del motor (auditable y reintentable, Loop B) ---
+estado_evaluacion_alertas       CharField choices=[PENDIENTE, PROCESANDO, COMPLETADA, ERROR]
+                                # db_index. ERROR lo recoge reintentar_evaluaciones_alertas.
+                                # PROCESANDO solo existe dentro de la transacción que lo
+                                # resuelve: nunca queda guardado (BE-13, descartado 02/10).
+intentos_evaluacion_alertas     PositiveSmallIntegerField default=0
+                                # tope de 10 (D6): pasado el tope deja de reintentarse
+fecha_ultima_evaluacion_alertas DateTimeField nullable
+ultimo_error_evaluacion_alertas CharField(100) blank
+                                # SOLO el nombre de la excepción, nunca su mensaje:
+                                # el mensaje puede llevar datos del paciente (D11)
 ```
 
 **Decisión de diseño (Sprint 3):** `cantidad_drenaje` es el dato principal que
@@ -112,8 +126,16 @@ el paciente lo menciona espontáneamente (ej. "poco, 30ml"). El alert_engine usa
 ```python
 paciente              ForeignKey(Paciente, PROTECT)
 registro_origen       ForeignKey(RegistroDiario, PROTECT, null=True, blank=True)
-                      # null solo para alertas SILENCIO (check-in sin respuesta)
-tipo                  CharField choices=[SEPSIS,FUGA_ANASTOMOTICA,ILEO_PARALITICO,DOLOR_AGUDO,INTOLERANCIA_ORAL,TAQUICARDIA,SILENCIO]
+                      # null para SILENCIO y AUXILIO (no salen de un registro).
+                      # OJO, lo que guarda NO es lo que el nombre dice: es el
+                      # ÚLTIMO registro que detectó el problema, no el que lo
+                      # originó (alert_engine lo reescribe en cada recurrencia).
+                      # La detección original está en DeteccionAlerta. Hallazgo
+                      # DB-03, abierto: la gráfica marca un solo punto rojo por
+                      # alerta por esta razón.
+tipo                  CharField choices=[SEPSIS,FUGA_ANASTOMOTICA,ILEO_PARALITICO,DOLOR_AGUDO,INTOLERANCIA_ORAL,TAQUICARDIA,SILENCIO,AUXILIO]
+                      # AUXILIO (D21, migraciones 0029 y 0030): el paciente escribió AYUDA.
+                      # No la produce el motor sino bot.py, y siempre es ALTA.
 severidad             CharField choices=[ALTA,MEDIA,BAJA]  # = MÁXIMA alcanzada mientras la alerta está abierta
 mensaje               TextField
 resuelta              BooleanField default=False
@@ -181,6 +203,61 @@ con datos reales en el futuro. El scoping por médico se aplica en cada paso
 Desde el Loop 1 de hardening, la alerta completa es de solo lectura en el
 formulario y la base exige fecha + motivo para todo cierre. `LEGACY` identifica
 exclusivamente cierres históricos previos donde ese motivo no se capturó.
+
+### DeteccionAlerta (Loop 3 de hardening — migración 0022)
+```python
+alerta              ForeignKey(Alerta, CASCADE, related_name='detecciones')
+registro            ForeignKey(RegistroDiario, PROTECT, null=True)
+                    # la fuente de una detección clínica
+checkin             ForeignKey(CheckInProgramado, PROTECT, null=True)
+                    # la fuente de una detección SILENCIO
+severidad_detectada CharField choices=[ALTA, MEDIA, BAJA]
+                    # la de ESTA detección; la de la alerta es la máxima alcanzada
+mensaje_detectado   TextField   # acumula los signos concurrentes (D5)
+fecha_deteccion     DateTimeField default=timezone.now, db_index
+```
+
+**Por qué existe:** una alerta agrupa todas las detecciones del mismo problema
+mientras sigue abierta (`veces`). Sin esta tabla, el contador decía cuántas
+veces se detectó pero no **cuándo ni con qué datos**. Cada fila conserva
+**exactamente una** fuente —un registro o un check-in, nunca los dos ni
+ninguno—, y no se fabrican filas para el contador histórico de antes de la
+migración.
+
+| Restricción | Qué garantiza |
+|---|---|
+| `deteccion_fuente_unica` | `registro` XOR `checkin` |
+| `deteccion_severidad_valida` | `severidad_detectada` ∈ ALTA / MEDIA / BAJA |
+| `unique_det_alerta_registro` / `unique_det_alerta_checkin` | La misma fuente no cuenta dos veces dentro de una alerta |
+
+### NotificacionAlerta (migraciones 0024 y 0026)
+```python
+alerta               OneToOneField(Alerta, PROTECT, related_name='notificacion_email')
+                     # uno a uno: una alerta, como mucho un correo. Es lo que de
+                     # verdad impide re-notificar en una recurrencia (TEST-12)
+destinatario         EmailField blank   # el correo del médico responsable
+estado               CharField choices=[PENDIENTE, ENVIADA, FALLIDA]
+                     # FALLIDA es terminal (D6): se agotaron los 10 intentos
+intentos             PositiveSmallIntegerField default=0
+proximo_intento      DateTimeField default=timezone.now, db_index
+                     # backoff 5, 15, 45, 135 min y luego cada 6 h
+fecha_creacion       DateTimeField auto_now_add=True
+fecha_ultimo_intento DateTimeField nullable
+fecha_envio          DateTimeField nullable   # solo si ENVIADA
+ultimo_error         CharField(100) blank     # solo el nombre de la excepción
+```
+
+**Por qué existe:** es una **bandeja de salida** (outbox). El correo de una
+alerta ALTA no se manda desde el webhook ni desde el motor —una caída del
+proveedor no puede perder la alerta ni frenar al paciente—: `signals.py` deja
+aquí la fila en la misma transacción que guarda la alerta, y
+`procesar_notificaciones_email` la envía y reintenta. **No guarda datos del
+paciente:** el correo se arma al enviar y solo enlaza al panel.
+
+| Restricción | Qué garantiza |
+|---|---|
+| `notificacion_alerta_estado_valido` | `estado` ∈ PENDIENTE / ENVIADA / FALLIDA |
+| `notificacion_alerta_envio_coherente` | `fecha_envio` existe si y solo si `estado = ENVIADA` |
 
 ### ConversacionWhatsApp (Sprint 3, ampliado en Sprint 3.5)
 ```python
@@ -256,7 +333,10 @@ hora_programada  DateTimeField
                  # Momento en que el sistema disparó (o debía disparar) el
                  # prompt. Es el origen del corte de 10 horas de gracia.
 fecha_respuesta  DateTimeField nullable   # null = aún no respondió
-estado           CharField choices=[PENDIENTE, COMPLETADO, NO_RESPONDIDO]
+estado           CharField choices=[PENDIENTE, COMPLETADO, NO_RESPONDIDO, SIN_CONSENTIMIENTO]
+                 # SIN_CONSENTIMIENTO (D22, migración 0029): turno cerrado porque
+                 # el consentimiento se retiró. NO cuenta como «no respondió»
+                 # y no genera SILENCIO: el sistema le impedía responder.
 registro         OneToOneField(RegistroDiario, SET_NULL, null=True,
                  related_name='checkin')
                  # RegistroDiario creado al completar el flujo. Se vincula en
@@ -268,7 +348,7 @@ registro         OneToOneField(RegistroDiario, SET_NULL, null=True,
 | Nombre | Qué garantiza |
 |---|---|
 | `unique_checkin_paciente_dia_orden` | Un solo turno por paciente/día/orden. Es la mitad de lo que hace idempotentes a `crear_checkins_diarios` y `cerrar_checkins_vencidos` — la otra mitad es que ambos verifican el estado antes de actuar, así que una segunda corrida no reprocesa |
-| `checkin_estado_valido` | `estado` ∈ PENDIENTE / COMPLETADO / NO_RESPONDIDO |
+| `checkin_estado_valido` | `estado` ∈ PENDIENTE / COMPLETADO / NO_RESPONDIDO / SIN_CONSENTIMIENTO. Hasta el 04/10/2026 esta fila no nombraba el cuarto, que existe desde D22 |
 | `checkin_etiqueta_valida` | `etiqueta` ∈ MAÑANA / TARDE |
 | `checkin_turno_coherente` | `orden=1 ⇒ MAÑANA` y `orden=2 ⇒ TARDE` — impide que el número del turno y su nombre se contradigan |
 
@@ -315,5 +395,27 @@ segundo intento en un no-op.
 opaco de Twilio y los datos de control. Es deliberado — es una tabla técnica de
 idempotencia, no un registro clínico. En el Admin es de solo lectura y visible
 únicamente para superusuarios.
+
+### MensajeContacto (app `home` — el formulario público)
+```python
+nombre               CharField(100)
+telefono             CharField(30)
+mensaje              TextField   # la vista rechaza más de 2000 caracteres (UX-L04)
+medico_destinatario  ForeignKey(User, SET_NULL, null=True, blank=True)
+                     # el médico que puede verlo; sin asignar, solo el superusuario
+autorizacion_datos   BooleanField default=False
+fecha_autorizacion   DateTimeField nullable
+                     # SEC-03 / D23: la autorización de habeas data (Ley 1581/2012,
+                     # art. 6) se guarda con su fecha, para poder DEMOSTRARLA
+fecha_creacion       DateTimeField auto_now_add=True
+revisado             BooleanField default=False
+```
+
+**Por qué está aquí, aunque no sea clínico:** es la única tabla que escribe
+cualquiera desde internet, sin login, y recoge datos personales, a veces de
+salud aunque se pida no enviarlos. Sus máximos son los mismos que valida la
+vista y que declara el `maxlength` del formulario (`home/views.py`,
+`_CAMPOS_CONTACTO`): desde UX-L04 nada se recorta en silencio, así que ningún
+texto puede superar el campo de la base.
 
 ---

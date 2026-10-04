@@ -9,7 +9,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import DataError, IntegrityError, transaction
-from django.test import TestCase, TransactionTestCase
+from django.test import SimpleTestCase, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -19,6 +19,50 @@ from ..models import (
     RegistroDiario,
 )
 from .soporte import medico_de_pruebas
+
+
+class ModelosDatosDocumentaCadaCampoTests(SimpleTestCase):
+    """DB-06 — `docs/modelos_datos.md` nombra cada campo y cada choice real.
+
+    El documento se declara fuente única de los modelos, y el 04/10/2026 un
+    recorrido de `_meta` encontró 25 ausencias: tres modelos sin sección
+    (`NotificacionAlerta`, `DeteccionAlerta`, `MensajeContacto`), los cuatro
+    campos de evaluación de `RegistroDiario`, el tipo `AUXILIO` (D21) y el
+    estado `SIN_CONSENTIMIENTO` (D22), entre otros. Nada lo avisaba: un
+    documento que se queda atrás no rompe ninguna prueba.
+
+    Lo que esta prueba NO ve, y conviene decirlo: busca el nombre en todo el
+    documento, así que un nombre común (`estado`, `paciente`) aparece siempre en
+    alguna parte aunque falte en su sección. Atrapa lo que sí importa: un campo,
+    un modelo o un choice NUEVO que nadie documentó.
+    """
+
+    def test_cada_modelo_campo_y_choice_aparece_en_el_documento(self):
+        import re
+        from pathlib import Path
+
+        from django.apps import apps
+        from django.conf import settings
+
+        doc = (Path(settings.BASE_DIR).parent / 'docs' / 'modelos_datos.md').read_text(
+            encoding='utf-8')
+        ausencias = []
+        for app in ('signos_sintomas', 'home'):
+            for modelo in apps.get_app_config(app).get_models():
+                nombre = modelo.__name__
+                if not re.search(rf'^### {nombre}\b', doc, re.M):
+                    ausencias.append(f'sin sección: {nombre}')
+                for campo in modelo._meta.concrete_fields:
+                    if campo.name == 'id':
+                        continue
+                    if not re.search(rf'\b{re.escape(campo.name)}\b', doc):
+                        ausencias.append(f'campo: {nombre}.{campo.name}')
+                    for valor, _ in campo.choices or []:
+                        if not re.search(rf'\b{re.escape(str(valor))}\b', doc):
+                            ausencias.append(f'choice: {nombre}.{campo.name}={valor}')
+
+        self.assertEqual(ausencias, [], 'docs/modelos_datos.md no documenta: '
+                         + '; '.join(ausencias))
 
 
 class RegistroDiarioModelTests(TestCase):

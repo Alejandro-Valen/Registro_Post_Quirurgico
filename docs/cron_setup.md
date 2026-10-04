@@ -5,9 +5,11 @@
 > el destino de despliegue es Railway o Render (ambos Linux), no la
 > máquina de Alejandro. Ver ROADMAP_MONITOREO_POSQUIRURGICO.md, FASE 5.
 >
-> Estado al 21/07/2026: `cron-manana` y el `cron_operativo` temporal están
-> desplegados. La recuperación de evaluaciones y correo fue verificada; el
-> monitoreo externo de ausencia de ejecuciones sigue pendiente.
+> **⚠️ Desde el 07/08/2026 no hay producción.** Venció la prueba de Railway:
+> `cron-manana` y `cron-tarde` **no están corriendo** y hoy nadie
+> ejecuta `cron_matutino` ni `cron_operativo`. Lo de abajo describe lo que estuvo desplegado del 21/07 al 06/08/2026 y
+> sirve como guion para reconstruirlo, no como descripción del presente. El
+> estado vivo lo lleva `docs/railway_deploy.md`.
 
 ## Los 6 management commands que deben programarse
 
@@ -146,15 +148,15 @@ Por eso `desactivar_pacientes_vencidos` va 5 minutos antes (10:55 UTC),
 no en el mismo minuto — así se garantiza que termina antes de que
 empiece `crear_checkins_diarios`.
 
-## Configuración actual en Railway
+## Configuración en Railway (hasta el 06/08/2026)
 
-Desde el 19/07/2026 hay dos servicios cron:
+Del 19/07 al 06/08/2026 hubo dos servicios cron:
 
 - `cron-manana`: `cron_matutino`, a las `0 11 * * *` UTC.
 - `cron-tarde`: **reutilizado temporalmente** con `cron_operativo`, cada
   `*/5 * * * *`.
 
-`cron_matutino` ejecuta hoy las seis tareas en una sola corrida de las 6:00 AM,
+`cron_matutino` ejecutaba las seis tareas en una sola corrida de las 6:00 AM,
 incluido `enviar_recordatorios`. Como ese command sigue siendo un stub, todavía
 no envía nada. Al implementar Twilio saliente se debe decidir si el recordatorio
 se separa a las 7:00 AM o si se aprueba explícitamente enviarlo a las 6:00 AM;
