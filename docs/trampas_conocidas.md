@@ -10,6 +10,11 @@
 
 ## Cron y despliegue en Railway
 
+> **Desde el 07/08/2026 no hay producción** (venció la prueba de Railway; ver
+> `docs/railway_deploy.md`). Estas trampas siguen siendo ciertas como
+> comportamiento de la plataforma y **van a volver a morder al reconstruir el
+> despliegue**; lo que ya no es cierto es que haya un servicio corriendo ahora.
+
 **Cada servicio de Railway tiene su PROPIO entorno, y pueden divergir sin que
 nadie lo note (incidente 25/07/2026).** El servicio web, `cron-manana` y
 `cron-tarde` cargan el mismo `settings_production`, pero sus variables se

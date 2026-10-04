@@ -4,8 +4,11 @@
 > sesión el 01/07/2026 — ver ROADMAP_MONITOREO_POSQUIRURGICO.md, FASE 5,
 > tabla de decisiones P-1 a P-15.
 >
-> Estado actualizado al 21/07/2026: infraestructura piloto desplegada en
-> Railway; transferencia comercial y requisitos para pacientes reales siguen
+> **⚠️ Desde el 07/08/2026 no hay producción.** Venció la prueba de Railway:
+> la app, la base y los cron ya no están corriendo. Lo de abajo describe lo que estuvo desplegado del 21/07 al 06/08/2026 y
+> sirve como guion para reconstruirlo, no como descripción del presente. El
+> estado vivo lo lleva `docs/railway_deploy.md`.
+> La transferencia comercial y los requisitos para pacientes reales siguen
 > pendientes.
 
 ## Modelo de negocio (P-1, P-2, P-13)
@@ -21,10 +24,10 @@ email automático → resolución en ~30 min).
 
 | Servicio | Propósito | Estado actual | Quién transfiere |
 |---|---|---|---|
-| Railway | Web, PostgreSQL, Redis y cron | Desplegado y verificado; el plan actual obliga a reutilizar temporalmente `cron-tarde` cada 5 minutos | León/Alejandro → Médico |
+| Railway | Web, PostgreSQL, Redis y cron | **Sin servicio desde el 07/08/2026** (venció la prueba). Estuvo desplegado y verificado del 21/07 al 06/08; el plan obligaba a reutilizar `cron-tarde` cada 5 minutos | León/Alejandro → Médico |
 | Twilio | Recepción de WhatsApp del bot | Sandbox activo y probado; faltan WhatsApp Business, número propio, facturación, plantillas y envío saliente | León/Alejandro → Médico |
 | Correo del sistema / Resend | Notificaciones genéricas de alerta ALTA | Resend por HTTPS entregó una prueba real; se usa temporalmente `onboarding@resend.dev` | León/Alejandro → Médico |
-| Dominio propio | Remitente de correo y URL pública propia | URL Railway activa; dominio propio y autenticación SPF/DKIM/DMARC pendientes | León/Alejandro → Médico |
+| Dominio propio | Remitente de correo y URL pública propia | La URL de Railway ya no responde (desde el 07/08/2026); dominio propio y autenticación SPF/DKIM/DMARC pendientes | León/Alejandro → Médico |
 | Cuenta de correo del proyecto | Propiedad de Resend y contacto técnico | Una cuenta personal del equipo, usada para pruebas; definir titularidad definitiva antes de transferir | León/Alejandro → Médico |
 
 > **Por qué la cuenta de correo no aparece escrita aquí.** Hasta el 10/08/2026
