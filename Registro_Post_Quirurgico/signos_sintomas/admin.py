@@ -4,6 +4,8 @@ from datetime import timedelta
 from django import forms as django_forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
+from django.db.models import Case, IntegerField, Value, When
+from django.db.models.functions import Coalesce
 from django.template.response import TemplateResponse
 from django.utils import timezone
 from django.utils.html import format_html, mark_safe
@@ -332,6 +334,9 @@ class PacienteAdmin(admin.ModelAdmin):
                      'medico_responsable__last_name',
                      'medico_responsable__username']
     readonly_fields = ['fecha_consentimiento', 'grafica_signos_vitales', 'historial_paciente']
+    # DB-05 (02/10/2026): la columna del médico y `Paciente.__str__` pedían el
+    # médico de cada fila por separado: una consulta por paciente listado.
+    list_select_related = ('medico_responsable',)
 
     class Media:
         js = (
@@ -480,6 +485,8 @@ class RegistroDiarioAdmin(admin.ModelAdmin):
         'presencia_gases',
     ]
     search_fields = ['paciente__nombre_completo']
+    # DB-05: la columna del paciente es `Paciente.__str__`, que lee su médico.
+    list_select_related = ('paciente__medico_responsable',)
 
     def get_queryset(self, request):
         """B6: solo registros de pacientes propios del médico. Superuser ve todos."""
@@ -609,8 +616,11 @@ class DeteccionAlertaInline(admin.TabularInline):
 
 @admin.register(Alerta)
 class AlertaAdmin(admin.ModelAdmin):
+    # UX-P03 (02/10/2026): la columna de fecha era `fecha_alerta`, la PRIMERA
+    # detección. Una alerta redetectada esta mañana mostraba la fecha de hace
+    # días y, ordenada por ella, se hundía al fondo. Ahora se ve la última.
     list_display = ['paciente', 'tipo', 'severidad_badge', 'recurrencia',
-                    'resuelta', 'resuelta_por', 'fecha_alerta', 'mensaje_corto']
+                    'resuelta', 'resuelta_por', 'ultima_deteccion', 'mensaje_corto']
     list_filter = ['tipo', 'severidad', 'resuelta']
     search_fields = ['paciente__nombre_completo']
     actions = ['marcar_resuelta']
@@ -619,10 +629,30 @@ class AlertaAdmin(admin.ModelAdmin):
         'cobertura_detecciones',
     ]
     inlines = [DeteccionAlertaInline]
+    # DB-05: el paciente (y su médico, que sale en `Paciente.__str__`) y quien
+    # resolvió se pedían fila por fila: ~201 consultas por página.
+    list_select_related = ('paciente__medico_responsable', 'resuelta_por')
 
     def has_add_permission(self, request):
         # Las alertas son resultados del motor clínico, no entradas manuales.
         return False
+
+    def get_ordering(self, request):
+        """UX-P02 (02/10/2026, aprobado por León): la ALTA primero y, dentro de
+        cada severidad, la detección más reciente.
+
+        El listado ordenaba por `-fecha_alerta`: una ALTA de hace tres días
+        quedaba debajo de las BAJA de hoy. Se ordena por anotaciones de
+        `get_queryset`, no por `Meta.ordering`, que obligaría a una migración y
+        cambiaría el orden en todo el sistema, no solo aquí.
+        """
+        return ('orden_severidad', '-deteccion_reciente')
+
+    @admin.display(description='Última detección', ordering='deteccion_reciente')
+    def ultima_deteccion(self, obj):
+        # Las alertas anteriores al contador `veces` no tienen
+        # `fecha_ultima_deteccion`: su única detección es la de creación.
+        return getattr(obj, 'deteccion_reciente', None) or obj.fecha_ultima_deteccion or obj.fecha_alerta
 
     @admin.display(description='Recurrencia', ordering='veces')
     def recurrencia(self, obj):
@@ -667,7 +697,9 @@ class AlertaAdmin(admin.ModelAdmin):
             obj.veces,
         )
 
-    @admin.display(description='Severidad', ordering='severidad')
+    # UX-P02: ordenar por la columna usaba la cadena `severidad` — ALTA, BAJA,
+    # MEDIA, en orden alfabético. Ahora usa el rango clínico.
+    @admin.display(description='Severidad', ordering='orden_severidad')
     def severidad_badge(self, obj):
         color_texto, color_fondo = _COLORES_SEVERIDAD.get(
             obj.severidad, ('#374151', '#f3f4f6')
@@ -749,8 +781,26 @@ class AlertaAdmin(admin.ModelAdmin):
         return None
 
     def get_queryset(self, request):
-        """B6: solo alertas de pacientes propios del médico. Superuser ve todos."""
-        qs = super().get_queryset(request)
+        """B6: solo alertas de pacientes propios del médico. Superuser ve todos.
+
+        Anota el rango clínico de la severidad y la detección más reciente,
+        que es por lo que se ordena el listado (UX-P02 / UX-P03).
+
+        No se llama a `super()`: `ModelAdmin.get_queryset` aplica
+        `get_ordering()` ANTES de que exista la anotación por la que se ordena,
+        y Django falla con FieldError. Se hace lo mismo que él, en el orden
+        correcto: anotar y después ordenar.
+        """
+        qs = self.model._default_manager.get_queryset().annotate(
+            orden_severidad=Case(
+                When(severidad='ALTA', then=Value(0)),
+                When(severidad='MEDIA', then=Value(1)),
+                When(severidad='BAJA', then=Value(2)),
+                default=Value(3),
+                output_field=IntegerField(),
+            ),
+            deteccion_reciente=Coalesce('fecha_ultima_deteccion', 'fecha_alerta'),
+        ).order_by(*self.get_ordering(request))
         if _solo_propios(request):
             return qs.filter(paciente__medico_responsable=request.user)
         return qs
@@ -779,6 +829,8 @@ class CheckInProgramadoAdmin(admin.ModelAdmin):
     search_fields = ['paciente__nombre_completo']
     readonly_fields = ['hora_programada', 'fecha_respuesta', 'fecha_dia',
                        'orden', 'etiqueta', 'registro']
+    # DB-05: la columna del paciente es `Paciente.__str__`, que lee su médico.
+    list_select_related = ('paciente__medico_responsable',)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
