@@ -7,7 +7,7 @@ signos y avisa al médico cuando algo se sale de lo esperado.
 [![CI](https://github.com/Alejandro-Valen/Registro_Post_Quirurgico/actions/workflows/ci.yml/badge.svg?branch=Desarrollo)](https://github.com/Alejandro-Valen/Registro_Post_Quirurgico/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.13-blue)
 ![Django](https://img.shields.io/badge/django-6.0.8-092E20)
-![Pruebas](https://img.shields.io/badge/pruebas-440-brightgreen)
+![Pruebas](https://img.shields.io/badge/pruebas-475-brightgreen)
 ![Licencia](https://img.shields.io/badge/licencia-todos%20los%20derechos%20reservados-lightgrey)
 
 > **La IA no diagnostica.** El sistema clasifica bajo reglas clínicas fijas,
@@ -96,7 +96,7 @@ gráfica clínica es cómo se inventa un hecho.
 
 |  |  |
 |---|---|
-| **Suite** | 440 pruebas |
+| **Suite** | 475 pruebas |
 | **Integración continua** | 10 comprobaciones por PR: suite, `check`, migraciones, configuración de producción, higiene del diff, `gitleaks` sobre la historia completa, control de archivos de entorno, linter, auditoría de dependencias y barrido de veracidad de la documentación |
 | **Despliegue** | **Sin entorno productivo activo.** Ver [`docs/railway_deploy.md`](docs/railway_deploy.md) |
 | **Piloto con pacientes reales** | **No.** Ver la sección siguiente |

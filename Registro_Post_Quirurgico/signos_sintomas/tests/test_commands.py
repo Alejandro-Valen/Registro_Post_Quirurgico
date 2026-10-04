@@ -26,6 +26,24 @@ from ..models import (
 from .soporte import ANCLA_MEDIANOCHE, EspiaDeTareasCronMixin, medico_de_pruebas
 
 
+def correr_cron_con_salida_real(comando):
+    """Corre un cron SIN espiar sus tareas y devuelve todo lo que escribieron.
+
+    `cron_runner` invoca cada tarea con `call_command(nombre)`, sin pasarle un
+    stdout, así que cada comando escribe en el `sys.stdout` que encuentra al
+    crearse. Por eso se redirige `sys.stdout` además de pasar el buffer: sin lo
+    primero, solo se capturarían las líneas del runner y no los resúmenes de
+    las tareas, que son la prueba de que corrieron de verdad.
+    """
+    import contextlib
+    import io
+
+    salida = io.StringIO()
+    with contextlib.redirect_stdout(salida):
+        call_command(comando, stdout=salida, stderr=io.StringIO())
+    return salida.getvalue()
+
+
 class ReintentarEvaluacionesAlertasCommandTests(TestCase):
     def _registro(self, telefono):
         paciente = Paciente.objects.create(medico_responsable=medico_de_pruebas(),
@@ -262,6 +280,66 @@ class SchedulerTests(TestCase):
         checkin.refresh_from_db()
         self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
         self.assertEqual(Alerta.objects.filter(tipo='SILENCIO').count(), 1)
+
+    # --- TEST-07: la frontera exacta de la gracia de 10 horas ---
+    #
+    # Las pruebas de arriba miran 5 h y 11 h, lejos de la frontera: una gracia
+    # de 9 h o de 10,5 h, o un `<` en lugar de `<=`, las dejaba pasar en verde.
+    # Estos pares fijan el valor que cierra y el inmediatamente anterior. La
+    # clase congela el reloj (ANCLA_MEDIANOCHE), así que la resta es exacta.
+
+    def _checkin_con_edad(self, paciente, edad):
+        return CheckInProgramado.objects.create(
+            paciente=paciente,
+            fecha_dia=timezone.localdate(),
+            orden=1,
+            etiqueta=CheckInProgramado.ETIQUETA_MANANA,
+            hora_programada=timezone.now() - edad,
+        )
+
+    def test_checkin_con_exactamente_10_horas_se_cierra(self):
+        checkin = self._checkin_con_edad(self._paciente(), timedelta(hours=10))
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
+        self.assertEqual(Alerta.objects.filter(tipo='SILENCIO').count(), 1)
+
+    def test_checkin_un_segundo_antes_de_10_horas_no_se_cierra(self):
+        checkin = self._checkin_con_edad(
+            self._paciente(), timedelta(hours=10) - timedelta(seconds=1))
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_PENDIENTE)
+        self.assertEqual(Alerta.objects.count(), 0)
+
+    def _conversacion_tocada_hace(self, paciente, checkin, edad):
+        conversacion = ConversacionWhatsApp.objects.create(
+            paciente=paciente,
+            checkin_actual=checkin,
+            estado=ConversacionWhatsApp.ESTADO_DOLOR,
+        )
+        ConversacionWhatsApp.objects.filter(pk=conversacion.pk).update(
+            fecha_actualizacion=timezone.now() - edad,
+        )
+
+    def test_conversacion_tocada_hace_exactamente_10_horas_ya_no_protege_el_turno(self):
+        """La misma gracia decide si el paciente «sigue contestando»."""
+        paciente = self._paciente()
+        checkin = self._checkin_con_edad(paciente, timedelta(hours=11))
+        self._conversacion_tocada_hace(paciente, checkin, timedelta(hours=10))
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
+
+    def test_conversacion_tocada_un_segundo_antes_de_10_horas_protege_el_turno(self):
+        paciente = self._paciente()
+        checkin = self._checkin_con_edad(paciente, timedelta(hours=11))
+        self._conversacion_tocada_hace(
+            paciente, checkin, timedelta(hours=10) - timedelta(seconds=1))
+        call_command('cerrar_checkins_vencidos', verbosity=0)
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.estado, CheckInProgramado.ESTADO_PENDIENTE)
+        self.assertEqual(Alerta.objects.count(), 0)
 
     def test_silencios_repetidos_actualizan_una_sola_alerta_abierta(self):
         from django.core.management import call_command
@@ -604,9 +682,29 @@ class CronMatutinoCommandTests(EspiaDeTareasCronMixin, TestCase):
         ])
 
     def test_corre_sin_error_con_bd_vacia(self):
-        from django.core.management import call_command
-        # Con 0 pacientes las tareas deben correr sin lanzar excepción.
-        call_command('cron_matutino', verbosity=0)
+        """Con 0 pacientes, las seis tareas corren DE VERDAD y terminan limpias.
+
+        TEST-08 (02/10/2026): hasta esta fecha no tenía ninguna aserción.
+        Atrapaba una tarea que reventara, pero no una que dejara de hacer su
+        trabajo en silencio: la prueba de orden de arriba espía el `handle` de
+        cada comando, así que no ve qué hace por dentro. Aquí no se espía nada,
+        y cada comando real tiene que dejar su propio resumen, en cero.
+        """
+        salida = correr_cron_con_salida_real('cron_matutino')
+
+        for esperado in (
+            r'desactivar_pacientes_vencidos \d{4}-\d\d-\d\d: 0 paciente\(s\) desactivados\.',
+            r'crear_checkins_diarios \d{4}-\d\d-\d\d: 0 creados, 0 ya existían',
+            r'cerrar_checkins_vencidos \d{4}-\d\d-\d\d: 0 check-ins cerrados',
+            r'enviar_recordatorios \d{4}-\d\d-\d\d: 0 check-ins procesados',
+            r'Evaluaciones procesadas: 0 completadas, 0 con error\.',
+            r'Notificaciones: 0 candidatas, 0 enviadas, 0 con reintento pendiente\.',
+            r'cron_matutino: todas las tareas completadas\.',
+        ):
+            with self.subTest(esperado=esperado):
+                self.assertRegex(salida, esperado)
+        self.assertEqual(CheckInProgramado.objects.count(), 0)
+        self.assertEqual(Alerta.objects.count(), 0)
 
     def test_fallo_de_desactivar_omite_crear_checkins_pero_no_el_resto(self):
         """Dependencia clínica declarada — D14, la excepción a la regla.
@@ -702,9 +800,19 @@ class CronOperativoCommandTests(EspiaDeTareasCronMixin, TestCase):
         ])
 
     def test_corre_sin_error_con_bd_vacia(self):
-        from django.core.management import call_command
+        """Lo mismo que en cron_matutino (TEST-08): las tres tareas reales
+        corren y lo dicen, y no basta con que la corrida no reviente."""
+        salida = correr_cron_con_salida_real('cron_operativo')
 
-        call_command('cron_operativo', verbosity=0)
+        for esperado in (
+            r'cerrar_checkins_vencidos \d{4}-\d\d-\d\d: 0 check-ins cerrados',
+            r'Evaluaciones procesadas: 0 completadas, 0 con error\.',
+            r'Notificaciones: 0 candidatas, 0 enviadas, 0 con reintento pendiente\.',
+            r'cron_operativo: todas las tareas completadas\.',
+        ):
+            with self.subTest(esperado=esperado):
+                self.assertRegex(salida, esperado)
+        self.assertEqual(Alerta.objects.count(), 0)
 
     def test_fallo_de_la_primera_no_impide_entregar_las_alertas(self):
         """Un fallo operativo no puede costar los correos de alerta ALTA — D14.
@@ -737,6 +845,60 @@ class CronOperativoCommandTests(EspiaDeTareasCronMixin, TestCase):
         self.assertIsInstance(fallo, CommandError)
         self.assertIn('cerrar_checkins_vencidos', str(fallo))
 
+class CronSinDatosDelPacienteEnLaSalidaTests(TestCase):
+    """SEC-10 — la salida del cron nombra el fallo, nunca su mensaje (D11).
+
+    `cron_runner` escribía en stderr `({clase}: {mensaje})` y volcaba la traza
+    con `logger.exception`, mensaje incluido. Un `IntegrityError` de PostgreSQL
+    trae en su mensaje los valores de la fila —«Key (cedula)=(…) already
+    exists»—, así que una caída del cron podía dejar la cédula de un paciente
+    en el log de Railway. El propio proyecto ya lo prohíbe en
+    `registrar_fallo_evaluacion`: se guarda el NOMBRE de la excepción, no su
+    mensaje.
+    """
+
+    CEDULA = '1032456789'
+
+    def _correr_con_fallo(self):
+        import io
+        from unittest.mock import patch
+
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        def falla_cerrar(nombre, *args, **kwargs):
+            if nombre == 'cerrar_checkins_vencidos':
+                raise ValueError(
+                    f'llave duplicada: Key (cedula)=({self.CEDULA}) already exists')
+
+        salida, errores = io.StringIO(), io.StringIO()
+        with patch('signos_sintomas.cron_runner.call_command', side_effect=falla_cerrar), \
+                self.assertLogs('signos_sintomas.cron_runner', level='ERROR') as registro, \
+                self.assertRaises(CommandError):
+            call_command('cron_operativo', stdout=salida, stderr=errores)
+        return salida.getvalue(), errores.getvalue(), '\n'.join(registro.output)
+
+    def test_el_mensaje_de_la_excepcion_no_llega_a_ninguna_salida(self):
+        salida, errores, log = self._correr_con_fallo()
+
+        for nombre, texto in (('stdout', salida), ('stderr', errores), ('log', log)):
+            with self.subTest(salida=nombre):
+                self.assertNotIn(self.CEDULA, texto)
+
+    def test_la_salida_sigue_diciendo_que_fallo_que_tipo_y_donde(self):
+        """La otra dirección: sin el mensaje, el log no puede quedar inútil.
+
+        La tarea, el tipo de error y la traza —en qué función y en qué línea—
+        siguen ahí: con eso se diagnostica sin ver datos del paciente.
+        """
+        _, errores, log = self._correr_con_fallo()
+
+        self.assertIn('cerrar_checkins_vencidos', errores)
+        self.assertIn('ValueError', errores)
+        self.assertIn('ValueError', log)
+        self.assertIn('falla_cerrar', log)   # la traza llega hasta la función que falló
+
+
 class CrearAdminCommandTests(TestCase):
     """Comando crear_admin — superusuario idempotente desde variables de entorno."""
 
@@ -767,21 +929,76 @@ class CrearAdminCommandTests(TestCase):
         self.assertTrue(u.is_superuser)
         self.assertTrue(u.check_password('clave-limpia-123'))
 
-    def test_actualiza_password_de_usuario_existente(self):
+    def _entorno_admin(self, **extra):
+        """Las dos variables de siempre y, salvo que se pida, SIN la de reset."""
         import os
         from unittest.mock import patch
 
-        from django.core.management import call_command
-        User = get_user_model()
-        User.objects.create_user(username='jefe', password='vieja')
-        with patch.dict(os.environ, {
+        entorno = {
             'DJANGO_SUPERUSER_USERNAME': 'jefe',
-            'DJANGO_SUPERUSER_PASSWORD': 'nueva-clave-456',
-        }):
-            call_command('crear_admin', verbosity=0)
+            'DJANGO_SUPERUSER_PASSWORD': 'la-de-la-variable',
+            **extra,
+        }
+        parche = patch.dict(os.environ, entorno)
+        parche.start()
+        self.addCleanup(parche.stop)
+        if 'DJANGO_SUPERUSER_RESET' not in extra:
+            os.environ.pop('DJANGO_SUPERUSER_RESET', None)
+
+    def test_no_reescribe_la_password_de_un_superusuario_existente(self):
+        """SEC-05 (02/10/2026), el gemelo de D15.
+
+        Hasta esta fecha esta prueba se llamaba
+        `test_actualiza_password_de_usuario_existente` y EXIGÍA el defecto: cada
+        arranque devolvía la contraseña del superusuario a la de la variable de
+        entorno, así que la que eligiera el administrador no sobrevivía a un
+        despliegue, y el operador tenía que conocerla para siempre.
+        """
+        from django.core.management import call_command
+
+        User = get_user_model()
+        User.objects.create_superuser(
+            username='jefe', password='elegida-por-el-admin', email='')
+        self._entorno_admin()
+
+        call_command('crear_admin', verbosity=0)
+
         u = User.objects.get(username='jefe')
-        self.assertTrue(u.check_password('nueva-clave-456'))
+        self.assertTrue(u.check_password('elegida-por-el-admin'))
         self.assertTrue(u.is_superuser)
+
+    def test_reset_explicito_si_reescribe_la_password(self):
+        """La vía para rotarla existe, y hay que pedirla a propósito (D27)."""
+        from django.core.management import call_command
+
+        User = get_user_model()
+        User.objects.create_superuser(
+            username='jefe', password='elegida-por-el-admin', email='')
+        self._entorno_admin(DJANGO_SUPERUSER_RESET='1')
+
+        call_command('crear_admin', verbosity=0)
+
+        self.assertTrue(
+            User.objects.get(username='jefe').check_password('la-de-la-variable'))
+
+    def test_no_convierte_en_superusuario_una_cuenta_que_no_lo_era(self):
+        """SEC-05, la otra mitad: `crear_admin` promovía a superusuario, sin
+        preguntar, cualquier cuenta que existiera con ese nombre —un médico,
+        por ejemplo—. Ahora falla de forma visible y no toca la cuenta."""
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        User = get_user_model()
+        User.objects.create_user(username='jefe', password='la-del-medico')
+        self._entorno_admin()
+
+        with self.assertRaises(CommandError):
+            call_command('crear_admin', verbosity=0)
+
+        u = User.objects.get(username='jefe')
+        self.assertFalse(u.is_superuser)
+        self.assertFalse(u.is_staff)
+        self.assertTrue(u.check_password('la-del-medico'))
 
 class CrearMedicoCommandTests(TestCase):
     """El rol médico se crea de forma reproducible y con privilegio mínimo."""
@@ -1164,6 +1381,28 @@ class DesactivarPacientesVencidosTests(TestCase):
         from django.core.management import call_command
         paciente = self._paciente_con_fecha_registro(
             dias_cirugia=8, dias_en_sistema=5, tel="+573002220009"
+        )
+        call_command('desactivar_pacientes_vencidos', verbosity=0)
+        paciente.refresh_from_db()
+        self.assertTrue(paciente.activo)
+
+    # --- TEST-07: la frontera exacta del ingreso tardío (DIAS_GRACIA_INGRESO = 2) ---
+    #
+    # Las dos de arriba miran 0 y 3 días en el sistema: una gracia de 1 o de 3
+    # días, o un `>` en lugar de `>=`, las dejaba pasar. Este par fija el valor
+    # que desactiva (2) y el inmediatamente anterior (1).
+
+    def test_pod12_con_2_dias_en_el_sistema_se_desactiva(self):
+        paciente = self._paciente_con_fecha_registro(
+            dias_cirugia=12, dias_en_sistema=2, tel="+573002220010"
+        )
+        call_command('desactivar_pacientes_vencidos', verbosity=0)
+        paciente.refresh_from_db()
+        self.assertFalse(paciente.activo)
+
+    def test_pod12_con_1_dia_en_el_sistema_no_se_desactiva(self):
+        paciente = self._paciente_con_fecha_registro(
+            dias_cirugia=12, dias_en_sistema=1, tel="+573002220011"
         )
         call_command('desactivar_pacientes_vencidos', verbosity=0)
         paciente.refresh_from_db()

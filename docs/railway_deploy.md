@@ -104,7 +104,7 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 
 | Variable | Valor / de dónde sale |
 |----------|----------------------|
-| `DJANGO_SETTINGS_MODULE` | `Registro_Post_Quirurgico.settings_production` |
+| `DJANGO_SETTINGS_MODULE` | `Registro_Post_Quirurgico.settings_production`. **En el servicio web, si falta, `wsgi.py` elige producción igual** (SEC-04, desde el 02/10/2026): antes caía a la configuración de desarrollo sin HSTS, sin HTTPS forzado, sin cookies seguras y sin CSP, y sin avisar. **En los servicios cron sigue siendo obligatoria:** arrancan con `manage.py`, que elige la base a propósito para que el desarrollo local no cambie. |
 | `SECRET_KEY` | Clave nueva y larga, **distinta** a la de desarrollo. Generar con `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` |
 | `ALLOWED_HOSTS` | El dominio de Railway, ej. `mi-app.up.railway.app` (sin `https://`). **Ojo:** la variable se llama `ALLOWED_HOSTS`, no `DJANGO_ALLOWED_HOSTS`. |
 | `CSRF_TRUSTED_ORIGINS` | El mismo dominio **con** esquema: `https://mi-app.up.railway.app`. **Obligatoria: si falta o queda vacía, el contenedor no arranca.** Vacía, el POST del login del médico devolvía 403 sin explicación. |
@@ -125,7 +125,8 @@ de las 6:00 PM Bogotá. Esta separación está documentada en
 | `TWILIO_AUTH_TOKEN` | Auth Token **primario** de Twilio (no el de Test) |
 | ~~`TWILIO_VALIDATE_SIGNATURE`~~ | **NO CREAR esta variable en producción (D13).** `settings_production.py` fija la validación en `True` y ya no la lee del entorno. Crear la casilla —aunque sea con valor `True`— reintroduce el modo de fallo del 25/07: `python-decouple` convierte la cadena vacía en `False`, y Railway reemplaza por cadena vacía toda referencia que no puede resolver. Fallaría **abriendo la cerradura del webhook en silencio**. En desarrollo local sí se usa, en el `.env`. |
 | `DEFAULT_FROM_EMAIL` | *(opcional)* si se omite, usa `EMAIL_HOST_USER` |
-| `DJANGO_SUPERUSER_USERNAME` / `DJANGO_SUPERUSER_PASSWORD` / `DJANGO_SUPERUSER_EMAIL` | Bootstrap temporal de la cuenta técnica. Retirar usuario y contraseña tras verificar el primer arranque. |
+| `DJANGO_SUPERUSER_USERNAME` / `DJANGO_SUPERUSER_PASSWORD` / `DJANGO_SUPERUSER_EMAIL` | Bootstrap de la cuenta técnica. Desde el 02/10/2026 (D27), `crear_admin` **solo la crea**: si ya existe, no le reescribe la contraseña, y si existe sin ser superusuario no la promueve. Retirarlas tras el primer arranque sigue siendo lo prudente: un secreto que no hace falta no se deja en el servicio. |
+| `DJANGO_SUPERUSER_RESET` | **Solo para rotar la contraseña del superusuario.** `1` hace que el siguiente arranque la reescriba con `DJANGO_SUPERUSER_PASSWORD`. Se quita después: mientras esté puesta, la reescribe en cada arranque. |
 | `DJANGO_MEDICO_USERNAME` / `DJANGO_MEDICO_PASSWORD` | Bootstrap de la cuenta `staff` del médico. `crear_medico` la asigna al grupo de privilegio mínimo. Desde **D15** la contraseña solo se aplica al **crear** la cuenta: dejarlas puestas ya no revierte la que el médico eligió. Van juntas o ninguna — si falta una sola, el arranque aborta. |
 | `DJANGO_MEDICO_EMAIL` | **Destinatario de las alertas al médico.** Sin este campo poblado, las notificaciones ALTA fallan con `DestinatarioNoConfigurado`. Desde D15 el comando ya no lo vacía si la variable falta, pero tampoco lo inventa: definirla al crear la cuenta. |
 | `DJANGO_MEDICO_RESET` | Interruptor temporal (**D15**). Con el valor exacto `1`, el arranque **reescribe la contraseña del médico** a la de `DJANGO_MEDICO_PASSWORD`. Es la vía para rotarla si se filtra: ponerla, reiniciar, comprobar el log, y **retirarla**. Si se queda puesta, cada despliegue vuelve a pisar la contraseña. |

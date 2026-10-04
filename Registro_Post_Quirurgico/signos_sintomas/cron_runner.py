@@ -22,6 +22,7 @@ La regla que implementa este módulo:
 """
 
 import logging
+import traceback
 from dataclasses import dataclass
 
 from django.core.management import call_command
@@ -70,16 +71,26 @@ def ejecutar_tareas(comando, etiqueta, tareas):
         comando.stdout.write(f'--- {etiqueta}: {tarea.nombre} ---')
         try:
             call_command(tarea.nombre)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  (D14: el fallo de una tarea no detiene a las demás; se registra abajo sin el mensaje, SEC-10)
             # Se captura Exception, no BaseException: una interrupción del
             # proceso (Ctrl-C, SystemExit) debe seguir cortando la corrida.
             fallidas.append(tarea)
+            # SEC-10 (02/10/2026) — el NOMBRE de la excepción y la traza, nunca
+            # su mensaje. Un IntegrityError de PostgreSQL trae en el mensaje
+            # los valores de la fila («Key (cedula)=(…) already exists»), y
+            # esto acaba en el log de Railway. Es la misma regla que ya sigue
+            # `registrar_fallo_evaluacion` (D11). La traza sí se conserva: dice
+            # en qué función y en qué línea falló sin mostrar ningún dato.
+            nombre_error = exc.__class__.__name__
             comando.stderr.write(comando.style.ERROR(
-                f'{etiqueta}: {tarea.nombre} FALLÓ '
-                f'({exc.__class__.__name__}: {exc}) — las tareas que no '
-                f'dependen de ella siguen corriendo.'
+                f'{etiqueta}: {tarea.nombre} FALLÓ ({nombre_error}) — las '
+                f'tareas que no dependen de ella siguen corriendo.'
             ))
-            logger.exception('%s: la tarea %s falló.', etiqueta, tarea.nombre)
+            logger.error(
+                '%s: la tarea %s falló con %s.\n%s',
+                etiqueta, tarea.nombre, nombre_error,
+                ''.join(traceback.format_tb(exc.__traceback__)).rstrip(),
+            )
         else:
             completadas.add(tarea.nombre)
 
