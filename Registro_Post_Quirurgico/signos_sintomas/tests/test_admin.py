@@ -3,6 +3,7 @@
 Extraido de signos_sintomas/tests.py sin cambiar una sola prueba
 (refactor del 10/08/2026)."""
 
+import re
 from datetime import timedelta
 from decimal import Decimal
 
@@ -1238,3 +1239,122 @@ class TableroQueNoSeContradiceTests(TestCase):
         """La otra dirección."""
         ctx = self._contexto()
         self.assertEqual(ctx['total_detenidos'], 0)
+
+
+# ===========================================================================
+# Carril A · panel del médico (02/10/2026)
+# Hallazgos de la auditoría de seis frentes: UX-P02, UX-P03 y DB-05. Cada
+# clase nació en rojo contra el código de `7383b00`.
+# ===========================================================================
+
+class _AlertasDelListadoMixin:
+    """Un paciente con alertas de severidades y fechas controladas."""
+
+    def _preparar_listado(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username='super_orden', password='pass')
+        self.client.force_login(self.superuser)
+        self.paciente = Paciente.objects.create(
+            medico_responsable=medico_de_pruebas(),
+            nombre_completo='Paciente Orden',
+            telefono_whatsapp='+573050000001',
+            fecha_cirugia=timezone.localdate() - timedelta(days=4),
+        )
+
+    def _alerta(self, tipo, severidad, mensaje, primera, ultima):
+        alerta = Alerta.objects.create(
+            paciente=self.paciente, tipo=tipo, severidad=severidad,
+            mensaje=mensaje, fecha_ultima_deteccion=ultima,
+        )
+        # `fecha_alerta` es auto_now_add: solo un update la puede fechar.
+        Alerta.objects.filter(pk=alerta.pk).update(fecha_alerta=primera)
+        return alerta
+
+    def _orden(self, url, *mensajes):
+        contenido = self.client.get(url).content.decode()
+        return sorted(mensajes, key=contenido.index)
+
+
+class ListadoDeAlertasOrdenTests(_AlertasDelListadoMixin, TestCase):
+    """UX-P02 / UX-P03 — la ALTA primero, y lo redetectado arriba.
+
+    El listado ordenaba por `-fecha_alerta`, la PRIMERA detección: una ALTA de
+    hace tres días quedaba debajo de las BAJA de hoy, y una alerta que se volvió
+    a detectar esta mañana se hundía con su fecha de creación. Ordenar por la
+    columna Severidad daba ALTA, BAJA, MEDIA: orden alfabético.
+    """
+
+    URL = '/admin/signos_sintomas/alerta/'
+
+    def setUp(self):
+        self._preparar_listado()
+
+    def test_la_alta_va_primero_aunque_sea_la_mas_vieja(self):
+        ahora = timezone.now()
+        self._alerta('SEPSIS', 'ALTA', 'MSG-ALTA', ahora - timedelta(days=3), ahora - timedelta(days=3))
+        self._alerta('TAQUICARDIA', 'MEDIA', 'MSG-MEDIA', ahora - timedelta(days=1), ahora - timedelta(days=1))
+        self._alerta('FUGA_ANASTOMOTICA', 'BAJA', 'MSG-BAJA', ahora, ahora)
+
+        self.assertEqual(self._orden(self.URL, 'MSG-ALTA', 'MSG-MEDIA', 'MSG-BAJA'),
+                         ['MSG-ALTA', 'MSG-MEDIA', 'MSG-BAJA'])
+
+    def test_dentro_de_la_severidad_va_primero_la_deteccion_mas_reciente(self):
+        ahora = timezone.now()
+        self._alerta('SEPSIS', 'ALTA', 'MSG-AYER', ahora - timedelta(days=1), ahora - timedelta(days=1))
+        # Nació hace cinco días, pero se volvió a detectar hoy.
+        self._alerta('TAQUICARDIA', 'ALTA', 'MSG-REDETECTADA', ahora - timedelta(days=5), ahora)
+
+        self.assertEqual(self._orden(self.URL, 'MSG-AYER', 'MSG-REDETECTADA'),
+                         ['MSG-REDETECTADA', 'MSG-AYER'])
+
+    def _columna(self, nombre):
+        """Posición de la columna en la cabecera que ve el médico.
+
+        Se lee del HTML y no de `list_display`: con acciones, Django antepone
+        la casilla de selección y todas las columnas se corren una. La primera
+        versión de esta prueba usó `?o=2` contando a mano, ordenó por el TIPO, y
+        caía en rojo por esa razón y no por la que debía.
+        """
+        cabecera = re.search(r'<thead>(.*?)</thead>',
+                             self.client.get(self.URL).content.decode(), re.S)
+        self.assertIsNotNone(cabecera, 'El listado no tiene cabecera')
+        columnas = re.findall(r'<th scope="col"([^>]*)>', cabecera.group(1))
+        indices = [i for i, attrs in enumerate(columnas) if f'column-{nombre}' in attrs]
+        self.assertEqual(len(indices), 1, f'No se encontró la columna {nombre}')
+        return indices[0]
+
+    def test_ordenar_por_la_columna_severidad_no_es_alfabetico(self):
+        ahora = timezone.now()
+        # Tipos elegidos para que su orden alfabético (FUGA, SEPSIS,
+        # TAQUICARDIA) no coincida con ninguno de los dos que se comprueban:
+        # ordenar por la columna equivocada no puede pasar por casualidad.
+        for tipo, severidad in (('SEPSIS', 'ALTA'), ('TAQUICARDIA', 'MEDIA'),
+                                ('FUGA_ANASTOMOTICA', 'BAJA')):
+            self._alerta(tipo, severidad, f'MSG-{severidad}', ahora, ahora)
+        mensajes = ('MSG-ALTA', 'MSG-MEDIA', 'MSG-BAJA')
+        columna = self._columna('severidad_badge')
+
+        self.assertEqual(self._orden(f'{self.URL}?o={columna}', *mensajes),
+                         ['MSG-ALTA', 'MSG-MEDIA', 'MSG-BAJA'])
+        self.assertEqual(self._orden(f'{self.URL}?o=-{columna}', *mensajes),
+                         ['MSG-BAJA', 'MSG-MEDIA', 'MSG-ALTA'])
+
+    def test_el_listado_muestra_la_ultima_deteccion(self):
+        """La fecha que se ve es la de la última detección, no la primera.
+
+        Las dos se formatean con la misma función que usa el Admin para una
+        fecha, así que la comparación no depende del idioma ni del formato.
+        """
+        from django.utils import formats
+
+        ahora = timezone.now()
+        primera = ahora - timedelta(days=5)
+        self._alerta('SEPSIS', 'ALTA', 'MSG-ALTA', primera, ahora)
+
+        def como_la_pinta_el_admin(fecha):
+            return formats.localize(timezone.template_localtime(fecha))
+
+        contenido = self.client.get(self.URL).content.decode()
+        self.assertIn('Última detección', contenido)
+        self.assertIn(como_la_pinta_el_admin(ahora), contenido)
+        self.assertNotIn(como_la_pinta_el_admin(primera), contenido)
