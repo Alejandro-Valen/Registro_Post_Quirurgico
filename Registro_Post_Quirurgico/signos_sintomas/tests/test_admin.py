@@ -391,12 +391,37 @@ class AlertaAdminAccionesTests(TestCase):
         )
 
     def test_changelist_contiene_badge_severidad(self):
-        """La lista de alertas renderiza el badge de severidad con HTML coloreado."""
+        """El badge de cada severidad lleva SU color y SU nombre (TEST-09).
+
+        Hasta el 02/10/2026 esta prueba buscaba la subcadena `border-radius`:
+        pasaba con los colores de ALTA y BAJA intercambiados, que es justo el
+        error que importa — una ALTA pintada de verde tranquiliza al médico.
+        Los colores van escritos aquí a propósito, y no leídos de
+        `_COLORES_SEVERIDAD`: una prueba que lee el valor que vigila se adapta
+        a cualquier cambio y no protege nada (TEST-10).
+        """
+        from django.contrib import admin as django_admin
+
+        from ..admin import AlertaAdmin
+
+        esperado = {
+            'ALTA': ('#fee2e2', '#7f1d1d', 'Alta — Ir a urgencias'),
+            'MEDIA': ('#fef3c7', '#78350f', 'Media — Llamar al médico'),
+            'BAJA': ('#dcfce7', '#14532d', 'Baja — Monitorear'),
+        }
+        modelo_admin = AlertaAdmin(Alerta, django_admin.site)
+        for severidad, (fondo, texto, etiqueta) in esperado.items():
+            with self.subTest(severidad=severidad):
+                self.alerta.severidad = severidad
+                badge = str(modelo_admin.severidad_badge(self.alerta))
+                self.assertIn(f'background:{fondo};color:{texto};', badge)
+                self.assertIn(f'>{etiqueta}</span>', badge)
+
+        # Y en el listado real, la ALTA de este setUp sale con el color de ALTA.
         self.client.force_login(self.superuser)
         resp = self.client.get('/admin/signos_sintomas/alerta/')
         self.assertEqual(resp.status_code, 200)
-        # El badge usa border-radius como parte del estilo — confirma que se renderizó HTML
-        self.assertContains(resp, 'border-radius')
+        self.assertContains(resp, 'background:#fee2e2;color:#7f1d1d;')
 
     def test_accion_marcar_resuelta(self):
         """Bloque A: marcar_resuelta con el paso 'aplicar' + motivo actualiza
