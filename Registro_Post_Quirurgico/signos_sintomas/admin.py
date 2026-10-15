@@ -240,7 +240,7 @@ _RANGO_DOLOR = '0-10'   # D20: 0 = sin dolor
 
 _HTML_GRAFICAS_TEMPLATE = """
 <div class="js-graficas-signos" data-paciente="{paciente_id}"
-     data-graficas="{datos}" style="margin-top:8px;">
+     data-graficas="{datos}" data-umbrales="{umbrales}" style="margin-top:8px;">
   <div style="margin-bottom:12px;font-size:0.85em;">
     Ver:
     <button type="button" class="js-grafica-periodo" data-dias="3"
@@ -291,6 +291,13 @@ def _grafica_signos_vitales(paciente):
     return format_html(
         _HTML_GRAFICAS_TEMPLATE,
         datos=json.dumps(datos, separators=(',', ':')),
+        # BE-02, la mitad JS: las líneas punteadas de la gráfica también salen
+        # del motor. El JS no lleva ningún umbral escrito; los lee de aquí.
+        umbrales=json.dumps({
+            'fiebre': float(TEMPERATURA_ALTA),
+            'fc_baja': FC_BAJA_MIN,
+            'fc_media': FC_MEDIA_MIN,
+        }, separators=(',', ':')),
         paciente_id=paciente.pk,
         # BE-02: los tres umbrales salen de `alert_engine`, no de un literal.
         umbral_fiebre=TEMPERATURA_ALTA,

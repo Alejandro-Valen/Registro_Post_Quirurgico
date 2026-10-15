@@ -1094,6 +1094,51 @@ class GraficaSignosVitalesTests(TestCase):
         datos = self._extraer_datos(resp.content.decode())
         self.assertEqual(set(datos.keys()), {'3', '7', '10'})
 
+    def _extraer_umbrales(self, contenido):
+        import html
+        import json
+        import re
+        match = re.search(r'data-umbrales="([^"]+)"', contenido)
+        self.assertIsNotNone(match, "No se encontró el JSON de los umbrales")
+        return json.loads(html.unescape(match.group(1)))
+
+    def test_las_lineas_de_umbral_salen_de_alert_engine(self):
+        """BE-02, la mitad JS: la leyenda ya leía los umbrales del motor, pero
+        la línea punteada los traía escritos en `graficas_signos_vitales.js`
+        (37.9, 101, 110). Ahora el panel se los entrega al JS."""
+        from ..alert_engine import FC_BAJA_MIN, FC_MEDIA_MIN, TEMPERATURA_ALTA
+
+        RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('37.0'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+        resp = self.client.get(self._url_change())
+        umbrales = self._extraer_umbrales(resp.content.decode())
+        self.assertEqual(umbrales, {
+            'fiebre': float(TEMPERATURA_ALTA),
+            'fc_baja': FC_BAJA_MIN,
+            'fc_media': FC_MEDIA_MIN,
+        })
+
+    def test_un_umbral_movido_en_el_motor_llega_a_la_grafica(self):
+        """La otra dirección: si el valor viajara copiado, mover la constante
+        no cambiaría lo que dibuja la gráfica. Se mueve y se mira que llegue."""
+        from unittest import mock
+
+        RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('37.0'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+        with mock.patch('signos_sintomas.admin.TEMPERATURA_ALTA', Decimal('38.4')), \
+                mock.patch('signos_sintomas.admin.FC_MEDIA_MIN', 120):
+            resp = self.client.get(self._url_change())
+        umbrales = self._extraer_umbrales(resp.content.decode())
+        self.assertEqual(umbrales['fiebre'], 38.4)
+        self.assertEqual(umbrales['fc_media'], 120)
+
+
 class AdminFiltrosNoExponenOtrasCuentasTests(TestCase):
     """Hallazgo 8 — el filtro lateral no debe revelar las demás cuentas médicas.
 

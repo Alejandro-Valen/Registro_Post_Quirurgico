@@ -68,13 +68,15 @@
         });
     }
 
-    function crearGraficas(contenedor, datos) {
+    // Los umbrales llegan del panel (`data-umbrales`), que los lee de
+    // `alert_engine`. Aquí no se escribe ninguno a mano (BE-02).
+    function crearGraficas(contenedor, datos, umbrales) {
         const inicial = datos['7'];
         const charts = {};
 
         const temperatura = [
             seriePrincipal('Temperatura', inicial.temps, '#dc2626', inicial),
-            serieUmbral('Umbral fiebre', 37.9, '#fca5a5', [4, 4])
+            serieUmbral('Umbral fiebre', umbrales.fiebre, '#fca5a5', [4, 4])
         ];
         completarUmbrales(temperatura, inicial.labels);
         const opcionesTemperatura = opcionesBase();
@@ -116,8 +118,8 @@
 
         const frecuencia = [
             seriePrincipal('FC', inicial.fcs, '#3b82f6', inicial),
-            serieUmbral('Taquicardia leve', 101, '#fcd34d', [3, 3]),
-            serieUmbral('Taquicardia', 110, '#f87171', [3, 3])
+            serieUmbral('Taquicardia leve', umbrales.fc_baja, '#fcd34d', [3, 3]),
+            serieUmbral('Taquicardia', umbrales.fc_media, '#f87171', [3, 3])
         ];
         completarUmbrales(frecuencia, inicial.labels);
         charts.fc = new Chart(
@@ -177,8 +179,10 @@
             }
 
             let datos;
+            let umbrales;
             try {
                 datos = JSON.parse(contenedor.dataset.graficas);
+                umbrales = JSON.parse(contenedor.dataset.umbrales);
             } catch (error) {
                 return;
             }
@@ -186,7 +190,7 @@
                 return;
             }
 
-            const charts = crearGraficas(contenedor, datos);
+            const charts = crearGraficas(contenedor, datos, umbrales);
             contenedor.querySelectorAll('.js-grafica-periodo').forEach(function (boton) {
                 boton.addEventListener('click', function () {
                     cambiarPeriodo(contenedor, charts, datos, boton.dataset.dias);
