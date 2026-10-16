@@ -1075,35 +1075,58 @@ class GraficaSignosVitalesTests(TestCase):
         datos = self._extraer_datos(resp.content.decode())
         self.assertTrue(datos['7']['labels'][0].endswith(' M'))
 
+    def _registro(self, dias_atras=0, **campos):
+        datos = {'temperatura': Decimal('38.5'), 'dolor_eva': 8,
+                 'aspecto_drenaje': 'sin_drenaje', 'presencia_gases': True,
+                 'episodios_nauseas': 0}
+        datos.update(campos)
+        registro = RegistroDiario.objects.create(paciente=self.paciente, **datos)
+        if dias_atras:
+            RegistroDiario.objects.filter(pk=registro.pk).update(
+                fecha_registro=timezone.now() - timedelta(days=dias_atras))
+        return registro
+
+    def _alerta_con_deteccion(self, registro, severidad='ALTA', resuelta=False):
+        """La forma real de los datos: el motor nunca crea una alerta sin su
+        detección. Hasta el 15/10/2026 estas pruebas creaban solo la alerta."""
+        cierre = {'fecha_resolucion': timezone.now(),
+                  'motivo_resolucion': Alerta.MOTIVO_CONTACTO} if resuelta else {}
+        alerta = Alerta.objects.create(
+            paciente=self.paciente, registro_origen=registro, tipo='SEPSIS',
+            severidad=severidad, mensaje='Fiebre', resuelta=resuelta, **cierre)
+        DeteccionAlerta.objects.create(
+            alerta=alerta, registro=registro, severidad_detectada=severidad,
+            mensaje_detectado='Fiebre')
+        return alerta
+
     def test_alerta_alta_sin_resolver_marca_el_indice(self):
-        registro = RegistroDiario.objects.create(
-            paciente=self.paciente,
-            temperatura=Decimal('38.5'), dolor_eva=8,
-            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
-        )
-        Alerta.objects.create(
-            paciente=self.paciente, registro_origen=registro,
-            tipo='SEPSIS', severidad='ALTA', mensaje='Fiebre alta', resuelta=False,
-        )
+        self._alerta_con_deteccion(self._registro())
         resp = self.client.get(self._url_change())
         datos = self._extraer_datos(resp.content.decode())
         self.assertEqual(datos['7']['alertas_idx'], [0])
 
     def test_alerta_alta_resuelta_no_marca_el_indice(self):
-        registro = RegistroDiario.objects.create(
-            paciente=self.paciente,
-            temperatura=Decimal('38.5'), dolor_eva=8,
-            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
-        )
-        Alerta.objects.create(
-            paciente=self.paciente, registro_origen=registro,
-            tipo='SEPSIS', severidad='ALTA', mensaje='Fiebre alta', resuelta=True,
-            fecha_resolucion=timezone.now(),
-            motivo_resolucion=Alerta.MOTIVO_CONTACTO,
-        )
+        self._alerta_con_deteccion(self._registro(), resuelta=True)
         resp = self.client.get(self._url_change())
         datos = self._extraer_datos(resp.content.decode())
         self.assertEqual(datos['7']['alertas_idx'], [])
+
+    def test_el_punto_rojo_cae_en_la_medicion_que_disparo_la_alta(self):
+        """DB-03: `Alerta.registro_origen` guarda el ÚLTIMO registro que tocó la
+        alerta, no el que la originó. Con una ALTA el día 1 y una detección
+        MEDIA de la misma alerta el día 2, el punto rojo caía en el día 2 —una
+        medición que no fue grave— y desaparecía del día 1, que sí lo fue."""
+        dia_1 = self._registro(dias_atras=1)
+        dia_2 = self._registro(temperatura=Decimal('37.6'))
+        alerta = self._alerta_con_deteccion(dia_1, severidad='ALTA')
+        DeteccionAlerta.objects.create(
+            alerta=alerta, registro=dia_2, severidad_detectada='MEDIA',
+            mensaje_detectado='Subfebril')
+        Alerta.objects.filter(pk=alerta.pk).update(registro_origen=dia_2)
+
+        resp = self.client.get(self._url_change())
+        datos = self._extraer_datos(resp.content.decode())
+        self.assertEqual(datos['7']['alertas_idx'], [0])   # el día 1, no el 2
 
     def test_carga_chartjs_y_logica_desde_estaticos_locales(self):
         RegistroDiario.objects.create(
@@ -1677,3 +1700,77 @@ class ListadosSinConsultaPorFilaTests(TestCase):
 
     def test_listado_de_checkins(self):
         self._sin_consulta_por_fila('/admin/signos_sintomas/checkinprogramado/')
+
+
+class OraculoDeUnicidadTests(TestCase):
+    """SEC-12: al registrar un paciente, el formulario respondía «Ya existe un
+    Paciente con este Cédula» junto al campo: un médico podía averiguar si una
+    cédula o un teléfono están en el sistema aunque el paciente sea de otro.
+
+    Mientras sean únicos en todo el sistema, cualquier rechazo delata ALGO. Lo
+    que se corrige: el error no dice qué campo chocó ni confirma que exista un
+    paciente, y el intento queda registrado. El riesgo residual va en
+    SECURITY.md (decisión del Arquitecto, 15/10/2026).
+    """
+
+    def setUp(self):
+        from django.contrib.auth.models import Group
+        from django.core.management import call_command
+
+        call_command('crear_medico', verbosity=0)
+        User = get_user_model()
+        self.medico_a = User.objects.create_user(
+            username='dr_oraculo_a', password='pass', is_staff=True,
+            email='a@ejemplo.com')
+        self.medico_b = User.objects.create_user(
+            username='dr_oraculo_b', password='pass', is_staff=True,
+            email='b@ejemplo.com')
+        grupo = Group.objects.get(name='Médicos')
+        self.medico_a.groups.add(grupo)
+        self.medico_b.groups.add(grupo)
+        Paciente.objects.create(
+            nombre_completo='Paciente del Medico A', cedula='1020304050',
+            telefono_whatsapp='+573004440001',
+            fecha_cirugia=timezone.localdate(), medico_responsable=self.medico_a,
+        )
+        self.client.force_login(self.medico_b)
+
+    def _registrar(self, cedula, telefono):
+        return self.client.post('/admin/signos_sintomas/paciente/add/', {
+            'nombre_completo': 'Intento del Medico B',
+            'cedula': cedula,
+            'telefono_whatsapp': telefono,
+            'fecha_cirugia': timezone.localdate().isoformat(),
+            'medico_responsable': self.medico_b.pk,
+            'activo': 'on',
+        })
+
+    def _afirmar_rechazo_generico(self, resp):
+        self.assertEqual(resp.status_code, 200)   # el formulario vuelve, no guarda
+        form = resp.context['adminform'].form
+        self.assertEqual(form.errors.get('cedula'), None)
+        self.assertEqual(form.errors.get('telefono_whatsapp'), None)
+        self.assertIn('No se pudo registrar', ' '.join(form.non_field_errors()))
+        self.assertNotContains(resp, 'ya existe')
+        self.assertNotContains(resp, 'Ya existe')
+        self.assertEqual(Paciente.objects.filter(nombre_completo='Intento del Medico B').count(), 0)
+
+    def test_cedula_de_otro_medico_no_se_confirma(self):
+        with self.assertLogs('signos_sintomas.admin', level='WARNING') as registro:
+            resp = self._registrar('1020304050', '+573004449999')
+        self._afirmar_rechazo_generico(resp)
+        self.assertIn(str(self.medico_b.pk), ' '.join(registro.output))
+        # El log no lleva el dato que se probó: sería otra fuga, esta vez a
+        # quien lea los registros.
+        self.assertNotIn('1020304050', ' '.join(registro.output))
+
+    def test_telefono_de_otro_medico_no_se_confirma(self):
+        with self.assertLogs('signos_sintomas.admin', level='WARNING'):
+            resp = self._registrar('9999999999', '+573004440001')
+        self._afirmar_rechazo_generico(resp)
+
+    def test_un_paciente_nuevo_se_sigue_registrando(self):
+        """La otra dirección: datos libres entran como siempre."""
+        resp = self._registrar('5555555555', '+573004445555')
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(Paciente.objects.filter(cedula='5555555555').exists())

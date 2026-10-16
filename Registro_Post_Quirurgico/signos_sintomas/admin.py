@@ -1,4 +1,5 @@
 import json
+import logging
 from contextvars import ContextVar
 from datetime import timedelta
 
@@ -23,6 +24,8 @@ from .models import (
     RecepcionWebhookTwilio,
     RegistroDiario,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class MotivoResolucionForm(django_forms.Form):
@@ -218,12 +221,16 @@ def _datos_grafica(paciente, dias):
         return {'labels': [], 'temps': [], 'evas': [], 'fcs': [], 'alertas_idx': []}
 
     turnos = _turnos_por_registro(registros)
-    # Una sola query batched — evita N+1 y no depende del related_name
-    # equivocado ("alerta_set") que traía el borrador original.
+    # DB-03 (15/10/2026): un punto rojo por cada MEDICIÓN que disparó una ALTA
+    # de una alerta todavía sin resolver. Se lee de las detecciones, que guardan
+    # cada medición; `Alerta.registro_origen` guarda el ÚLTIMO registro que
+    # tocó la alerta, y con él el punto caía en una medición posterior que no
+    # fue grave. Una sola consulta: sin N+1.
     ids_con_alerta_alta = set(
-        Alerta.objects
-        .filter(registro_origen__in=registros, severidad='ALTA', resuelta=False)
-        .values_list('registro_origen_id', flat=True)
+        DeteccionAlerta.objects
+        .filter(registro__in=registros, severidad_detectada='ALTA',
+                alerta__resuelta=False)
+        .values_list('registro_id', flat=True)
     )
 
     labels, temps, evas, fcs, alertas_idx = [], [], [], [], []
@@ -348,8 +355,52 @@ class TieneAlertaActivaFilter(admin.SimpleListFilter):
         return queryset
 
 
+_CAMPOS_UNICOS_PACIENTE = ('cedula', 'telefono_whatsapp')
+MSG_REGISTRO_RECHAZADO = (
+    "No se pudo registrar al paciente con estos datos. Revisa la cédula y el "
+    "teléfono; si el paciente ya está en seguimiento, contacta al administrador."
+)
+
+
+class PacienteAdminForm(django_forms.ModelForm):
+    """SEC-12 (15/10/2026): el choque de unicidad no delata al paciente.
+
+    Django respondía «Ya existe un Paciente con este Cédula» junto al campo, y
+    así un médico podía averiguar si una cédula o un teléfono están en el
+    sistema aunque el paciente fuera de otro. Mientras los dos sean únicos en
+    todo el sistema, cualquier rechazo delata ALGO —eso queda escrito en
+    SECURITY.md—; lo que se corrige es que el error ya no dice qué campo chocó
+    ni confirma que exista un paciente, y que el intento queda en el log.
+
+    `usuario_id` lo fija `PacienteAdmin.get_form` en la clase que crea para
+    cada petición: el log dice quién lo intentó, nunca qué dato probó.
+    """
+
+    usuario_id = None
+
+    class Meta:
+        model = Paciente
+        fields = '__all__'
+
+    def validate_unique(self):
+        try:
+            self.instance.validate_unique(exclude=self._get_validation_exclusions())
+        except django_forms.ValidationError as error:
+            chocan = [c for c in _CAMPOS_UNICOS_PACIENTE if c in error.error_dict]
+            for campo in chocan:
+                del error.error_dict[campo]
+            if chocan:
+                logger.warning(
+                    "Registro de paciente rechazado por un dato ya existente "
+                    "(usuario pk=%s, campos=%s).", self.usuario_id, ','.join(chocan))
+                self.add_error(None, MSG_REGISTRO_RECHAZADO)
+            if error.error_dict:
+                self._update_errors(error)
+
+
 @admin.register(Paciente)
 class PacienteAdmin(admin.ModelAdmin):
+    form = PacienteAdminForm
     list_display = ['nombre_completo', 'cedula', 'medico_nombre',
                     'fecha_cirugia', 'activo']
     list_filter = [
@@ -422,8 +473,12 @@ class PacienteAdmin(admin.ModelAdmin):
         sincronía con el checkbox de consentimiento_informado.
         D12 (capa 1): última red antes de la base — un médico no-superusuario
         solo puede asignarse a sí mismo, así que no tiene sentido rechazarle el
-        guardado por un campo cuya única opción posible es él."""
-        if obj.activo and obj.medico_responsable_id is None and _solo_propios(request):
+        guardado por un campo cuya única opción posible es él.
+        SEC-11 (15/10/2026): también con la ficha INACTIVA. Antes solo se
+        asignaba a las activas, y una ficha registrada sin marcar «activo»
+        nacía sin responsable: fuera del listado de quien la registró y sin
+        atribución clínica. El superusuario conserva la libertad de D12."""
+        if obj.medico_responsable_id is None and _solo_propios(request):
             obj.medico_responsable = request.user
         if not change:
             dias_post = (timezone.localdate() - obj.fecha_cirugia).days
@@ -507,6 +562,10 @@ class PacienteAdmin(admin.ModelAdmin):
         usuario = request.user
 
         class FormConResponsable(form):
+            # SEC-12: quién intentó el registro, para el log del rechazo. Va en
+            # esta clase, que se crea en cada petición: no se comparte.
+            usuario_id = usuario.pk
+
             def clean(self):
                 datos = super().clean()
                 if datos.get('activo') and not datos.get('medico_responsable'):
