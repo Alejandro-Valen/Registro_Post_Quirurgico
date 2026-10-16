@@ -7,7 +7,7 @@
   </div>
 
   {% if notificaciones_fallidas %}
-  <div class="pt-alerta-sistema" role="alert" style="background:#fee2e2;border:1px solid #fca5a5;color:#7f1d1d;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-weight:600;">
+  <div class="pt-alerta-sistema" role="alert">
     Correos de alerta sin entregar: {{ notificaciones_fallidas }}.
     Un aviso de alerta ALTA no llegó tras varios intentos — revisa la
     configuración de correo (clave del proveedor y destinatario del médico).
@@ -15,7 +15,7 @@
   {% endif %}
 
   {% if sin_atencion %}
-  <div class="pt-alerta-sistema" role="alert" style="background:#fee2e2;border:1px solid #fca5a5;color:#7f1d1d;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-weight:600;">
+  <div class="pt-alerta-sistema" role="alert">
     Pacientes activos sin atención efectiva: {{ sin_atencion }}.
     Su médico responsable no puede atenderlos —cuenta desactivada, sin acceso
     al panel o sin correo configurado—, así que no aparecen en el listado de

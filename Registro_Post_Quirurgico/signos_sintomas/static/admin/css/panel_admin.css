@@ -113,6 +113,15 @@ html[data-theme="dark"] .pt-wrap {
 }
 
 .pt-wrap * { box-sizing: border-box; }
+
+/* UX-P10: avisos del sistema (correos sin entregar, pacientes sin atención).
+   Antes el estilo iba en línea y copiado dos veces en panel_triage.html, y en
+   modo oscuro seguía siendo un rojo claro sobre fondo oscuro. */
+.pt-alerta-sistema {
+  background:var(--pt-alta-soft); color:var(--pt-alta-ink);
+  border:1px solid color-mix(in srgb,var(--pt-alta) 45%,var(--pt-line));
+  padding:12px 16px; border-radius:8px; margin-bottom:16px; font-weight:600;
+}
 .pt-wrap .tnum { font-variant-numeric: tabular-nums; }
 .pt-wrap h1, .pt-wrap h2 { margin: 0; }
 
