@@ -1184,6 +1184,19 @@ significa que la operación "dar de baja a un médico" pasa a tener un paso
 obligatorio previo: reasignar. Se documenta en la regla operativa, y el aviso
 del tablero es lo que hace que se cumpla sola.
 
+### Ampliación del 15/10/2026 — la ficha inactiva (SEC-11)
+
+La capa 1 asignaba el médico que guarda **solo si el paciente estaba activo**.
+Un médico que registraba una ficha sin marcar «activo» la dejaba sin
+responsable: la base lo permite (la restricción es sobre los activos, a
+propósito), pero la ficha desaparecía del listado de quien la acababa de
+registrar y perdía la atribución clínica. Reproducido por el formulario real.
+
+Ahora se asigna **siempre** que el usuario sea un médico no superusuario, porque
+su única opción posible es él mismo. **La regla de la base no cambia** —sigue
+siendo «activo ⇒ médico», y la prueba que lo congela sigue en verde—, y el
+superusuario conserva la libertad de dejar sin responsable una ficha histórica.
+
 ---
 
 <a id="d13"></a>
