@@ -76,6 +76,18 @@ def preparar_datos_para_integridad(apps, schema_editor):
     CheckInProgramado.objects.filter(orden=2).update(etiqueta='TARDE')
 
 
+def reverso_sin_deshacer_reparacion(apps, schema_editor):
+    """Reverso honesto (DB-10, 15/10/2026). Antes era `RunPython.noop`, que
+    reportaba éxito sin deshacer nada. La reparación no se puede deshacer —los
+    valores originales no se guardaron— ni conviene: devolvería datos rotos.
+    El esquema sí se revierte; los datos se quedan reparados, y se dice."""
+    print(
+        '\n  AVISO: la reparación de datos de esta migración NO se deshace '
+        '(POD recalculado, cierres LEGACY, veces y etiquetas de turno). '
+        'Los datos quedan reparados; solo se revierte el esquema.'
+    )
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -95,7 +107,7 @@ class Migration(migrations.Migration):
         ),
         migrations.RunPython(
             preparar_datos_para_integridad,
-            reverse_code=migrations.RunPython.noop,
+            reverse_code=reverso_sin_deshacer_reparacion,
         ),
         migrations.AddConstraint(
             model_name='alerta',

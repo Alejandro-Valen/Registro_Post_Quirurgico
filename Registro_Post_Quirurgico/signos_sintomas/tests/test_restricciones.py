@@ -204,3 +204,36 @@ class IndicesDeLaBaseTests(TestCase):
         # Parcial: solo los pendientes. Los cerrados son la inmensa mayoría y
         # ninguna consulta caliente los busca por hora.
         self.assertIn("WHERE ((estado)::text = 'PENDIENTE'", definicion)
+
+
+class MigracionesDeDatosTests(TestCase):
+    """DB-10: 0019 y 0020 reparan datos en un solo sentido (recalculan el POD,
+    fusionan alertas duplicadas, rellenan motivos) y los valores originales no
+    se guardaron. Su reverso era `RunPython.noop`: un `migrate` hacia atrás
+    reportaba éxito sin deshacer nada, y quien lo corriera creería los datos
+    restaurados. Ahora el reverso sigue sin tocar los datos —deshacer la
+    reparación devolvería datos rotos— pero lo dice."""
+
+    def _operacion_de_datos(self, nombre_modulo):
+        import importlib
+
+        from django.db.migrations import RunPython
+        modulo = importlib.import_module(f'signos_sintomas.migrations.{nombre_modulo}')
+        operaciones = [op for op in modulo.Migration.operations if isinstance(op, RunPython)]
+        self.assertEqual(len(operaciones), 1)
+        return operaciones[0]
+
+    def test_el_reverso_avisa_que_no_deshace_la_reparacion(self):
+        import io
+        from contextlib import redirect_stdout
+
+        from django.db.migrations import RunPython
+        for nombre in ('0019_alter_alerta_motivo_resolucion_and_more',
+                       '0020_recepcionwebhooktwilio_and_more'):
+            with self.subTest(migracion=nombre):
+                operacion = self._operacion_de_datos(nombre)
+                self.assertIsNot(operacion.reverse_code, RunPython.noop)
+                salida = io.StringIO()
+                with redirect_stdout(salida):
+                    operacion.reverse_code(None, None)
+                self.assertIn('NO se deshace', salida.getvalue())
