@@ -991,6 +991,18 @@ class CheckInProgramado(models.Model):
                 name='checkin_turno_coherente',
             ),
         ]
+        # DB-09: los comandos del cron buscan en todos los pacientes los turnos
+        # PENDIENTE cuya hora ya pasó. Parcial, porque los cerrados son casi
+        # toda la tabla y ninguna consulta caliente los busca por hora. La
+        # racha de SILENCIO no lo necesita: filtra por paciente, día y orden, y
+        # eso ya lo cubre el índice de `unique_checkin_paciente_dia_orden`.
+        indexes = [
+            models.Index(
+                fields=['hora_programada'],
+                condition=Q(estado='PENDIENTE'),
+                name='checkin_pendiente_por_hora',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.paciente} — {self.fecha_dia} {self.etiqueta} ({self.estado})"

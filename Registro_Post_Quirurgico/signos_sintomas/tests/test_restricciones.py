@@ -179,3 +179,28 @@ class RestriccionesDeLaBaseTests(TestCase):
         )
         Paciente.objects.filter(pk=self.paciente.pk).update(
             activo=False, medico_responsable=None)
+
+
+class IndicesDeLaBaseTests(TestCase):
+    """DB-09: los dos comandos del cron buscan, en TODOS los pacientes, los
+    turnos PENDIENTE cuya hora ya pasó (`cerrar_checkins_vencidos`,
+    `enviar_recordatorios`). Sin índice, cada corrida recorre la tabla entera,
+    que crece dos filas por paciente y día y nunca se purga.
+    """
+
+    def test_turnos_pendientes_indexados_por_hora(self):
+        with connection.cursor() as cursor:
+            restricciones = connection.introspection.get_constraints(
+                cursor, CheckInProgramado._meta.db_table)
+        indice = restricciones.get('checkin_pendiente_por_hora')
+        self.assertIsNotNone(indice, 'falta el índice de turnos pendientes')
+        self.assertTrue(indice['index'])
+        self.assertEqual(indice['columns'], ['hora_programada'])
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'SELECT indexdef FROM pg_indexes WHERE indexname = %s',
+                ['checkin_pendiente_por_hora'])
+            definicion = cursor.fetchone()[0]
+        # Parcial: solo los pendientes. Los cerrados son la inmensa mayoría y
+        # ninguna consulta caliente los busca por hora.
+        self.assertIn("WHERE ((estado)::text = 'PENDIENTE'", definicion)
