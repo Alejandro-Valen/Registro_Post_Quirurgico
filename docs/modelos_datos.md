@@ -362,6 +362,19 @@ registro         OneToOneField(RegistroDiario, SET_NULL, null=True,
 | `checkin_etiqueta_valida` | `etiqueta` ∈ MAÑANA / TARDE |
 | `checkin_turno_coherente` | `orden=1 ⇒ MAÑANA` y `orden=2 ⇒ TARDE` — impide que el número del turno y su nombre se contradigan |
 
+`checkin_estado_valido` y `checkin_etiqueta_valida` existen por claridad, pero
+la segunda **no puede fallar sola**: cualquier etiqueta inventada viola también
+`checkin_turno_coherente`. Lo mismo pasa con `notificacion_alerta_estado_valido`
+frente a `notificacion_alerta_envio_coherente`. Las pruebas
+(`tests/test_restricciones.py`) las aíslan para verlas caer por sí mismas.
+
+**Índice** `checkin_pendiente_por_hora` (migración 0032, DB-09): sobre
+`hora_programada`, **solo para los turnos `PENDIENTE`**. Es la consulta de
+`cerrar_checkins_vencidos` y `enviar_recordatorios`, que buscan en todos los
+pacientes los turnos abiertos cuya hora ya pasó. La racha de SILENCIO no lo
+necesita: filtra por paciente, día y orden, y eso lo cubre el índice de
+`unique_checkin_paciente_dia_orden`.
+
 **Por qué existe:** es el registro de que el sistema *intentó* contactar al
 paciente. Sin él, un paciente que no responde es indistinguible de un paciente
 al que nunca se le preguntó — y esa diferencia es justamente la alerta
