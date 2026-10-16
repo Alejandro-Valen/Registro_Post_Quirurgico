@@ -16,8 +16,8 @@
 > documentación deja de afirmar lo que no es cierto (DB-06, REPO-05 a 09)**,
 > los dos el 04/10/2026; **la gráfica del panel deja de llevar umbrales
 > escritos a mano (BE-02)** y **la ficha del paciente abre con la evolución y
-> se lee con contraste suficiente (UX-P04 a P11)**, los dos el 15/10/2026, 499
-> tests OK)
+> se lee con contraste suficiente (UX-P04 a P11)**, los dos el 15/10/2026,
+> 499 tests OK)
 > **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026 —
 > **diez comprobaciones** desde el 09/09/2026 (siete hasta el 07/09; se sumaron
 > el linter `ruff` y `pip-audit`, `check --deploy` recuperó la capacidad de
