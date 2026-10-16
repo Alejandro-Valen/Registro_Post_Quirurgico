@@ -265,7 +265,7 @@ _HTML_GRAFICAS_TEMPLATE = """
     <span style="color:#6b7280;">- - {fc_baja} lpm  · - - {fc_media} lpm</span>
   </div>
   <canvas data-serie="frecuencia" height="90" style="width:100%;margin-bottom:8px;"></canvas>
-  <p style="font-size:0.75em;color:#9ca3af;margin:4px 0 0;">
+  <p style="font-size:0.75em;color:#6b7280;margin:4px 0 0;">
     Puntos rojos = alerta ALTA sin resolver ese registro. Huecos en la
     línea = el paciente no midió ese dato ese día (no es un valor de 0).
   </p>
