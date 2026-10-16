@@ -2,7 +2,7 @@
 Management command: cerrar_checkins_vencidos
 
 Cierra los CheckInProgramado PENDIENTE que superaron el período de gracia
-(10 horas desde hora_programada) y genera una alerta SILENCIO según la
+(10 horas desde hora_programada, o desde su creación si fue posterior — D28) y genera una alerta SILENCIO según la
 racha de check-ins sin respuesta.
 
 Racha (check a check, ignorando horas): cuenta cuántos check-ins
@@ -102,11 +102,19 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         ahora = timezone.now()
         corte = ahora - timedelta(hours=HORAS_GRACIA)
+        # D28: la gracia cuenta desde la más tardía entre la hora programada y
+        # la creación del turno. Un cron que arranca a las 18:00 crea el turno
+        # de las 7:00, y sin esto lo cerraba en la misma corrida: SILENCIO para
+        # todos por un turno que existió cero segundos. Sin fecha de creación
+        # (turnos anteriores a D28), la regla de siempre.
+        vencido = Q(hora_programada__lte=corte) & (
+            Q(fecha_creacion__isnull=True) | Q(fecha_creacion__lte=corte)
+        )
 
         vencidos = list(
             CheckInProgramado.objects.filter(
+                vencido,
                 estado=CheckInProgramado.ESTADO_PENDIENTE,
-                hora_programada__lte=corte,
             ).order_by('hora_programada', 'pk').values_list('pk', flat=True)
         )
 
@@ -121,9 +129,9 @@ class Command(BaseCommand):
                     CheckInProgramado.objects.select_for_update()
                     .select_related('paciente')
                     .filter(
+                        vencido,
                         pk=checkin_pk,
                         estado=CheckInProgramado.ESTADO_PENDIENTE,
-                        hora_programada__lte=corte,
                     )
                     .first()
                 )

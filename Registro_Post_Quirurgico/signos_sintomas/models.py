@@ -448,7 +448,11 @@ class Alerta(models.Model):
         related_name='alertas',
         null=True,
         blank=True,
-        help_text="El registro diario que disparó esta alerta. Null para alertas SILENCIO (sin respuesta)."
+        help_text=(
+            "El ÚLTIMO registro diario que detectó este problema, no el que lo "
+            "originó (cada detección está en DeteccionAlerta). Vacío en "
+            "SILENCIO y AUXILIO, que no salen de un registro."
+        ),
     )
     tipo = models.CharField(max_length=30, choices=TIPO_CHOICES)
     severidad = models.CharField(max_length=10, choices=SEVERIDAD_CHOICES)
@@ -944,6 +948,18 @@ class CheckInProgramado(models.Model):
     )
     hora_programada = models.DateTimeField(
         help_text="Momento en que el sistema disparó (o debía disparar) el prompt al paciente."
+    )
+    # D28 (15/10/2026): cuándo existió el turno de verdad. La gracia de
+    # `cerrar_checkins_vencidos` cuenta desde la más tardía entre esta fecha y
+    # `hora_programada`: un turno creado tarde ya no se cierra en la misma
+    # corrida. Vacía en los turnos anteriores a D28, que siguen la regla de
+    # siempre: no se les inventa una fecha que nadie registró (criterio de D3).
+    fecha_creacion = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+        default=timezone.now,
+        help_text="Momento en que el turno se creó. Vacío en los anteriores al 15/10/2026.",
     )
     fecha_respuesta = models.DateTimeField(
         null=True,
