@@ -1,4 +1,5 @@
 import json
+import logging
 from contextvars import ContextVar
 from datetime import timedelta
 
@@ -23,6 +24,8 @@ from .models import (
     RecepcionWebhookTwilio,
     RegistroDiario,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class MotivoResolucionForm(django_forms.Form):
@@ -348,8 +351,52 @@ class TieneAlertaActivaFilter(admin.SimpleListFilter):
         return queryset
 
 
+_CAMPOS_UNICOS_PACIENTE = ('cedula', 'telefono_whatsapp')
+MSG_REGISTRO_RECHAZADO = (
+    "No se pudo registrar al paciente con estos datos. Revisa la cédula y el "
+    "teléfono; si el paciente ya está en seguimiento, contacta al administrador."
+)
+
+
+class PacienteAdminForm(django_forms.ModelForm):
+    """SEC-12 (15/10/2026): el choque de unicidad no delata al paciente.
+
+    Django respondía «Ya existe un Paciente con este Cédula» junto al campo, y
+    así un médico podía averiguar si una cédula o un teléfono están en el
+    sistema aunque el paciente fuera de otro. Mientras los dos sean únicos en
+    todo el sistema, cualquier rechazo delata ALGO —eso queda escrito en
+    SECURITY.md—; lo que se corrige es que el error ya no dice qué campo chocó
+    ni confirma que exista un paciente, y que el intento queda en el log.
+
+    `usuario_id` lo fija `PacienteAdmin.get_form` en la clase que crea para
+    cada petición: el log dice quién lo intentó, nunca qué dato probó.
+    """
+
+    usuario_id = None
+
+    class Meta:
+        model = Paciente
+        fields = '__all__'
+
+    def validate_unique(self):
+        try:
+            self.instance.validate_unique(exclude=self._get_validation_exclusions())
+        except django_forms.ValidationError as error:
+            chocan = [c for c in _CAMPOS_UNICOS_PACIENTE if c in error.error_dict]
+            for campo in chocan:
+                del error.error_dict[campo]
+            if chocan:
+                logger.warning(
+                    "Registro de paciente rechazado por un dato ya existente "
+                    "(usuario pk=%s, campos=%s).", self.usuario_id, ','.join(chocan))
+                self.add_error(None, MSG_REGISTRO_RECHAZADO)
+            if error.error_dict:
+                self._update_errors(error)
+
+
 @admin.register(Paciente)
 class PacienteAdmin(admin.ModelAdmin):
+    form = PacienteAdminForm
     list_display = ['nombre_completo', 'cedula', 'medico_nombre',
                     'fecha_cirugia', 'activo']
     list_filter = [
@@ -507,6 +554,10 @@ class PacienteAdmin(admin.ModelAdmin):
         usuario = request.user
 
         class FormConResponsable(form):
+            # SEC-12: quién intentó el registro, para el log del rechazo. Va en
+            # esta clase, que se crea en cada petición: no se comparte.
+            usuario_id = usuario.pk
+
             def clean(self):
                 datos = super().clean()
                 if datos.get('activo') and not datos.get('medico_responsable'):

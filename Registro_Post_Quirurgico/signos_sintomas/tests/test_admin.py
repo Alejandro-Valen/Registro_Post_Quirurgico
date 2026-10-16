@@ -1677,3 +1677,77 @@ class ListadosSinConsultaPorFilaTests(TestCase):
 
     def test_listado_de_checkins(self):
         self._sin_consulta_por_fila('/admin/signos_sintomas/checkinprogramado/')
+
+
+class OraculoDeUnicidadTests(TestCase):
+    """SEC-12: al registrar un paciente, el formulario respondía «Ya existe un
+    Paciente con este Cédula» junto al campo: un médico podía averiguar si una
+    cédula o un teléfono están en el sistema aunque el paciente sea de otro.
+
+    Mientras sean únicos en todo el sistema, cualquier rechazo delata ALGO. Lo
+    que se corrige: el error no dice qué campo chocó ni confirma que exista un
+    paciente, y el intento queda registrado. El riesgo residual va en
+    SECURITY.md (decisión del Arquitecto, 15/10/2026).
+    """
+
+    def setUp(self):
+        from django.contrib.auth.models import Group
+        from django.core.management import call_command
+
+        call_command('crear_medico', verbosity=0)
+        User = get_user_model()
+        self.medico_a = User.objects.create_user(
+            username='dr_oraculo_a', password='pass', is_staff=True,
+            email='a@ejemplo.com')
+        self.medico_b = User.objects.create_user(
+            username='dr_oraculo_b', password='pass', is_staff=True,
+            email='b@ejemplo.com')
+        grupo = Group.objects.get(name='Médicos')
+        self.medico_a.groups.add(grupo)
+        self.medico_b.groups.add(grupo)
+        Paciente.objects.create(
+            nombre_completo='Paciente del Medico A', cedula='1020304050',
+            telefono_whatsapp='+573004440001',
+            fecha_cirugia=timezone.localdate(), medico_responsable=self.medico_a,
+        )
+        self.client.force_login(self.medico_b)
+
+    def _registrar(self, cedula, telefono):
+        return self.client.post('/admin/signos_sintomas/paciente/add/', {
+            'nombre_completo': 'Intento del Medico B',
+            'cedula': cedula,
+            'telefono_whatsapp': telefono,
+            'fecha_cirugia': timezone.localdate().isoformat(),
+            'medico_responsable': self.medico_b.pk,
+            'activo': 'on',
+        })
+
+    def _afirmar_rechazo_generico(self, resp):
+        self.assertEqual(resp.status_code, 200)   # el formulario vuelve, no guarda
+        form = resp.context['adminform'].form
+        self.assertEqual(form.errors.get('cedula'), None)
+        self.assertEqual(form.errors.get('telefono_whatsapp'), None)
+        self.assertIn('No se pudo registrar', ' '.join(form.non_field_errors()))
+        self.assertNotContains(resp, 'ya existe')
+        self.assertNotContains(resp, 'Ya existe')
+        self.assertEqual(Paciente.objects.filter(nombre_completo='Intento del Medico B').count(), 0)
+
+    def test_cedula_de_otro_medico_no_se_confirma(self):
+        with self.assertLogs('signos_sintomas.admin', level='WARNING') as registro:
+            resp = self._registrar('1020304050', '+573004449999')
+        self._afirmar_rechazo_generico(resp)
+        self.assertIn(str(self.medico_b.pk), ' '.join(registro.output))
+        # El log no lleva el dato que se probó: sería otra fuga, esta vez a
+        # quien lea los registros.
+        self.assertNotIn('1020304050', ' '.join(registro.output))
+
+    def test_telefono_de_otro_medico_no_se_confirma(self):
+        with self.assertLogs('signos_sintomas.admin', level='WARNING'):
+            resp = self._registrar('9999999999', '+573004440001')
+        self._afirmar_rechazo_generico(resp)
+
+    def test_un_paciente_nuevo_se_sigue_registrando(self):
+        """La otra dirección: datos libres entran como siempre."""
+        resp = self._registrar('5555555555', '+573004445555')
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(Paciente.objects.filter(cedula='5555555555').exists())
