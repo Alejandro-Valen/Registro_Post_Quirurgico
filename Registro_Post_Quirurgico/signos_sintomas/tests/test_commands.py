@@ -194,6 +194,10 @@ class SchedulerTests(TestCase):
             orden=orden,
             etiqueta=etiqueta,
             hora_programada=hora_prog,
+            # D28: un turno programado en el pasado existió desde entonces. Sin
+            # esto el fixture fabrica «creado ahora, programado hace horas»,
+            # que el sistema real no produce, y la gracia no habría corrido.
+            fecha_creacion=hora_prog,
             estado=estado,
         )
 
@@ -295,6 +299,10 @@ class SchedulerTests(TestCase):
             orden=1,
             etiqueta=CheckInProgramado.ETIQUETA_MANANA,
             hora_programada=timezone.now() - edad,
+            # D28: un turno programado en el pasado existió desde entonces. Sin
+            # esto el fixture fabrica «creado ahora, programado hace horas»,
+            # que el sistema real no produce, y la gracia no habría corrido.
+            fecha_creacion=timezone.now() - edad,
         )
 
     def test_checkin_con_exactamente_10_horas_se_cierra(self):
@@ -474,20 +482,18 @@ class SchedulerTests(TestCase):
     def _correr_scheduler_matutino(self, paciente):
         """Ejecuta crear_checkins_diarios + cerrar_checkins_vencidos, en ese orden.
 
-        Es la secuencia real de `cron_matutino`. Los turnos de hoy que crea el
-        scheduler quedan a las 7:00 y 14:00; en producción el cron corre a las
-        6:00 AM, así que ambos están todavía en el futuro y ninguno vence en esa
-        misma corrida. Aquí se normalizan a "recién programados" para que el
-        resultado no dependa de la hora en que se ejecute la suite — sin eso, un
-        test corrido por la tarde cerraría también el turno de la mañana de hoy.
+        Es la secuencia real de `cron_matutino`, sin retoques. Hasta el
+        15/10/2026 aquí se movían los turnos de hoy a «ahora» antes de cerrar,
+        porque —decía este mismo comentario— «un test corrido por la tarde
+        cerraría también el turno de la mañana de hoy». Eso no era fragilidad
+        de la prueba: era BE-03, un cron tardío que cierra el turno que acaba de
+        crear, y el retoque lo escondía. Con D28 la gracia cuenta desde que el
+        turno existe, y la secuencia real pasa tal cual, incluso a las 23:59:59
+        en que esta clase congela el reloj.
         """
         from django.core.management import call_command
 
         call_command('crear_checkins_diarios', verbosity=0)
-        CheckInProgramado.objects.filter(
-            paciente=paciente,
-            fecha_dia=timezone.localdate(),
-        ).update(hora_programada=timezone.now())
         call_command('cerrar_checkins_vencidos', verbosity=0)
 
     def test_escalera_silencio_con_scheduler_real_llega_a_alta(self):
@@ -1514,6 +1520,10 @@ class ConsentimientoRevocadoTests(TestCase):
             orden=1,
             etiqueta=CheckInProgramado.ETIQUETA_MANANA,
             hora_programada=timezone.now() - timedelta(hours=11),
+            # D28: un turno programado en el pasado existió desde entonces. Sin
+            # esto el fixture fabrica «creado ahora, programado hace horas»,
+            # que el sistema real no produce, y la gracia no habría corrido.
+            fecha_creacion=timezone.now() - timedelta(hours=11),
         )
 
     def _correr(self, comando):
@@ -1563,3 +1573,75 @@ class ConsentimientoRevocadoTests(TestCase):
         turno = CheckInProgramado.objects.get(paciente=self.paciente)
         self.assertEqual(turno.estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
         self.assertEqual(Alerta.objects.filter(tipo='SILENCIO').count(), 1)
+
+
+class GraciaDesdeQueElTurnoExisteTests(TestCase):
+    """D28 / BE-03 (15/10/2026) — la gracia cuenta desde que el turno existe.
+
+    Si `cron_matutino` arrancaba tarde —un reinicio, un servicio que vuelve a
+    las 18:00—, `crear_checkins_diarios` creaba el turno de la mañana con hora
+    7:00 y `cerrar_checkins_vencidos` lo cerraba EN LA MISMA CORRIDA (7 + 10 =
+    17 < 18): un SILENCIO para cada paciente, por un turno que existió cero
+    segundos. Y la prueba que cubría esa secuencia movía los turnos a «ahora»
+    justo antes de cerrar, así que el bug no podía verse.
+    """
+
+    def setUp(self):
+        self.paciente = Paciente.objects.create(
+            medico_responsable=medico_de_pruebas(),
+            nombre_completo='Paciente Cron Tardio',
+            telefono_whatsapp='+573009990777',
+            fecha_cirugia=timezone.localdate() - timedelta(days=3),
+            activo=True, consentimiento_informado=True,
+        )
+        self.hoy = timezone.localdate()
+
+    def _bogota(self, dia, hora, minuto=0):
+        return timezone.datetime(dia.year, dia.month, dia.day, hora, minuto,
+                                 tzinfo=timezone.get_current_timezone())
+
+    def _turno_manana(self):
+        return CheckInProgramado.objects.get(paciente=self.paciente, orden=1)
+
+    def test_un_cron_tardio_no_cierra_el_turno_que_acaba_de_crear(self):
+        with freeze_time(self._bogota(self.hoy, 18)):
+            call_command('crear_checkins_diarios', verbosity=0)
+            call_command('cerrar_checkins_vencidos', verbosity=0)
+        self.assertEqual(self._turno_manana().estado, CheckInProgramado.ESTADO_PENDIENTE)
+        self.assertFalse(Alerta.objects.filter(tipo='SILENCIO').exists())
+
+    def test_el_turno_creado_tarde_tiene_sus_diez_horas_completas(self):
+        """La otra dirección: no se perdona el silencio, se cuenta bien. Creado
+        a las 18:00, vence a las 04:00 del día siguiente."""
+        manana = self.hoy + timedelta(days=1)
+        with freeze_time(self._bogota(self.hoy, 18)):
+            call_command('crear_checkins_diarios', verbosity=0)
+        with freeze_time(self._bogota(manana, 3, 59)):
+            call_command('cerrar_checkins_vencidos', verbosity=0)
+        self.assertEqual(self._turno_manana().estado, CheckInProgramado.ESTADO_PENDIENTE)
+        with freeze_time(self._bogota(manana, 4, 1)):
+            call_command('cerrar_checkins_vencidos', verbosity=0)
+        self.assertEqual(self._turno_manana().estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
+        self.assertTrue(Alerta.objects.filter(tipo='SILENCIO').exists())
+
+    def test_un_cron_a_su_hora_no_cambia_nada(self):
+        """Creado a las 6:00 (antes de su hora), la gracia sigue contando desde
+        las 7:00: vence a las 17:00, como siempre."""
+        with freeze_time(self._bogota(self.hoy, 6)):
+            call_command('crear_checkins_diarios', verbosity=0)
+        with freeze_time(self._bogota(self.hoy, 16, 59)):
+            call_command('cerrar_checkins_vencidos', verbosity=0)
+        self.assertEqual(self._turno_manana().estado, CheckInProgramado.ESTADO_PENDIENTE)
+        with freeze_time(self._bogota(self.hoy, 17, 1)):
+            call_command('cerrar_checkins_vencidos', verbosity=0)
+        self.assertEqual(self._turno_manana().estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)
+
+    def test_un_turno_sin_fecha_de_creacion_sigue_la_regla_de_siempre(self):
+        """Los turnos anteriores a D28 no tienen fecha de creación, y no se les
+        inventa (mismo criterio que D3): cuentan desde la hora programada."""
+        with freeze_time(self._bogota(self.hoy, 6)):
+            call_command('crear_checkins_diarios', verbosity=0)
+        CheckInProgramado.objects.filter(paciente=self.paciente).update(fecha_creacion=None)
+        with freeze_time(self._bogota(self.hoy, 17, 1)):
+            call_command('cerrar_checkins_vencidos', verbosity=0)
+        self.assertEqual(self._turno_manana().estado, CheckInProgramado.ESTADO_NO_RESPONDIDO)

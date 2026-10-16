@@ -747,6 +747,10 @@ class BugsDelPacienteTests(TestCase):
             orden=orden,
             etiqueta=etiqueta or CheckInProgramado.ETIQUETA_MANANA,
             hora_programada=timezone.now() - timedelta(hours=horas_atras),
+            # D28: un turno programado en el pasado existió desde entonces. Sin
+            # esto el fixture fabrica «creado ahora, programado hace horas»,
+            # que el sistema real no produce, y la gracia no habría corrido.
+            fecha_creacion=timezone.now() - timedelta(hours=horas_atras),
         )
 
     def _flujo(self, temperatura='37.0', dolor='3'):
