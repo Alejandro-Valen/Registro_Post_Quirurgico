@@ -798,3 +798,43 @@ class MigracionGasesYNauseasTests(TransactionTestCase):
         self.assertEqual(conv.estado, 'ESPERANDO_GASES_NAUSEAS')
         # El estado viejo pide los dos datos a la vez: un gases suelto no vale.
         self.assertIsNone(conv.temp_presencia_gases)
+
+
+class MigracionFechaCreacionDelTurnoTests(TransactionTestCase):
+    """D28: la migración 0033 NO inventa la fecha de creación de los turnos
+    que ya existían. Un solo AddField con default=now los habría rellenado con
+    la hora de la migración, y turnos de hace semanas pasarían por recientes:
+    la gracia volvería a empezar para todos ellos el día del despliegue."""
+
+    ANTES = [('signos_sintomas', '0032_indice_turnos_pendientes')]
+    DESPUES = [('signos_sintomas', '0033_checkin_fecha_creacion')]
+
+    _migrar = MigracionGasesYNauseasTests._migrar
+    tearDown = MigracionGasesYNauseasTests.tearDown
+
+    def _turno(self, apps):
+        usuarios = apps.get_model('auth', 'User').objects
+        pacientes = apps.get_model('signos_sintomas', 'Paciente').objects
+        turnos = apps.get_model('signos_sintomas', 'CheckInProgramado').objects
+        medico = usuarios.create(username='medico_migracion_0033')
+        paciente = pacientes.create(
+            nombre_completo='Paciente Migración 0033', telefono_whatsapp='+573009990033',
+            fecha_cirugia=timezone.localdate(), medico_responsable=medico,
+        )
+        return turnos.create(
+            paciente=paciente, fecha_dia=timezone.localdate(), orden=1,
+            etiqueta='MAÑANA', hora_programada=timezone.now() - timedelta(days=3),
+        )
+
+    def test_los_turnos_existentes_quedan_sin_fecha_de_creacion(self):
+        apps = self._migrar(self.ANTES)
+        turno = self._turno(apps)
+        apps = self._migrar(self.DESPUES)
+        turno = apps.get_model('signos_sintomas', 'CheckInProgramado').objects.get(pk=turno.pk)
+        self.assertIsNone(turno.fecha_creacion)
+
+    def test_los_turnos_nuevos_si_la_registran(self):
+        self._migrar(self.DESPUES)
+        apps = self._migrar(self.DESPUES)
+        turno = self._turno(apps)
+        self.assertIsNotNone(turno.fecha_creacion)
