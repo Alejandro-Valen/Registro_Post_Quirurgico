@@ -19,10 +19,11 @@
 > se lee con contraste suficiente (UX-P04 a P11)**, **cada restricción de la
 > base se ve fallar por su nombre (DB-04)**, **el bot tutea de principio a fin
 > y sin preguntas numeradas (UX-B06, UX-B09)**, **el panel deja de delatar
-> pacientes ajenos y de dejar fichas sin responsable (SEC-12, SEC-11)** y **un
-> cron tardío ya no cierra el turno que acaba de crear (BE-03, D28)**, todo el
-> 15/10/2026,
-> 519 tests OK)
+> pacientes ajenos y de dejar fichas sin responsable (SEC-12, SEC-11)**, **un
+> cron tardío ya no cierra el turno que acaba de crear (BE-03, D28)**, **la
+> sesión caduca tras 30 minutos sin uso (D29)** y **queda constancia de quién
+> abre cada ficha (SEC-07, D30)**, todo el 15/10/2026,
+> 530 tests OK)
 > **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026 —
 > **diez comprobaciones** desde el 09/09/2026 (siete hasta el 07/09; se sumaron
 > el linter `ruff` y `pip-audit`, `check --deploy` recuperó la capacidad de

@@ -49,6 +49,8 @@
 | [D26](#d26) | El bot no le promete al paciente lo que el sistema no hace | UX-B02 · BE-05 · UX-B10 · UX-B11 · DB-12 | El bot no promete | **Implementada** (02/10/2026) |
 | [D27](#d27) | Qué reescribe `crear_admin` en cada arranque | SEC-05 | Comandos de operación | **Implementada** (03/10/2026) |
 | [D28](#d28) | Desde cuándo cuenta la gracia de un turno | BE-03 | Base de datos y cron | **Implementada** (15/10/2026) |
+| [D29](#d29) | La sesión del panel caduca por inactividad | SEC-15 | Sesión y accesos | **Implementada** (15/10/2026) |
+| [D30](#d30) | Quién abrió la ficha de qué paciente | SEC-07 | Sesión y accesos | **Implementada** (15/10/2026) |
 
 Los hallazgos 2, 6, 7, 8, 9, 11 y 14 son correcciones técnicas sin decisión de
 producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
@@ -2388,6 +2390,89 @@ SILENCIO pasan con D28 y caen con la regla vieja: quedan vigilándolo.
 Las pruebas que fabricaban turnos «creados ahora, programados hace 11 horas»
 —una combinación que el sistema real no produce— pasan a crearlos cuando
 debían existir.
+
+<a id="d29"></a>
+
+## D29 — La sesión del panel caduca por inactividad
+
+**Hallazgo:** continuación de SEC-15 (auditoría del 07/09/2026) · **Estado:**
+**Implementada** (15/10/2026). Decisión del Arquitecto del 15/10/2026: 30 minutos.
+
+### Problema
+
+SEC-15 dejó la sesión en 8 horas **desde el ingreso** y cerrada al cerrar el
+navegador. En medio quedaba lo más común: el médico deja el panel abierto y se
+levanta. Durante horas, las fichas quedaban a la vista de quien se sentara.
+
+### Decisión
+
+1. **30 minutos sin uso cierran la sesión**, con un aviso que explica por qué.
+2. **Las 8 horas siguen siendo el tope absoluto**, aunque el médico esté activo.
+
+### Por qué no basta con `SESSION_SAVE_EVERY_REQUEST`
+
+Es la trampa de este cambio. Guardar la última actividad en cada petición
+**modifica la sesión**, y Django renueva su caducidad cada vez que la guarda:
+las 8 horas pasarían a contar desde el último clic y un médico activo no
+saldría nunca. Por eso el middleware (`signos_sintomas/sesion.py`) guarda dos
+marcas, el inicio y la última actividad, y vigila los dos límites. Una sesión
+abierta antes del cambio, sin marcas, se adopta como si empezara: no se expulsa
+a nadie por un dato que no existía.
+
+### Verificación
+
+5 pruebas en `SesionCaducaPorInactividadTests`. La del tope de 8 horas **nace en
+verde a propósito**: vigila la trampa. Sabotaje: quitar el tope del middleware
+la pone en rojo. La del aviso se reescribió porque su primera versión buscaba
+«inactividad», palabra que el panel ya contenía, y pasaba sin probar nada.
+
+---
+
+<a id="d30"></a>
+
+## D30 — Quién abrió la ficha de qué paciente
+
+**Hallazgo:** SEC-07 (auditoría del 07/09/2026) · **Estado:** **Implementada**
+(15/10/2026). Decisión del Arquitecto del 15/10/2026: tabla en la base.
+
+### Problema
+
+Django registra lo que se cambia en el Admin, no lo que se lee. No había forma
+de responder «¿quién vio la ficha de este paciente?». Con un solo médico era
+teórico; con dos deja de serlo, y es lo primero que se pregunta ante una fuga.
+
+### Decisión
+
+1. **Modelo `AccesoFicha`**: quién, a quién, qué pantalla, qué objeto y cuándo.
+   **Ningún dato clínico**: un registro de accesos con datos de salud sería otra
+   copia de lo que protege.
+2. **Se registra cada vez que el Admin muestra** la ficha del paciente, un
+   registro diario, una alerta o un check-in. Una ficha que el Admin niega no
+   se registra, porque no hubo lectura. El listado tampoco.
+3. **Solo el superusuario lo ve, y nadie lo crea, edita ni borra** desde el
+   Admin. Un registro que su propio sujeto puede editar no prueba nada.
+4. **`paciente` es CASCADE**, a diferencia del responsable clínico: con PROTECT,
+   la supresión de un paciente (DB-11) fallaría por su propio registro de
+   lecturas. `usuario` es PROTECT, como en D12.
+
+### Por qué una tabla y no el log
+
+El log del servidor rota y se pierde. Este registro existe para responder una
+pregunta meses después, y eso exige que sea durable y consultable.
+
+### Lo que queda abierto
+
+**Cuánto tiempo se conserva.** Es una decisión legal, junto a SEC-08 y DB-11.
+
+### Verificación
+
+6 pruebas en `RegistroDeAccesosAFichasTests`, más el caso de su restricción en
+`test_restricciones.py` y su sección en `modelos_datos.md` (las dos guardias de
+esta misma jornada saltaron solas al añadir el modelo). Sabotajes: sin el
+mixin en `AlertaAdmin` cae; registrando sin objeto, cae la prueba de la ficha
+ajena. **Un tercer sabotaje escapó**, y por eso el código cambió: una condición
+«solo GET» que ninguna prueba sostenía. Se quitó en vez de cubrirla, porque un
+POST que vuelve a dibujar la ficha también es una lectura.
 
 ## Método de trabajo acordado
 

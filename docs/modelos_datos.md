@@ -426,6 +426,36 @@ opaco de Twilio y los datos de control. Es deliberado — es una tabla técnica 
 idempotencia, no un registro clínico. En el Admin es de solo lectura y visible
 únicamente para superusuarios.
 
+### AccesoFicha (SEC-07, decisión D30 — migración 0034)
+```python
+usuario      ForeignKey(User, PROTECT, related_name='accesos_a_fichas')
+             # quién abrió la ficha. PROTECT, como el responsable clínico (D12):
+             # una cuenta con historia se desactiva, no se borra.
+paciente     ForeignKey(Paciente, CASCADE, related_name='accesos')
+             # de quién es la ficha. CASCADE: la supresión de un paciente
+             # (DB-11) o `seed_demo --borrar` no pueden fallar por su propio
+             # registro de lecturas.
+vista        CharField choices=[paciente, registrodiario, alerta, checkinprogramado]
+             # qué pantalla se abrió
+objeto_id    PositiveIntegerField   # clave del objeto abierto
+fecha        DateTimeField default=now, no editable, indexado
+```
+
+**Restricción en base de datos:** `acceso_vista_valida` (`vista` ∈ las cuatro
+pantallas). **Índice** `acceso_por_paciente` (`paciente`, `-fecha`): la
+pregunta que responde esta tabla es «¿quién vio la ficha de este paciente?».
+
+**Por qué existe:** Django registra lo que se cambia en el Admin, no lo que se
+lee. Hasta el 15/10/2026 no había forma de saber qué médico consultó qué ficha.
+Lo escribe `RegistraAccesoMixin` en `admin.py` cada vez que el Admin **muestra**
+una de las cuatro fichas (respuesta 200). Un intento que el Admin rechaza
+—un médico que prueba la ficha de otro— no es una lectura y no se registra. El
+listado tampoco cuenta: muestra nombres, no la ficha.
+
+**No guarda PHI.** Quién, a quién, qué pantalla, qué objeto y cuándo. En el
+Admin lo ve solo el superusuario, y nadie lo crea, edita ni borra desde ahí.
+**Pendiente legal:** cuánto tiempo se conserva (va con SEC-08 y DB-11).
+
 ### MensajeContacto (app `home` — el formulario público)
 ```python
 nombre               CharField(100)
