@@ -221,12 +221,16 @@ def _datos_grafica(paciente, dias):
         return {'labels': [], 'temps': [], 'evas': [], 'fcs': [], 'alertas_idx': []}
 
     turnos = _turnos_por_registro(registros)
-    # Una sola query batched — evita N+1 y no depende del related_name
-    # equivocado ("alerta_set") que traía el borrador original.
+    # DB-03 (15/10/2026): un punto rojo por cada MEDICIÓN que disparó una ALTA
+    # de una alerta todavía sin resolver. Se lee de las detecciones, que guardan
+    # cada medición; `Alerta.registro_origen` guarda el ÚLTIMO registro que
+    # tocó la alerta, y con él el punto caía en una medición posterior que no
+    # fue grave. Una sola consulta: sin N+1.
     ids_con_alerta_alta = set(
-        Alerta.objects
-        .filter(registro_origen__in=registros, severidad='ALTA', resuelta=False)
-        .values_list('registro_origen_id', flat=True)
+        DeteccionAlerta.objects
+        .filter(registro__in=registros, severidad_detectada='ALTA',
+                alerta__resuelta=False)
+        .values_list('registro_id', flat=True)
     )
 
     labels, temps, evas, fcs, alertas_idx = [], [], [], [], []

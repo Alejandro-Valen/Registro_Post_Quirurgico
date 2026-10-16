@@ -130,9 +130,12 @@ registro_origen       ForeignKey(RegistroDiario, PROTECT, null=True, blank=True)
                       # OJO, lo que guarda NO es lo que el nombre dice: es el
                       # ÚLTIMO registro que detectó el problema, no el que lo
                       # originó (alert_engine lo reescribe en cada recurrencia).
-                      # La detección original está en DeteccionAlerta. Hallazgo
-                      # DB-03, abierto: la gráfica marca un solo punto rojo por
-                      # alerta por esta razón.
+                      # La detección original está en DeteccionAlerta. Por eso
+                      # la gráfica del panel lee las detecciones y no este
+                      # campo (DB-03, corregido el 15/10/2026): un punto rojo
+                      # por cada medición que disparó una ALTA aún abierta. El
+                      # campo conserva su nombre por decisión del Arquitecto:
+                      # renombrarlo exigía migración y tocar alert_engine.
 tipo                  CharField choices=[SEPSIS,FUGA_ANASTOMOTICA,ILEO_PARALITICO,DOLOR_AGUDO,INTOLERANCIA_ORAL,TAQUICARDIA,SILENCIO,AUXILIO]
                       # AUXILIO (D21, migraciones 0029 y 0030): el paciente escribió AYUDA.
                       # No la produce el motor sino bot.py, y siempre es ALTA.

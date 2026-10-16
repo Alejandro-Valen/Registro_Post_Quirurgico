@@ -1075,35 +1075,58 @@ class GraficaSignosVitalesTests(TestCase):
         datos = self._extraer_datos(resp.content.decode())
         self.assertTrue(datos['7']['labels'][0].endswith(' M'))
 
+    def _registro(self, dias_atras=0, **campos):
+        datos = {'temperatura': Decimal('38.5'), 'dolor_eva': 8,
+                 'aspecto_drenaje': 'sin_drenaje', 'presencia_gases': True,
+                 'episodios_nauseas': 0}
+        datos.update(campos)
+        registro = RegistroDiario.objects.create(paciente=self.paciente, **datos)
+        if dias_atras:
+            RegistroDiario.objects.filter(pk=registro.pk).update(
+                fecha_registro=timezone.now() - timedelta(days=dias_atras))
+        return registro
+
+    def _alerta_con_deteccion(self, registro, severidad='ALTA', resuelta=False):
+        """La forma real de los datos: el motor nunca crea una alerta sin su
+        detección. Hasta el 15/10/2026 estas pruebas creaban solo la alerta."""
+        cierre = {'fecha_resolucion': timezone.now(),
+                  'motivo_resolucion': Alerta.MOTIVO_CONTACTO} if resuelta else {}
+        alerta = Alerta.objects.create(
+            paciente=self.paciente, registro_origen=registro, tipo='SEPSIS',
+            severidad=severidad, mensaje='Fiebre', resuelta=resuelta, **cierre)
+        DeteccionAlerta.objects.create(
+            alerta=alerta, registro=registro, severidad_detectada=severidad,
+            mensaje_detectado='Fiebre')
+        return alerta
+
     def test_alerta_alta_sin_resolver_marca_el_indice(self):
-        registro = RegistroDiario.objects.create(
-            paciente=self.paciente,
-            temperatura=Decimal('38.5'), dolor_eva=8,
-            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
-        )
-        Alerta.objects.create(
-            paciente=self.paciente, registro_origen=registro,
-            tipo='SEPSIS', severidad='ALTA', mensaje='Fiebre alta', resuelta=False,
-        )
+        self._alerta_con_deteccion(self._registro())
         resp = self.client.get(self._url_change())
         datos = self._extraer_datos(resp.content.decode())
         self.assertEqual(datos['7']['alertas_idx'], [0])
 
     def test_alerta_alta_resuelta_no_marca_el_indice(self):
-        registro = RegistroDiario.objects.create(
-            paciente=self.paciente,
-            temperatura=Decimal('38.5'), dolor_eva=8,
-            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
-        )
-        Alerta.objects.create(
-            paciente=self.paciente, registro_origen=registro,
-            tipo='SEPSIS', severidad='ALTA', mensaje='Fiebre alta', resuelta=True,
-            fecha_resolucion=timezone.now(),
-            motivo_resolucion=Alerta.MOTIVO_CONTACTO,
-        )
+        self._alerta_con_deteccion(self._registro(), resuelta=True)
         resp = self.client.get(self._url_change())
         datos = self._extraer_datos(resp.content.decode())
         self.assertEqual(datos['7']['alertas_idx'], [])
+
+    def test_el_punto_rojo_cae_en_la_medicion_que_disparo_la_alta(self):
+        """DB-03: `Alerta.registro_origen` guarda el ÚLTIMO registro que tocó la
+        alerta, no el que la originó. Con una ALTA el día 1 y una detección
+        MEDIA de la misma alerta el día 2, el punto rojo caía en el día 2 —una
+        medición que no fue grave— y desaparecía del día 1, que sí lo fue."""
+        dia_1 = self._registro(dias_atras=1)
+        dia_2 = self._registro(temperatura=Decimal('37.6'))
+        alerta = self._alerta_con_deteccion(dia_1, severidad='ALTA')
+        DeteccionAlerta.objects.create(
+            alerta=alerta, registro=dia_2, severidad_detectada='MEDIA',
+            mensaje_detectado='Subfebril')
+        Alerta.objects.filter(pk=alerta.pk).update(registro_origen=dia_2)
+
+        resp = self.client.get(self._url_change())
+        datos = self._extraer_datos(resp.content.decode())
+        self.assertEqual(datos['7']['alertas_idx'], [0])   # el día 1, no el 2
 
     def test_carga_chartjs_y_logica_desde_estaticos_locales(self):
         RegistroDiario.objects.create(
