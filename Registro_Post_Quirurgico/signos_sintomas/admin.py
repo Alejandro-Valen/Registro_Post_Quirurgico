@@ -16,6 +16,7 @@ from django.utils.html import escape, format_html, mark_safe
 from .alert_engine import FC_BAJA_MIN, FC_MEDIA_MIN, TEMPERATURA_ALTA
 from .management.commands.desactivar_pacientes_vencidos import DIAS_SEGUIMIENTO
 from .models import (
+    AccesoFicha,
     Alerta,
     CheckInProgramado,
     DeteccionAlerta,
@@ -26,6 +27,34 @@ from .models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class RegistraAccesoMixin:
+    """SEC-07 / D30: deja constancia de quién abrió una ficha con datos de un
+    paciente. Cuenta toda vez que el Admin MUESTRA la ficha, sea GET o un POST
+    que la vuelve a dibujar: en los dos casos el médico la está viendo.
+
+    La guardia es que el Admin haya construido la ficha (`original` en el
+    contexto). Si la negó —un médico que prueba la de otro—, responde con una
+    redirección sin objeto, y no se registra: no hubo lectura. Tomar el objeto
+    del contexto, además, no cuesta una consulta más."""
+
+    vista_acceso = None   # cada ModelAdmin dice qué pantalla es
+
+    def paciente_del_acceso(self, obj):
+        return obj.paciente
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        respuesta = super().change_view(request, object_id, form_url, extra_context)
+        obj = (getattr(respuesta, 'context_data', None) or {}).get('original')
+        if obj is not None:
+            AccesoFicha.objects.create(
+                usuario=request.user,
+                paciente=self.paciente_del_acceso(obj),
+                vista=self.vista_acceso,
+                objeto_id=obj.pk,
+            )
+        return respuesta
 
 
 class MotivoResolucionForm(django_forms.Form):
@@ -399,7 +428,12 @@ class PacienteAdminForm(django_forms.ModelForm):
 
 
 @admin.register(Paciente)
-class PacienteAdmin(admin.ModelAdmin):
+class PacienteAdmin(RegistraAccesoMixin, admin.ModelAdmin):
+    vista_acceso = AccesoFicha.VISTA_PACIENTE
+
+    def paciente_del_acceso(self, obj):
+        return obj
+
     form = PacienteAdminForm
     list_display = ['nombre_completo', 'cedula', 'medico_nombre',
                     'fecha_cirugia', 'activo']
@@ -597,7 +631,8 @@ class PacienteAdmin(admin.ModelAdmin):
 
 
 @admin.register(RegistroDiario)
-class RegistroDiarioAdmin(admin.ModelAdmin):
+class RegistroDiarioAdmin(RegistraAccesoMixin, admin.ModelAdmin):
+    vista_acceso = AccesoFicha.VISTA_REGISTRO
     list_display = ['paciente', 'temperatura', 'dolor_eva',
                     'aspecto_drenaje', 'presencia_gases',
                     'estado_evaluacion_alertas', 'fecha_registro']
@@ -737,7 +772,8 @@ class DeteccionAlertaInline(admin.TabularInline):
 
 
 @admin.register(Alerta)
-class AlertaAdmin(admin.ModelAdmin):
+class AlertaAdmin(RegistraAccesoMixin, admin.ModelAdmin):
+    vista_acceso = AccesoFicha.VISTA_ALERTA
     # UX-P03 (02/10/2026): la columna de fecha era `fecha_alerta`, la PRIMERA
     # detección. Una alerta redetectada esta mañana mostraba la fecha de hace
     # días y, ordenada por ella, se hundía al fondo. Ahora se ve la última.
@@ -940,7 +976,8 @@ class AlertaAdmin(admin.ModelAdmin):
 
 
 @admin.register(CheckInProgramado)
-class CheckInProgramadoAdmin(admin.ModelAdmin):
+class CheckInProgramadoAdmin(RegistraAccesoMixin, admin.ModelAdmin):
+    vista_acceso = AccesoFicha.VISTA_CHECKIN
     list_display  = ['paciente', 'fecha_dia', 'etiqueta', 'orden',
                      'estado', 'hora_programada', 'fecha_respuesta']
     list_filter   = [
@@ -981,3 +1018,31 @@ admin.site.site_header = 'Seguimiento Postquirúrgico'
 admin.site.site_title = 'Seguimiento Postquirúrgico'
 admin.site.index_title = 'Panel del médico'
 admin.site.index_template = 'admin/index_panel.html'
+
+
+@admin.register(AccesoFicha)
+class AccesoFichaAdmin(admin.ModelAdmin):
+    """SEC-07 / D30: el registro de lecturas lo ve solo el superusuario, y nadie
+    lo escribe ni lo borra desde el Admin. Un registro que su propio sujeto
+    puede editar no prueba nada."""
+
+    list_display = ['fecha', 'usuario', 'paciente', 'vista', 'objeto_id']
+    list_filter = ['vista']
+    date_hierarchy = 'fecha'
+    list_select_related = ('usuario', 'paciente')
+    search_fields = ['usuario__username', 'paciente__nombre_completo', 'paciente__cedula']
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

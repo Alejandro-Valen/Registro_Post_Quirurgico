@@ -1069,3 +1069,69 @@ class RecepcionWebhookTwilio(models.Model):
 
     def __str__(self):
         return f'{self.message_sid} — {self.estado}'
+
+
+class AccesoFicha(models.Model):
+    """SEC-07 / D30 (15/10/2026) — quién abrió la ficha de qué paciente.
+
+    Django registra lo que se cambia en el Admin, no lo que se lee. Esto deja
+    constancia de cada lectura de una ficha con datos de un paciente: la del
+    paciente, un registro diario, una alerta o un check-in. Lo escribe
+    `admin.RegistraAccesoMixin` cada vez que el Admin muestra la ficha; un
+    intento que el Admin rechaza no es una lectura y no se registra.
+
+    **No guarda ningún dato clínico**: quién, a quién, qué pantalla, qué
+    objeto y cuándo. Un registro de accesos con datos de salud sería otra copia
+    de lo que protege.
+
+    `paciente` es CASCADE a propósito: con PROTECT, borrar un paciente —la
+    supresión por habeas data (DB-11) o `seed_demo --borrar`— fallaría por su
+    propio registro de lecturas. Cuánto tiempo se conserva es una pregunta
+    legal abierta, junto a SEC-08. `usuario` es PROTECT, como el responsable
+    clínico (D12): una cuenta con historia se desactiva, no se borra.
+    """
+
+    VISTA_PACIENTE = 'paciente'
+    VISTA_REGISTRO = 'registrodiario'
+    VISTA_ALERTA = 'alerta'
+    VISTA_CHECKIN = 'checkinprogramado'
+    VISTA_CHOICES = [
+        (VISTA_PACIENTE, 'Ficha del paciente'),
+        (VISTA_REGISTRO, 'Registro diario'),
+        (VISTA_ALERTA, 'Alerta'),
+        (VISTA_CHECKIN, 'Check-in'),
+    ]
+
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='accesos_a_fichas',
+    )
+    paciente = models.ForeignKey(
+        Paciente,
+        on_delete=models.CASCADE,
+        related_name='accesos',
+    )
+    vista = models.CharField(max_length=20, choices=VISTA_CHOICES)
+    objeto_id = models.PositiveIntegerField(
+        help_text="Clave del objeto abierto (paciente, registro, alerta o check-in).",
+    )
+    fecha = models.DateTimeField(default=timezone.now, editable=False, db_index=True)
+
+    class Meta:
+        verbose_name = "Acceso a ficha"
+        verbose_name_plural = "Accesos a fichas"
+        ordering = ['-fecha']
+        constraints = [
+            CheckConstraint(
+                condition=Q(vista__in=['paciente', 'registrodiario', 'alerta',
+                                       'checkinprogramado']),
+                name='acceso_vista_valida',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['paciente', '-fecha'], name='acceso_por_paciente'),
+        ]
+
+    def __str__(self):
+        return f'{self.usuario} → {self.get_vista_display()} {self.objeto_id} ({self.fecha:%Y-%m-%d %H:%M})'
