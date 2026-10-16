@@ -404,10 +404,8 @@ mergeó el agente principal.
    `workflow` (`gh auth refresh -h github.com -s workflow`) y subir
    `ci-no-cancela-tras-merge` con su PR. Está 20+ commits detrás de
    `Desarrollo`: traerlo antes del push.
-2. **El carril A, etapa 2**, lo que su PR #44 dejó en «Lo que NO resuelve»:
-   UX-P04 a UX-P11 y la frontera del aviso del Admin de TEST-07. La mitad JS
-   de BE-02 y el barrido que leía `.claude/worktrees/` se cerraron el
-   15/10/2026 (rama `be02-umbrales-grafica`).
+2. **El carril A está terminado** (15/10/2026): BE-02 y el barrido en el PR #46;
+   UX-P04 a UX-P11 y la frontera del aviso de TEST-07 en el PR #47.
 
 **Lo que necesita a alguien, no a una sesión técnica:**
 
