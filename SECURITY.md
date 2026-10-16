@@ -95,6 +95,14 @@ Se dice aquí en vez de esperar a que alguien lo "descubra":
 - **Sin política de retención ni procedimiento de supresión.** El formato de
   consentimiento fija una conservación mínima de cinco años, pero no hay máximo
   ni una herramienta para ejercer el derecho de supresión.
+- **Un rechazo de registro todavía delata algo** (SEC-12). La cédula y el
+  teléfono son únicos en todo el sistema, así que si un médico intenta
+  registrar a un paciente que ya sigue otro médico, el registro falla: con eso
+  sabe que **alguien** tiene ese dato. Desde el 15/10/2026 el error ya no dice
+  qué campo chocó ni que el paciente exista, y cada intento queda en el log con
+  el usuario (nunca con el dato que se probó). Cerrarlo del todo exigiría que
+  la unicidad fuera por médico, y eso permitiría dos fichas de la misma persona
+  con dos médicos: es peor. Riesgo aceptado por el Arquitecto.
 - **Datos personales en la historia de git.** El nombre y la cédula de un
   tercero entraron al repositorio en junio de 2026 y siguen siendo recuperables
   con `git show`, aunque estén fuera del árbol de trabajo. Registrado con su
