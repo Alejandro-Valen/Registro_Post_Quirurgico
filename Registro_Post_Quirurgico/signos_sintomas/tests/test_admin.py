@@ -1774,3 +1774,106 @@ class OraculoDeUnicidadTests(TestCase):
         resp = self._registrar('5555555555', '+573004445555')
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(Paciente.objects.filter(cedula='5555555555').exists())
+
+
+class RegistroDeAccesosAFichasTests(TestCase):
+    """SEC-07 / D30 (15/10/2026): queda constancia de qué médico abrió qué ficha.
+
+    Django registra lo que se CAMBIA en el Admin, no lo que se LEE. Hasta hoy no
+    había forma de responder «¿quién vio la ficha de este paciente?». Con un
+    solo médico era teórico; con dos deja de serlo.
+    """
+
+    def setUp(self):
+        from django.contrib.auth.models import Group
+        from django.core.management import call_command
+
+        call_command('crear_medico', verbosity=0)
+        User = get_user_model()
+        self.medico = User.objects.create_user(
+            username='dr_accesos', password='pass', is_staff=True, email='acc@ejemplo.com')
+        self.otro = User.objects.create_user(
+            username='dr_accesos_otro', password='pass', is_staff=True, email='otro@ejemplo.com')
+        grupo = Group.objects.get(name='Médicos')
+        self.medico.groups.add(grupo)
+        self.otro.groups.add(grupo)
+        self.paciente = Paciente.objects.create(
+            nombre_completo='Paciente Accesos', cedula='3030303030',
+            telefono_whatsapp='+573003030303',
+            fecha_cirugia=timezone.localdate(), medico_responsable=self.medico)
+        self.ajeno = Paciente.objects.create(
+            nombre_completo='Paciente Ajeno', cedula='4040404040',
+            telefono_whatsapp='+573004040404',
+            fecha_cirugia=timezone.localdate(), medico_responsable=self.otro)
+
+    def test_abrir_la_ficha_queda_registrado(self):
+        from ..models import AccesoFicha
+
+        self.client.force_login(self.medico)
+        resp = self.client.get(f'/admin/signos_sintomas/paciente/{self.paciente.pk}/change/')
+        self.assertEqual(resp.status_code, 200)
+        acceso = AccesoFicha.objects.get()
+        self.assertEqual(acceso.usuario, self.medico)
+        self.assertEqual(acceso.paciente, self.paciente)
+        self.assertEqual(acceso.vista, 'paciente')
+        self.assertEqual(acceso.objeto_id, self.paciente.pk)
+
+    def test_abrir_una_alerta_queda_registrado_con_su_paciente(self):
+        from ..models import AccesoFicha
+
+        registro = RegistroDiario.objects.create(
+            paciente=self.paciente, temperatura=Decimal('38.5'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0)
+        alerta = Alerta.objects.create(
+            paciente=self.paciente, registro_origen=registro, tipo='SEPSIS',
+            severidad='ALTA', mensaje='Fiebre', resuelta=False)
+        self.client.force_login(self.medico)
+        resp = self.client.get(f'/admin/signos_sintomas/alerta/{alerta.pk}/change/')
+        self.assertEqual(resp.status_code, 200)
+        acceso = AccesoFicha.objects.get()
+        self.assertEqual((acceso.vista, acceso.paciente), ('alerta', self.paciente))
+
+    def test_una_ficha_ajena_que_no_se_pudo_abrir_no_cuenta_como_lectura(self):
+        """La otra dirección: el Admin ya le niega la ficha de otro médico. Si
+        no la leyó, registrarla sería afirmar algo que no pasó."""
+        from ..models import AccesoFicha
+
+        self.client.force_login(self.medico)
+        resp = self.client.get(f'/admin/signos_sintomas/paciente/{self.ajeno.pk}/change/')
+        self.assertNotEqual(resp.status_code, 200)
+        self.assertFalse(AccesoFicha.objects.exists())
+
+    def test_el_listado_no_es_una_lectura_de_ficha(self):
+        from ..models import AccesoFicha
+
+        self.client.force_login(self.medico)
+        self.assertEqual(self.client.get('/admin/signos_sintomas/paciente/').status_code, 200)
+        self.assertFalse(AccesoFicha.objects.exists())
+
+    def test_el_registro_no_guarda_ningun_dato_clinico(self):
+        """Un registro de accesos con datos de salud sería otra copia de lo
+        que protege. Solo quién, a quién, qué pantalla y cuándo."""
+        from ..models import AccesoFicha
+
+        campos = {f.name for f in AccesoFicha._meta.concrete_fields}
+        self.assertEqual(campos, {'id', 'usuario', 'paciente', 'vista', 'objeto_id', 'fecha'})
+
+    def test_solo_el_superusuario_ve_el_registro_y_nadie_lo_edita(self):
+        from django.contrib import admin as django_admin
+
+        from ..models import AccesoFicha
+
+        self.client.force_login(self.medico)
+        self.assertNotEqual(
+            self.client.get('/admin/signos_sintomas/accesoficha/').status_code, 200)
+
+        jefe = get_user_model().objects.create_superuser('jefe_accesos', password='pass')
+        self.client.force_login(jefe)
+        self.assertEqual(
+            self.client.get('/admin/signos_sintomas/accesoficha/').status_code, 200)
+        modelo_admin = django_admin.site._registry[AccesoFicha]
+        peticion = RequestFactory().get('/')
+        peticion.user = jefe
+        self.assertFalse(modelo_admin.has_add_permission(peticion))
+        self.assertFalse(modelo_admin.has_change_permission(peticion))
+        self.assertFalse(modelo_admin.has_delete_permission(peticion))

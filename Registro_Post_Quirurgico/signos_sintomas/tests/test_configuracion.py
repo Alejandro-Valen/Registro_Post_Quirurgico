@@ -3,7 +3,10 @@
 Extraido de signos_sintomas/tests.py sin cambiar una sola prueba
 (refactor del 10/08/2026)."""
 
+from datetime import timedelta
+
 from django.test import TestCase
+from django.utils import timezone
 
 
 class CacheProductionConfigTests(TestCase):
@@ -123,3 +126,70 @@ class NormaDeZonaHorariaTests(TestCase):
                 if re.search(r'\.date\(\)', codigo):
                     hallados.append(f'{ruta.relative_to(raiz).as_posix()}:{n}')
         self.assertEqual(hallados, [], 'usar timezone.localdate(valor), no valor.date()')
+
+
+class SesionCaducaPorInactividadTests(TestCase):
+    """D29 (15/10/2026): la sesión del panel se cierra tras 30 minutos sin uso,
+    y las 8 horas desde el ingreso siguen siendo el tope absoluto (SEC-15).
+
+    Hasta hoy las 8 horas corrían desde el inicio de sesión, no desde el último
+    clic: un médico que dejaba el panel abierto y se iba dejaba las fichas a
+    la vista de quien se sentara después, durante horas.
+    """
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.medico = get_user_model().objects.create_superuser(
+            'medico_inactividad', password='clave-de-prueba-larga-1')
+        self.inicio = timezone.now().replace(microsecond=0)
+
+    def _en(self, minutos):
+        from freezegun import freeze_time
+        return freeze_time(self.inicio + timedelta(minutes=minutos))
+
+    def _get_panel(self):
+        return self.client.get('/admin/')
+
+    def _entrar(self):
+        with self._en(0):
+            self.client.force_login(self.medico)
+
+    def test_con_uso_la_sesion_sigue_viva(self):
+        self._entrar()
+        for minuto in (29, 58, 87):          # cada clic, a menos de 30 del anterior
+            with self._en(minuto):
+                self.assertEqual(self._get_panel().status_code, 200, minuto)
+
+    def test_treinta_minutos_sin_uso_cierran_la_sesion(self):
+        self._entrar()
+        with self._en(31):
+            respuesta = self._get_panel()
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertIn('/admin/login/', respuesta['Location'])
+        with self._en(31):
+            # Y no basta con volver: la sesión ya no existe.
+            self.assertEqual(self._get_panel().status_code, 302)
+
+    def test_justo_antes_del_limite_no_se_cierra(self):
+        self._entrar()
+        with self._en(29):
+            self.assertEqual(self._get_panel().status_code, 200)
+
+    def test_las_ocho_horas_siguen_siendo_el_tope_aunque_haya_uso(self):
+        """Guardar la última actividad en cada clic renueva la caducidad de la
+        sesión en el servidor. Sin un tope propio, las 8 horas de SEC-15 se
+        volverían 8 horas desde el último clic: un médico activo no saldría
+        nunca."""
+        self._entrar()
+        for minuto in range(20, 8 * 60, 20):
+            with self._en(minuto):
+                self.assertEqual(self._get_panel().status_code, 200, minuto)
+        with self._en(8 * 60 + 1):
+            self.assertEqual(self._get_panel().status_code, 302)
+
+    def test_el_aviso_dice_por_que_se_cerro(self):
+        self._entrar()
+        with self._en(31):
+            respuesta = self.client.get('/admin/', follow=True)
+        self.assertContains(respuesta, 'Tu sesión se cerró tras 30 minutos sin uso')

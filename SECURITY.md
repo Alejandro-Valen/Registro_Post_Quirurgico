@@ -51,6 +51,8 @@ Para que un reporte no repita lo conocido:
   con una regla propia para la `SECRET_KEY` de Django y otra para números de
   cédula.
 - **Auditoría de dependencias** con `pip-audit` en cada PR.
+- **Sesión del panel acotada** (SEC-15 y D29): se cierra al cerrar el navegador,
+  tras 30 minutos sin uso y, como tope, a las 8 horas del ingreso.
 
 ## Lo que sabemos que falta
 
@@ -87,9 +89,11 @@ Se dice aquí en vez de esperar a que alguien lo "descubra":
   obligatoria, página de política de tratamiento, y una retención definida para
   `MensajeContacto`.
 
-- **No hay registro de accesos de lectura.** Django registra las escrituras del
-  Admin, no las consultas. Hoy no se puede saber qué médico consultó qué ficha.
-  Con un solo médico el impacto es teórico; con dos deja de serlo.
+- ~~**No hay registro de accesos de lectura.**~~ — **corregido el 15/10/2026**
+  (SEC-07, ficha D30). `AccesoFicha` guarda quién abrió la ficha de qué paciente
+  y cuándo, sin datos clínicos; solo el superusuario lo ve y nadie lo edita.
+  **Sigue pendiente:** cuánto tiempo se conserva, que es una decisión legal
+  junto a la retención del resto de los datos.
 - **Sin cifrado a nivel de aplicación.** Nombre, cédula y teléfono están en
   claro en la base; la protección depende del cifrado de disco del proveedor.
 - **Sin política de retención ni procedimiento de supresión.** El formato de

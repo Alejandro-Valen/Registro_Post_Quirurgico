@@ -23,6 +23,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from ..models import (
+    AccesoFicha,
     Alerta,
     CheckInProgramado,
     DeteccionAlerta,
@@ -62,6 +63,9 @@ class RestriccionesDeLaBaseTests(TestCase):
         # La señal ya la crea al nacer una alerta ALTA (uno a uno con la alerta).
         self.notificacion, _ = NotificacionAlerta.objects.get_or_create(alerta=self.alerta)
         self.webhook = RecepcionWebhookTwilio.objects.create(message_sid='SMrestricciones')
+        self.acceso = AccesoFicha.objects.create(
+            usuario=self.medico, paciente=self.paciente,
+            vista=AccesoFicha.VISTA_PACIENTE, objeto_id=self.paciente.pk)
 
     # -- Atajos: una violación es un UPDATE de un campo sobre una fila válida --
 
@@ -124,6 +128,8 @@ class RestriccionesDeLaBaseTests(TestCase):
             # RecepcionWebhookTwilio
             'webhook_twilio_estado_valido': self._upd(w, estado='PERDIDO'),
             'webhook_twilio_intentos_positivo': self._upd(w, intentos=0),
+            # AccesoFicha (SEC-07)
+            'acceso_vista_valida': self._upd(self.acceso, vista='listado'),
         }
 
     # Restricciones que no pueden fallar SOLAS, porque otra las cubre: cualquier
