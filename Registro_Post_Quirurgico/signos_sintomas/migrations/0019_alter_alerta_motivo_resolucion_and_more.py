@@ -36,7 +36,8 @@ def preparar_datos_para_integridad(apps, schema_editor):
     # `fecha_resolucion` de abajo SÍ fabrica un dato: usa la última detección (o
     # la fecha de la alerta) como si fuera el momento en que el médico la
     # resolvió, y eso nadie lo observó. La migración ya corrió, así que no se
-    # cambia su comportamiento; queda escrito aquí y en CLAUDE.md para que nadie
+    # cambia su comportamiento; queda escrito aquí y en docs/modelos_datos.md
+    # (hasta el 15/10/2026 decía «en CLAUDE.md», y allí no estaba) para que nadie
     # lea esas fechas como registro de una actuación real.
     #
     # Regla que el proyecto sigue desde entonces: no se hace backfill de datos
