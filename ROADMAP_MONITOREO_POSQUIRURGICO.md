@@ -19,7 +19,7 @@
 > se lee con contraste suficiente (UX-P04 a P11)**, y **cada restricción de la
 > base se ve fallar por su nombre (DB-04)** y **un cron tardío ya no cierra el
 > turno que acaba de crear (BE-03, D28)**, todo el 15/10/2026,
-> 509 tests OK)
+> 511 tests OK)
 > **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026 —
 > **diez comprobaciones** desde el 09/09/2026 (siete hasta el 07/09; se sumaron
 > el linter `ruff` y `pip-audit`, `check --deploy` recuperó la capacidad de
