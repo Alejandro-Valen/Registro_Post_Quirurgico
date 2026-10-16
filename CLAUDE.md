@@ -405,13 +405,9 @@ mergeó el agente principal.
    `ci-no-cancela-tras-merge` con su PR. Está 20+ commits detrás de
    `Desarrollo`: traerlo antes del push.
 2. **El carril A, etapa 2**, lo que su PR #44 dejó en «Lo que NO resuelve»:
-   UX-P04 a UX-P11, la mitad JS de BE-02 (los umbrales de la gráfica leídos de
-   `alert_engine`, y el barrido que detecte uno escrito a mano) y la frontera
-   del aviso del Admin de TEST-07. Lo de BE-02 toca el barrido: hacerlo junto
-   con el punto 3.
-3. **El barrido de veracidad lee `.claude/worktrees/`**: recorre el sistema de
-   archivos en vez de lo que git rastrea (`git ls-files`), y con carriles
-   abiertos da falsos rojos en local (en la CI no).
+   UX-P04 a UX-P11 y la frontera del aviso del Admin de TEST-07. La mitad JS
+   de BE-02 y el barrido que leía `.claude/worktrees/` se cerraron el
+   15/10/2026 (rama `be02-umbrales-grafica`).
 
 **Lo que necesita a alguien, no a una sesión técnica:**
 
