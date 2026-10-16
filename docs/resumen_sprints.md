@@ -40,8 +40,14 @@ estaba, y `CLAUDE.md` solo dice dónde vamos.
 | Loop de bugs del paciente | Los ocho fallos que llegan a la persona (D19-D23) | ✅ 09/09/2026, PR #29, `6580996`. 43 pruebas nuevas y 17 reversiones, las 17 atrapadas. 409 tests OK |
 | Reverificación y siete PR | Volver a comprobar los hallazgos contra el código y corregir lo que no necesita al médico | ✅ 02-04/10/2026, PR #36 a #42. Fichas D25-D27. 475 tests OK |
 | Carril A, etapa 1, y la documentación que no miente | El panel ordena por gravedad; la documentación deja de afirmar lo que no es cierto | ✅ 04/10/2026, PR #44 y #45. 484 tests OK |
-| BE-02 y el barrido | La gráfica deja de llevar umbrales a mano; el barrido lee lo que git rastrea | 15/10/2026, PR #46 |
-| Carril A, etapa 2 | La ficha del paciente y el contraste del panel (UX-P04 a P11, TEST-07) | 15/10/2026, PR #47 |
+| BE-02 y el barrido | La gráfica deja de llevar umbrales a mano; el barrido lee lo que git rastrea | ✅ 15/10/2026, PR #46, `999b876`. 486 tests OK |
+| Carril A, etapa 2, y `CLAUDE.md` delgado | La ficha del paciente y el contraste del panel (UX-P04 a P11, TEST-07); `CLAUDE.md` de 703 a 307 líneas | ✅ 15/10/2026, PR #47 y #48, que se mergearon en sus ramas base por ir apilados y entraron juntos con el PR #49, `a9527e9`. 499 tests OK |
+| REPO-20 | La CI deja de cancelar la corrida que sigue a un merge | ✅ 15/10/2026, PR #50, `287831d`. Comprobado en vivo: las corridas de #49 y #50 terminaron las dos |
+| La base de datos | Las 31 restricciones vistas fallar por su nombre, índice de turnos pendientes, migraciones de datos honestas, `.date()` vigilado y la suite cruzando la medianoche (DB-04, 08, 09, 10, BE-10, TEST-11) | ✅ 15/10/2026, PR #51, `bd443aa` |
+| El bot | Tutea de principio a fin y sus preguntas no llevan número (UX-B06, UX-B09, BE-11) | ✅ 15/10/2026, PR #52, `8284509` |
+| El panel y la seguridad | El rechazo de un duplicado no delata al paciente, ninguna ficha nace sin responsable, el punto rojo en la medición que disparó la ALTA (SEC-12, SEC-11, DB-03) | ✅ 15/10/2026, PR #53, `8827fdd` |
+| D28 · BE-03 | La gracia de un turno cuenta desde que existe: un cron tardío ya no genera SILENCIO falso | ✅ 15/10/2026, PR #54, `1b5de23`. 519 tests OK |
+| D29 · D30 | La sesión caduca tras 30 minutos sin uso; queda constancia de quién abre cada ficha (SEC-07) | ✅ 15/10/2026, PR #55, `13d6c7d`. 530 tests OK |
 
 ---
 

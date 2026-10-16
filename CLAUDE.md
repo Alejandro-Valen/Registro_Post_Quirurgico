@@ -178,13 +178,21 @@ completa, con PR y merge de cada etapa: `docs/resumen_sprints.md`.
 cada uno lo lleva el cuaderno de trabajo. **Lo clínico abierto no lo decide una
 sesión técnica** (ver abajo).
 
+**Al cerrar el 15/10/2026 no queda ningún hallazgo que se pueda cerrar solo con
+código.** Nueve PR mergeados ese día (#46 a #55); la suite pasó de 484 a 530.
+
 **Pendiente técnico, en orden:**
 
-1. **REPO-20** (la CI cancela la corrida que sigue a un merge): listo en la rama
-   local `ci-no-cancela-tras-merge`. GitHub rechaza el push porque el token de
-   `gh` no tiene el permiso `workflow`: `gh auth refresh -h github.com -s
-   workflow`, después push y PR.
-2. **Auditoría de la calidad de las pruebas** y la decisión de **protección de
+1. **SEC-13 y REPO-18:** que el contenedor no corra como root y declare
+   `HEALTHCHECK`, y un `docker-compose.yml`. Necesitan **Docker Desktop
+   encendido** para verificarlos: `collectstatic` y `migrate` corren al arrancar
+   y escriben en `/app`, así que un permiso mal puesto rompe el arranque sin que
+   ninguna prueba lo vea. No se entrega sin ver el contenedor arrancar.
+2. **Una inconsistencia del bot, por decidir con el Arquitecto:** si el paciente
+   dice que tiene drenaje y en la pregunta de cantidad responde «no tengo», se
+   guarda `tiene_drenaje=True` con cantidad `sin_drenaje`. No cambia ninguna
+   alerta (la Regla 2 mira el aspecto), pero el dato se contradice.
+3. **Auditoría de la calidad de las pruebas** y la decisión de **protección de
    rama** (ver "Repositorio").
 
 **Lo que necesita a alguien, no a una sesión técnica:**
