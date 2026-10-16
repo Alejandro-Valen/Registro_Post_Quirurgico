@@ -10,6 +10,41 @@
 
 ---
 
+## Índice de etapas
+
+Hasta el 15/10/2026 esta tabla vivía en `CLAUDE.md`, bajo "Estado actual", y
+crecía una fila por sesión. Es historia, no estado: aquí se conserva tal cual
+estaba, y `CLAUDE.md` solo dice dónde vamos.
+
+| Etapa | Descripción | Resultado |
+|-------|-------------|-----------|
+| Sprint 0 | Configuración base y seguridad | ✅ Completado |
+| Sprint 1 | Modelos clínicos y base de datos | ✅ Completado |
+| Sprint 1 Frontend | Formulario de contacto, templates, admin home | ✅ Completado |
+| Sprint 2 | Motor de alertas (alert_engine) | ✅ Completado |
+| Sprint 3 | Bot WhatsApp (Twilio) | ✅ Completado y endurecido en Sprint 3-Hardening |
+| Sprint 3.5 | Auditoría de literatura, generalización de alcance y documentación | ✅ Completado |
+| Sprint 3.6 | Decisiones de arquitectura clínica del alert_engine | ✅ 5/5 variables del núcleo + 4/4 del Paso 2 |
+| Sprint 3-Hardening | Seguridad y robustez pre-producción | ✅ 24 hallazgos, mergeado a Desarrollo |
+| Sprint 4 | Dashboard médico y notificaciones | ✅ Completado y mergeado a Desarrollo |
+| Sprint 5 | Producción, despliegue y cierre pre-merge (RAG diferido a Sprint 6) | ✅ 29/07/2026, PR #3, `3a5c573`. Loops A-D cerrados; rama `produccion` creada y Railway reapuntado |
+| Sprint 6 · CI | Integración continua en GitHub Actions | ✅ 31/07/2026, PR #5, `5b40c01`. Cinco comprobaciones, las cinco verificadas en rojo |
+| Loop E · D14 | Aislar las tareas del cron sin perder la dependencia clínica | ✅ 07/08/2026, PR #10, `4fc690d`. 340 tests OK; cierra D1-D14 |
+| Partir `tests.py` | El archivo de 6.288 líneas pasa a un paquete `tests/` por tema | ✅ 10/08/2026, PR #12, `427153b`. 340 tests y los 305 métodos comparados uno a uno |
+| Guardia de secretos | `gitleaks` y control de archivos de entorno en la CI | ✅ 10/08/2026, PR #13, `301c743`. La CI pasa de cinco a siete comprobaciones |
+| D15 · `crear_medico` | Que el arranque deje de reescribir la cuenta del médico | ✅ 12/08/2026, PR #17, `1396744`. 344 tests OK |
+| Auditoría de seis frentes | Seguridad, datos, backend clínico, frontend, pruebas y repositorio, en paralelo y ciegas entre sí | ✅ Ejecutada el 07/09/2026. 101 hallazgos, 15 ALTA; un sabotaje dejó las 344 pruebas en verde con el motor clínico roto |
+| Loop del arnés · D16-D17 | Que las guardias automáticas puedan fallar; retirar la identidad de terceros | ✅ 07/09/2026, PR #18, `5f51831`. CI de siete a nueve comprobaciones |
+| Loop del repositorio · D18 | Separar producto de cuaderno de trabajo; que el repositorio se pueda instalar | ✅ 07/09/2026, PR #19, `591cd7c` |
+| Loop de umbrales | Anclar los umbrales clínicos con pruebas de frontera | ✅ 08/09/2026, PR #28, `21105a2`. 22 pruebas nuevas y 21 sabotajes, los 21 atrapados. 366 tests OK |
+| Loop de bugs del paciente | Los ocho fallos que llegan a la persona (D19-D23) | ✅ 09/09/2026, PR #29, `6580996`. 43 pruebas nuevas y 17 reversiones, las 17 atrapadas. 409 tests OK |
+| Reverificación y siete PR | Volver a comprobar los hallazgos contra el código y corregir lo que no necesita al médico | ✅ 02-04/10/2026, PR #36 a #42. Fichas D25-D27. 475 tests OK |
+| Carril A, etapa 1, y la documentación que no miente | El panel ordena por gravedad; la documentación deja de afirmar lo que no es cierto | ✅ 04/10/2026, PR #44 y #45. 484 tests OK |
+| BE-02 y el barrido | La gráfica deja de llevar umbrales a mano; el barrido lee lo que git rastrea | 15/10/2026, PR #46 |
+| Carril A, etapa 2 | La ficha del paciente y el contraste del panel (UX-P04 a P11, TEST-07) | 15/10/2026, PR #47 |
+
+---
+
 ## Sprint 5 — bloques (rama `sprint-5-produccion`)
 
 Resumen de lo resuelto en `sprint-5-produccion` (Bloques 1-6):

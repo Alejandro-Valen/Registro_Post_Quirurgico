@@ -80,10 +80,14 @@
         ];
         completarUmbrales(temperatura, inicial.labels);
         const opcionesTemperatura = opcionesBase();
+        // UX-P05: 35-40 es el rango que se ve por defecto, no un tope. Con
+        // `min`/`max` fijos, una temperatura de 41 (el bot acepta hasta 45)
+        // quedaba fuera del lienzo: el valor más grave era el único que no se
+        // dibujaba. `suggested*` abre la escala si el dato se sale.
         opcionesTemperatura.scales.y = {
             grid: {color: '#f3f4f6'},
-            min: 35,
-            max: 40,
+            suggestedMin: 35,
+            suggestedMax: 40,
             ticks: {stepSize: 0.5, font: {size: 10}}
         };
         charts.temp = new Chart(
@@ -190,7 +194,20 @@
                 return;
             }
 
-            const charts = crearGraficas(contenedor, datos, umbrales);
+            // UX-P04: el aviso de «no se pudieron dibujar» viene del servidor
+            // y solo se quita cuando las gráficas existen. Si Chart.js no
+            // llega o algo falla aquí, el médico lo ve en vez de tres
+            // lienzos en blanco que parecen «no hay datos».
+            let charts;
+            try {
+                charts = crearGraficas(contenedor, datos, umbrales);
+            } catch (error) {
+                return;
+            }
+            const aviso = contenedor.querySelector('.js-graficas-aviso');
+            if (aviso) {
+                aviso.remove();
+            }
             contenedor.querySelectorAll('.js-grafica-periodo').forEach(function (boton) {
                 boton.addEventListener('click', function () {
                     cambiarPeriodo(contenedor, charts, datos, boton.dataset.dias);

@@ -73,11 +73,16 @@ body.dashboard #content { max-width: 980px; }
    ========================================================================== */
 .pt-wrap {
   --pt-paper:#F2F5F1; --pt-surface:#FCFDFB; --pt-surface-2:#EBF0EC;
-  --pt-ink:#14201E; --pt-soft:#51605B; --pt-faint:#7C8983; --pt-line:#D9E2DC;
+  --pt-ink:#14201E; --pt-soft:#51605B; --pt-faint:#5F6C67; --pt-line:#D9E2DC;
   --pt-primary:#0E5A54; --pt-primary-deep:#0A423E;
   --pt-alta:#C0403A; --pt-alta-soft:#F7E2E0;
   --pt-media:#B7811A; --pt-media-soft:#F6ECD4;
   --pt-baja:#2E7D6B; --pt-baja-soft:#DBEEE7;
+  /* UX-P06: tono de TEXTO de cada severidad, distinto del de la franja. Las
+     píldoras escribían con el color de la franja sobre su fondo suave y no
+     llegaban a 4,5:1 (MEDIA 2,90; ALTA 4,19; BAJA 4,08). La franja y los
+     puntos no son texto: les basta 3:1 y siguen con el tono vivo. */
+  --pt-alta-ink:#A8332E; --pt-media-ink:#8A5F0F; --pt-baja-ink:#24675A;
   --pt-sans:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",sans-serif;
   --pt-display:"Palatino Linotype","Book Antiqua",Palatino,"Iowan Old Style",Charter,Georgia,serif;
   --pt-mono:"Cascadia Code","SFMono-Regular","SF Mono",Menlo,Consolas,monospace;
@@ -89,23 +94,34 @@ body.dashboard #content { max-width: 980px; }
 @media (prefers-color-scheme: dark) {
   .pt-wrap {
     --pt-paper:#0B1615; --pt-surface:#10201E; --pt-surface-2:#172A27;
-    --pt-ink:#E9F1ED; --pt-soft:#A0B2AC; --pt-faint:#6E817B; --pt-line:#203230;
+    --pt-ink:#E9F1ED; --pt-soft:#A0B2AC; --pt-faint:#8A9C96; --pt-line:#203230;
     --pt-primary:#52C0B1; --pt-primary-deep:#7FD6C9;
     --pt-alta:#E86B62; --pt-alta-soft:#331A17;
     --pt-media:#D6A63C; --pt-media-soft:#2E2410;
     --pt-baja:#4FB79F; --pt-baja-soft:#122A25;
+    --pt-alta-ink:#E86B62; --pt-media-ink:#D6A63C; --pt-baja-ink:#4FB79F;
   }
 }
 html[data-theme="dark"] .pt-wrap {
   --pt-paper:#0B1615; --pt-surface:#10201E; --pt-surface-2:#172A27;
-  --pt-ink:#E9F1ED; --pt-soft:#A0B2AC; --pt-faint:#6E817B; --pt-line:#203230;
+  --pt-ink:#E9F1ED; --pt-soft:#A0B2AC; --pt-faint:#8A9C96; --pt-line:#203230;
   --pt-primary:#52C0B1; --pt-primary-deep:#7FD6C9;
   --pt-alta:#E86B62; --pt-alta-soft:#331A17;
   --pt-media:#D6A63C; --pt-media-soft:#2E2410;
   --pt-baja:#4FB79F; --pt-baja-soft:#122A25;
+  --pt-alta-ink:#E86B62; --pt-media-ink:#D6A63C; --pt-baja-ink:#4FB79F;
 }
 
 .pt-wrap * { box-sizing: border-box; }
+
+/* UX-P10: avisos del sistema (correos sin entregar, pacientes sin atención).
+   Antes el estilo iba en línea y copiado dos veces en panel_triage.html, y en
+   modo oscuro seguía siendo un rojo claro sobre fondo oscuro. */
+.pt-alerta-sistema {
+  background:var(--pt-alta-soft); color:var(--pt-alta-ink);
+  border:1px solid color-mix(in srgb,var(--pt-alta) 45%,var(--pt-line));
+  padding:12px 16px; border-radius:8px; margin-bottom:16px; font-weight:600;
+}
 .pt-wrap .tnum { font-variant-numeric: tabular-nums; }
 .pt-wrap h1, .pt-wrap h2 { margin: 0; }
 
@@ -120,7 +136,7 @@ html[data-theme="dark"] .pt-wrap {
 .pt-kpi .pt-v .pt-of { font-size:17px; color:var(--pt-faint); font-weight:500; }
 .pt-kpi .pt-sub { font-size:12px; color:var(--pt-soft); margin-top:6px; }
 .pt-kpi.crit { background:var(--pt-alta-soft); border-color:color-mix(in srgb,var(--pt-alta) 35%,var(--pt-line)); }
-.pt-kpi.crit .pt-v, .pt-kpi.crit .pt-k { color:var(--pt-alta); }
+.pt-kpi.crit .pt-v, .pt-kpi.crit .pt-k { color:var(--pt-alta-ink); }
 .pt-dotk { width:9px; height:9px; border-radius:50%; flex:none; }
 
 .pt-grid { display:grid; grid-template-columns:minmax(0,1.8fr) minmax(270px,.8fr); gap:16px; align-items:start; }
@@ -138,7 +154,7 @@ html[data-theme="dark"] .pt-wrap {
 .pt-stripe.alta{background:var(--pt-alta);} .pt-stripe.media{background:var(--pt-media);} .pt-stripe.baja{background:var(--pt-baja);}
 .pt-main .pt-pt { font-weight:600; font-size:14.5px; color:var(--pt-ink); }
 .pt-veces { font-size:11px; font-weight:700; padding:1px 7px; border-radius:999px;
-  background:var(--pt-media-soft); color:var(--pt-media); vertical-align:middle;
+  background:var(--pt-media-soft); color:var(--pt-media-ink); vertical-align:middle;
   font-variant-numeric:tabular-nums; }
 .pt-main .pt-diag { font-size:13px; color:var(--pt-soft); margin-top:2px; }
 .pt-main .pt-meta { font-size:12px; color:var(--pt-faint); margin-top:3px; font-family:var(--pt-mono); }
@@ -150,7 +166,7 @@ html[data-theme="dark"] .pt-wrap {
 .pt-when { font-size:12px; color:var(--pt-soft); white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums; }
 .pt-when small { display:block; color:var(--pt-faint); font-size:11px; }
 .pt-pill { font-size:10.5px; font-weight:700; letter-spacing:0; padding:4px 9px; border-radius:999px; white-space:nowrap; text-transform:uppercase; }
-.pt-pill.alta{color:var(--pt-alta); background:var(--pt-alta-soft);} .pt-pill.media{color:var(--pt-media); background:var(--pt-media-soft);} .pt-pill.baja{color:var(--pt-baja); background:var(--pt-baja-soft);}
+.pt-pill.alta{color:var(--pt-alta-ink); background:var(--pt-alta-soft);} .pt-pill.media{color:var(--pt-media-ink); background:var(--pt-media-soft);} .pt-pill.baja{color:var(--pt-baja-ink); background:var(--pt-baja-soft);}
 .pt-pill.sil{color:var(--pt-soft); background:var(--pt-surface-2);}
 .pt-pill.contact{color:var(--pt-primary-deep); background:var(--pt-baja-soft);}
 

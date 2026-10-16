@@ -1,4 +1,5 @@
 import json
+from contextvars import ContextVar
 from datetime import timedelta
 
 from django import forms as django_forms
@@ -6,9 +7,10 @@ from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.db.models import Case, IntegerField, Value, When
 from django.db.models.functions import Coalesce
+from django.http import QueryDict
 from django.template.response import TemplateResponse
 from django.utils import timezone
-from django.utils.html import format_html, mark_safe
+from django.utils.html import escape, format_html, mark_safe
 
 from .alert_engine import FC_BAJA_MIN, FC_MEDIA_MIN, TEMPERATURA_ALTA
 from .management.commands.desactivar_pacientes_vencidos import DIAS_SEGUIMIENTO
@@ -89,6 +91,10 @@ class TodasLasFechasListFilter(admin.DateFieldListFilter):
 DIAS_HISTORIAL_DEFAULT = 7
 DIAS_HISTORIAL_OPCIONES = [3, 7, 10]
 
+# (dias, query string) de la petición en curso, para el historial de la ficha.
+# Ver `PacienteAdmin.get_readonly_fields`.
+_peticion_historial = ContextVar('peticion_historial')
+
 
 def _clamp_dias_historial(valor):
     """Acepta solo los periodos definidos para el seguimiento de 10 días."""
@@ -99,14 +105,21 @@ def _clamp_dias_historial(valor):
     return dias if dias in DIAS_HISTORIAL_OPCIONES else DIAS_HISTORIAL_DEFAULT
 
 
-def _selector_dias_historial(dias_actual):
-    """Enlaces 3/7/10 días, alineados con la ventana de seguimiento."""
+def _selector_dias_historial(dias_actual, query=None):
+    """Enlaces 3/7/10 días, alineados con la ventana de seguimiento.
+
+    UX-P11: cada enlace conserva el resto del query string. Antes era
+    `?dias=N` a secas y se llevaba `_changelist_filters`, con el que el Admin
+    devuelve al médico al listado filtrado del que venía.
+    """
     enlaces = []
     for dias in DIAS_HISTORIAL_OPCIONES:
         if dias == dias_actual:
             enlaces.append(f'<strong>{dias} días</strong>')
         else:
-            enlaces.append(f'<a href="?dias={dias}">{dias} días</a>')
+            parametros = query.copy() if query is not None else QueryDict(mutable=True)
+            parametros['dias'] = dias
+            enlaces.append(f'<a href="?{escape(parametros.urlencode())}">{dias} días</a>')
     return f'<p style="margin:0 0 6px;">Ver: {" · ".join(enlaces)}</p>'
 
 
@@ -139,9 +152,9 @@ def _turnos_por_registro(registros):
     return turnos
 
 
-def _historial_paciente(paciente, dias=DIAS_HISTORIAL_DEFAULT):
+def _historial_paciente(paciente, dias=DIAS_HISTORIAL_DEFAULT, query=None):
     """Devuelve HTML con selector de rango + tabla de registros del paciente."""
-    selector = _selector_dias_historial(dias)
+    selector = _selector_dias_historial(dias, query)
     desde = timezone.localdate() - timedelta(days=dias - 1)
     registros = list(
         RegistroDiario.objects
@@ -169,7 +182,10 @@ def _historial_paciente(paciente, dias=DIAS_HISTORIAL_DEFAULT):
             f'</tr>'
         )
 
+    # UX-P07: nueve columnas no caben en un móvil. El contenedor se desplaza
+    # en horizontal en vez de desbordar la ficha entera.
     tabla = (
+        '<div style="overflow-x:auto;max-width:100%;">'
         '<table style="width:100%;border-collapse:collapse;font-size:0.85em;">'
         '<thead><tr style="background:#f3f4f6;">'
         '<th>Fecha</th><th>POD</th><th>Temp.</th><th>Dolor EVA</th>'
@@ -178,6 +194,7 @@ def _historial_paciente(paciente, dias=DIAS_HISTORIAL_DEFAULT):
         '</tr></thead>'
         '<tbody>' + ''.join(filas) + '</tbody>'
         '</table>'
+        '</div>'
     )
     return selector + tabla
 
@@ -241,6 +258,11 @@ _RANGO_DOLOR = '0-10'   # D20: 0 = sin dolor
 _HTML_GRAFICAS_TEMPLATE = """
 <div class="js-graficas-signos" data-paciente="{paciente_id}"
      data-graficas="{datos}" data-umbrales="{umbrales}" style="margin-top:8px;">
+  <p class="js-graficas-aviso" role="status"
+     style="margin:0 0 12px;padding:10px 12px;border:1px solid #fca5a5;border-radius:6px;background:#fef2f2;color:#7f1d1d;font-size:0.85em;">
+    Si ve este aviso, las gráficas no se pudieron dibujar en este navegador.
+    Los mismos datos están en el historial del paciente, más abajo.
+  </p>
   <div style="margin-bottom:12px;font-size:0.85em;">
     Ver:
     <button type="button" class="js-grafica-periodo" data-dias="3"
@@ -265,7 +287,7 @@ _HTML_GRAFICAS_TEMPLATE = """
     <span style="color:#6b7280;">- - {fc_baja} lpm  · - - {fc_media} lpm</span>
   </div>
   <canvas data-serie="frecuencia" height="90" style="width:100%;margin-bottom:8px;"></canvas>
-  <p style="font-size:0.75em;color:#9ca3af;margin:4px 0 0;">
+  <p style="font-size:0.75em;color:#6b7280;margin:4px 0 0;">
     Puntos rojos = alerta ALTA sin resolver ese registro. Huecos en la
     línea = el paciente no midió ese dato ese día (no es un valor de 0).
   </p>
@@ -345,18 +367,52 @@ class PacienteAdmin(admin.ModelAdmin):
     # médico de cada fila por separado: una consulta por paciente listado.
     list_select_related = ('medico_responsable',)
 
-    class Media:
-        js = (
-            'admin/js/vendor/chart.umd.min.js',
-            'admin/js/graficas_signos_vitales.js',
-        )
+    # UX-P08: la ficha abre con la evolución clínica, que es a lo que entra el
+    # médico; los datos administrativos van después. Al crear un paciente no
+    # hay evolución que mostrar y esa sección no aparece.
+    _FIELDSET_EVOLUCION = ('Evolución clínica', {
+        'fields': ['grafica_signos_vitales', 'historial_paciente'],
+    })
+    _FIELDSETS_DATOS = [
+        ('Paciente', {
+            'fields': ['nombre_completo', 'cedula', 'telefono_whatsapp'],
+        }),
+        ('Cirugía y seguimiento', {
+            'fields': ['fecha_cirugia', 'tipo_cirugia', 'medico_responsable', 'activo'],
+        }),
+        ('Consentimiento', {
+            'fields': ['consentimiento_informado', 'fecha_consentimiento'],
+        }),
+    ]
+
+    def get_fieldsets(self, request, obj=None):
+        if obj is None:
+            return self._FIELDSETS_DATOS
+        return [self._FIELDSET_EVOLUCION, *self._FIELDSETS_DATOS]
+
+    def render_change_form(self, request, context, add=False, change=False, form_url='', obj=None):
+        # UX-P09: Chart.js (204 KB) solo donde hay gráficas. Como `class Media`
+        # aplicaba también al listado, se descargaba en cada carga de la lista.
+        if obj is not None:
+            context['media'] = context['media'] + django_forms.Media(js=(
+                'admin/js/vendor/chart.umd.min.js',
+                'admin/js/graficas_signos_vitales.js',
+            ))
+        return super().render_change_form(request, context, add, change, form_url, obj)
 
     def get_readonly_fields(self, request, obj=None):
-        # Captura ?dias= de la URL para que historial_paciente() lo use al
-        # renderizar — los readonly_fields solo reciben `obj`, no `request`.
-        # La gráfica (grafica_signos_vitales) tiene su propio selector de
-        # período independiente, en el navegador — no usa este parámetro.
-        self._dias_historial = _clamp_dias_historial(request.GET.get('dias'))
+        # Captura ?dias= y el resto del query string para que
+        # historial_paciente() los use al renderizar — los readonly_fields
+        # solo reciben `obj`, no `request`. La gráfica tiene su propio
+        # selector de período, en el navegador, y no usa este parámetro.
+        #
+        # Va en un ContextVar y no en `self`: el ModelAdmin es UNA instancia
+        # para todas las peticiones, y con varios hilos un médico podía
+        # heredar el periodo —y el filtro de retorno— de otro.
+        _peticion_historial.set((
+            _clamp_dias_historial(request.GET.get('dias')),
+            request.GET.copy(),
+        ))
         return super().get_readonly_fields(request, obj)
 
     def save_model(self, request, obj, form, change):
@@ -410,8 +466,8 @@ class PacienteAdmin(admin.ModelAdmin):
     def historial_paciente(self, obj):
         if obj.pk is None:
             return '—'
-        dias = getattr(self, '_dias_historial', DIAS_HISTORIAL_DEFAULT)
-        return mark_safe(_historial_paciente(obj, dias=dias))
+        dias, query = _peticion_historial.get((DIAS_HISTORIAL_DEFAULT, None))
+        return mark_safe(_historial_paciente(obj, dias=dias, query=query))
 
     @admin.display(description='Médico responsable')
     def medico_nombre(self, obj):

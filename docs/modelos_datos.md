@@ -204,6 +204,13 @@ Desde el Loop 1 de hardening, la alerta completa es de solo lectura en el
 formulario y la base exige fecha + motivo para todo cierre. `LEGACY` identifica
 exclusivamente cierres históricos previos donde ese motivo no se capturó.
 
+**La `fecha_resolucion` de una alerta `LEGACY` NO es el momento en que el médico
+la resolvió.** La migración 0019 la rellenó con la última detección (o con la
+fecha de la alerta) porque la base pasó a exigirla, y eso nadie lo observó. No
+se lee como registro de una actuación real. Desde entonces el proyecto no hace
+backfill de datos que nadie observó: `veces` y `resuelta_por` (D3) se dejaron
+deliberadamente sin rellenar.
+
 ### DeteccionAlerta (Loop 3 de hardening — migración 0022)
 ```python
 alerta              ForeignKey(Alerta, CASCADE, related_name='detecciones')
