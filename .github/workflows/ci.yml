@@ -30,11 +30,21 @@ on:
   push:
     branches: [Desarrollo, produccion]
 
-# Un push nuevo sobre la misma rama vuelve obsoleta la corrida anterior: se
-# cancela en vez de gastar cinco minutos en un commit ya superado.
+# En un PR, un push nuevo vuelve obsoleta la corrida anterior: se cancela en vez
+# de gastar tres minutos en un commit ya superado.
+#
+# En los push a `Desarrollo` y `produccion` NO se cancela nada (REPO-20,
+# 02/10/2026). Sin protección de rama, la corrida que sigue a un merge es la
+# única señal de que lo mergeado funciona junto: si dos merges llegaban
+# seguidos, la del primero se cancelaba y ese estado quedaba sin verificar.
+#
+# Por eso cada push lleva su PROPIO grupo (el id de la corrida), y no basta con
+# `cancel-in-progress: false`: dentro de un mismo grupo GitHub deja correr una y
+# esperar otra, pero REEMPLAZA a la que espera si llega una tercera. Con tres
+# merges seguidos, la del medio se perdería igual.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.event_name == 'pull_request' && format('ci-{0}', github.ref) || format('ci-push-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # El token solo necesita leer el repositorio. Esta CI no publica nada.
 permissions:
