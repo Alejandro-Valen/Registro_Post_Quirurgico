@@ -291,7 +291,7 @@ class Command(BaseCommand):
 
             CheckInProgramado.objects.create(
                 paciente=paciente,
-                fecha_dia=registro.fecha_registro.date(),
+                fecha_dia=timezone.localdate(registro.fecha_registro),
                 orden=1,
                 etiqueta=CheckInProgramado.ETIQUETA_MANANA,
                 hora_programada=fecha_reg,
@@ -301,7 +301,7 @@ class Command(BaseCommand):
             )
 
             alertas = evaluar_registro_con_estado(
-                registro, fecha_referencia=registro.fecha_registro.date(),
+                registro, fecha_referencia=timezone.localdate(registro.fecha_registro),
             )
             alertas_paciente += len(alertas)
 
