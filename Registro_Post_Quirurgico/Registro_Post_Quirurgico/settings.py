@@ -79,6 +79,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'axes.middleware.AxesMiddleware',   # B5: debe ir DESPUÉS de AuthenticationMiddleware
     'django.contrib.messages.middleware.MessageMiddleware',
+    # D29: después de autenticación y mensajes. Ver signos_sintomas/sesion.py.
+    'signos_sintomas.sesion.CaducidadPorInactividadMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
@@ -133,12 +135,18 @@ AXES_CLIENT_IP_CALLABLE = 'home.ip_cliente._get_client_ip'
 # una clínica eso era el panel, con los datos de los pacientes, abierto dos
 # semanas para quien se sentara después.
 #
-# Las 8 horas cuentan desde el inicio de sesión, NO desde el último clic: la
-# caducidad por inactividad es otra decisión, con otro coste para el médico, y
-# sigue abierta. Va en la base y no solo en producción para que el desarrollo
-# local se comporte igual que lo que verá el médico.
+# Las 8 horas cuentan desde el inicio de sesión, NO desde el último clic. Van
+# en la base y no solo en producción para que el desarrollo local se comporte
+# igual que lo que verá el médico.
 SESSION_COOKIE_AGE = 8 * 60 * 60
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+# D29 (15/10/2026), decisión de León: además, 30 minutos sin uso cierran la
+# sesión. Lo vigila `signos_sintomas.sesion.CaducidadPorInactividadMiddleware`,
+# que también sostiene el tope de 8 horas: guardar la última actividad renueva
+# la caducidad de Django en cada clic, y sin ese tope propio las 8 horas
+# dejarían de ser un tope.
+SESION_INACTIVIDAD_MAXIMA = 30 * 60
 
 ROOT_URLCONF = 'Registro_Post_Quirurgico.urls'
 

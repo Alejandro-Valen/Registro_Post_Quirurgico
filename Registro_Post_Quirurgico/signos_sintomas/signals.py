@@ -2,10 +2,15 @@
 
 import logging
 
+from django.contrib.auth.signals import user_logged_in
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from .models import Alerta, NotificacionAlerta
+from .sesion import marcar_inicio
+
+# D29: las marcas de inicio y última actividad nacen con la sesión.
+user_logged_in.connect(marcar_inicio, dispatch_uid='d29_marcar_inicio_de_sesion')
 
 logger = logging.getLogger(__name__)
 
