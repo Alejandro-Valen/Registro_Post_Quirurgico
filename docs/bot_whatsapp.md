@@ -45,10 +45,10 @@ INICIO
                                 un mensaje con «sí» Y «no» se repregunta (UX-B03)
   → ESPERANDO_NAUSEAS           "¿Cuántas veces náuseas o vómito?" número, 0-20 (pregunta 7)
                                 acepta «ninguna», «nada», «no», «cero» como 0
-  → ESPERANDO_HINCHAZON         "¿cómo siente la hinchazón del abdomen? nada/algo/mucho"
+  → ESPERANDO_HINCHAZON         "¿Cómo sientes la hinchazón de tu abdomen? nada/algo/mucho"
   → ESPERANDO_FRECUENCIA_CARDIACA "¿cuál es tu frecuencia cardíaca? (lpm)"
   → ESPERANDO_FRECUENCIA_RESPIRATORIA "¿cuál es tu frecuencia respiratoria? (rpm)"
-  → ESPERANDO_TOLERANCIA_LIQUIDOS "¿Ha podido tomar líquidos sin vomitar? sí/no"
+  → ESPERANDO_TOLERANCIA_LIQUIDOS "¿Has podido tomar líquidos sin vomitar? sí/no"
   → COMPLETADO                  crea RegistroDiario, evalúa alertas (síncrono),
                                 cierra con mensaje según severidad (neutro / MEDIA / ALTA)
 ```
@@ -122,7 +122,15 @@ que dejó `urgencias` fuera de la palabra de auxilio (D21).
    turno pendiente, el bot informa que no hay reporte por completar.
 4. **Lenguaje:** español coloquial, tuteo, tono cálido — nunca jerga médica en
    las preguntas al paciente (ej. no decir "hemático", se muestra "rojo con
-   sangre").
+   sangre"). **Todo el bot tutea** desde el 15/10/2026 (UX-B09): hasta entonces
+   las preguntas de la hinchazón en adelante trataban de usted. Lo vigila
+   `LenguajeDelBotTests` en `tests/test_bot.py`.
+4b. **Las preguntas no llevan número** (UX-B06, 15/10/2026). El paciente sin
+   drenaje pasaba de la 3 a la 6, y la pregunta del aspecto se contesta con
+   números del 1 al 5: el número de la pregunta se mezclaba con el de la
+   respuesta. Las referencias a «pregunta 6» o «pregunta 7» de este documento
+   cuentan la posición en el cuestionario, no un texto que vea el paciente; el
+   avance se anuncia con «Ya casi terminamos» y «Última pregunta».
 5. **Validación con reintento por pregunta:** cada respuesta mal formada pide
    reintento con un mensaje específico de esa pregunta, nunca un error genérico.
 6. **Sin bloqueo horario artificial en la lógica del bot.** El bot puede
