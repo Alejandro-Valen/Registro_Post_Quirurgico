@@ -93,3 +93,33 @@ class SesionDelPanelTrasUnLoginRealTests(TestCase):
         )
         self.assertLessEqual(restante, timedelta(hours=8))
         self.assertGreater(restante, timedelta(hours=7, minutes=59))
+
+
+class NormaDeZonaHorariaTests(TestCase):
+    """BE-10 / DB-08 — la norma de CLAUDE.md, vigilada en vez de recordada.
+
+    Toda «fecha de hoy» usa `timezone.localdate()`. `.date()` sobre un datetime
+    con zona devuelve la fecha de ESA zona: si viene de la base, en UTC, y de
+    noche en Bogotá ya es mañana. Rompe las reglas de días calendario del motor
+    sin un solo error. Los dos seeds lo tenían en cuatro sitios, latente porque
+    el valor aún estaba en hora de Bogotá; bastaba recargarlo.
+
+    Se excluyen pruebas y migraciones: las primeras arman escenarios con
+    fechas ingenuas a propósito, las segundas ya corrieron.
+    """
+
+    def test_ningun_date_en_el_codigo_de_produccion(self):
+        import re
+        from pathlib import Path
+
+        raiz = Path(__file__).resolve().parents[2]
+        hallados = []
+        for ruta in raiz.rglob('*.py'):
+            partes = ruta.relative_to(raiz).parts
+            if 'tests' in partes or 'migrations' in partes:
+                continue
+            for n, linea in enumerate(ruta.read_text(encoding='utf-8').splitlines(), 1):
+                codigo = linea.split('#', 1)[0]
+                if re.search(r'\.date\(\)', codigo):
+                    hallados.append(f'{ruta.relative_to(raiz).as_posix()}:{n}')
+        self.assertEqual(hallados, [], 'usar timezone.localdate(valor), no valor.date()')
