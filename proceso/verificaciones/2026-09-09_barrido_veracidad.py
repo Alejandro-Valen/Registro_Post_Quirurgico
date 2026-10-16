@@ -64,6 +64,14 @@ rompió una afirmación de cada tipo y se comprobó que el barrido cae:
 
     7 de 7, y verde otra vez al restaurar.
 
+Y el 15/10/2026, al pasar a leer lo que git rastrea y vigilar el JavaScript:
+
+    rutas      `.claude/worktrees/falso/NOTA.md` cita una ruta inexistente
+               → antes rojo (falso), ahora no se lee: no es del repositorio
+    umbrales   37.9, 101 y 110 devueltos uno a uno a la gráfica del panel
+               → 3 de 3 atrapados
+    umbrales   «37.9» dentro de un comentario del JS → no salta, como debe
+
 LO QUE ESTE BARRIDO NO PUEDE COMPROBAR
 =======================================
 
@@ -178,15 +186,38 @@ RUTAS_HISTORICAS = {
 }
 
 
+def rastreados():
+    """Los archivos que son del repositorio: los rastreados y los nuevos que git
+    no ignora.
+
+    **Se pregunta a git, no al sistema de archivos** (corregido el 15/10/2026).
+    Hasta entonces el barrido recorría la carpeta con `rglob`, y con carriles
+    abiertos se metía en `.claude/worktrees/`: copias enteras del repositorio en
+    otra rama, con su propia documentación. En local daba rojos por afirmaciones
+    que no estaban en este árbol; en la CI no, porque el runner no tiene esas
+    copias. Un barrido que en local miente acaba ignorado, que es justo lo que
+    vino a impedir.
+
+    `--others --exclude-standard` incluye lo nuevo que todavía no se ha añadido:
+    un documento recién escrito se comprueba antes del commit, no después.
+    """
+    salida = subprocess.run(
+        ['git', 'ls-files', '--cached', '--others', '--exclude-standard'],
+        cwd=RAIZ, capture_output=True, text=True, encoding='utf-8', check=True,
+    ).stdout
+    return [RAIZ / linea for linea in salida.splitlines()
+            if linea and (RAIZ / linea).is_file()]
+
+
 def documentos():
     """Todos los .md sobre los que tiene sentido comprobar algo.
 
     Se excluye `docs/auditoria_literatura/`: son transcripciones y análisis de
     PDFs externos, no afirmaciones sobre este repositorio.
     """
-    for ruta in RAIZ.rglob('*.md'):
+    for ruta in rastreados():
         rel = ruta.relative_to(RAIZ).as_posix()
-        if rel.startswith(('.venv/', 'docs/auditoria_literatura/')):
+        if ruta.suffix != '.md' or rel.startswith('docs/auditoria_literatura/'):
             continue
         yield ruta
 
@@ -491,6 +522,10 @@ def _sin_comentarios(ruta):
     y es justo donde estaban los literales que hay que impedir.
     """
     texto = ruta.read_text(encoding='utf-8')
+    if ruta.suffix == '.js':
+        # En JavaScript, los comentarios de bloque y los de línea. El de línea
+        # exige no venir tras `:` para no comerse un `https://...`.
+        return re.sub(r'/\*.*?\*/|(?<!:)//[^\n]*', '', texto, flags=re.S)
     if ruta.suffix != '.py':
         # En las plantillas, los comentarios de Django y los de HTML.
         texto = re.sub(r'\{#.*?#\}|<!--.*?-->', '', texto, flags=re.S)
@@ -542,11 +577,21 @@ def comprobar_umbrales_duplicados():
     # `alert_engine.py` (es la fuente), ni las pruebas (ahí los valores tienen
     # que estar escritos: son justo las que fijan los umbrales), ni las
     # migraciones (código generado).
+    #
+    # Desde el 15/10/2026 también el JavaScript propio: la gráfica del panel
+    # dibujaba la línea de fiebre y las de taquicardia con 37.9, 101 y 110
+    # escritos en `graficas_signos_vitales.js`, y esta comprobación no lo veía
+    # porque solo miraba Python y plantillas. Era la mitad de BE-02 que quedó
+    # abierta. Se excluye `vendor/`: es Chart.js minificado, código de terceros
+    # lleno de números que no son umbrales.
     vigilados = []
     for patron in ('signos_sintomas/admin.py', 'signos_sintomas/templatetags/*.py',
                    'signos_sintomas/bot.py', 'templates/**/*.html',
-                   'signos_sintomas/templates/**/*.html'):
-        vigilados += list(PROYECTO.glob(patron))
+                   'signos_sintomas/templates/**/*.html', '*/static/**/*.js'):
+        vigilados += [ruta for ruta in PROYECTO.glob(patron)
+                      if '/vendor/' not in ruta.as_posix()]
+    propios = set(rastreados())
+    vigilados = [ruta for ruta in vigilados if ruta in propios]
 
     encontrados = 0
     for ruta in vigilados:
