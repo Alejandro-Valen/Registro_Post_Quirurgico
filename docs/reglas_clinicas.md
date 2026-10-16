@@ -196,7 +196,15 @@ alerta ALTA por una duda. Una lista de auxilio que cría ruido acaba ignorada.
 **Regla operativa: SILENCIO (paciente sin responder).** No la produce
 `alert_engine.evaluar_registro` sino el command `cerrar_checkins_vencidos`,
 que cierra los check-in `PENDIENTE` pasadas 10 horas de su
-`hora_programada` y cuenta la racha de turnos consecutivos sin responder.
+`hora_programada` —o de su creación, si el turno se creó después (D28)— y
+cuenta la racha de turnos consecutivos sin responder.
+
+**Desde cuándo cuentan las 10 horas — decisión D28, 15/10/2026.** Si el cron
+de la mañana arrancaba tarde, creaba el turno de las 7:00 y lo cerraba en la
+misma corrida: un SILENCIO para cada paciente por un turno que existió cero
+segundos. Ahora la gracia cuenta desde la más tardía entre la hora programada y
+la creación del turno. La escalera, la racha y lo que cuenta como turno no
+respondido (D1) **no cambian**.
 
 | Racha | Tipo | Severidad |
 |-------|------|-----------|

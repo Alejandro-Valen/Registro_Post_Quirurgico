@@ -36,6 +36,13 @@ en `signos_sintomas/tests/test_commands.py`.
 corrida cierra los vencidos de la tarde anterior, la otra los de la
 mañana.
 
+**Si un cron arranca tarde no pasa nada grave** (D28, 15/10/2026). Las 10 horas
+cuentan desde que el turno existe, no solo desde su hora programada: un
+`cron_matutino` que arranca a las 18:00 crea el turno de la mañana y ya no lo
+cierra en la misma corrida. Ese turno vence a las 4:00 del día siguiente.
+Limitación: el bot solo sirve los turnos de hoy, así que esa noche el paciente
+tiene hasta la medianoche para responderlo.
+
 `reintentar_evaluaciones_alertas` es una tarea técnica y no envía preguntas
 al paciente. Procesa como máximo 100 registros por corrida, bloquea cada fila
 y continúa con las demás si una evaluación vuelve a fallar. El cron matutino

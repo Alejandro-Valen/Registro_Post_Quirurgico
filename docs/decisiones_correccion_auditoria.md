@@ -48,6 +48,7 @@
 | [D25](#d25) | Una pregunta, un dato; y la duda que arranca el reporte | UX-B03 · BE-04 · UX-B08 | El bot entiende al paciente | **Implementada** (02/10/2026, PR #37) |
 | [D26](#d26) | El bot no le promete al paciente lo que el sistema no hace | UX-B02 · BE-05 · UX-B10 · UX-B11 · DB-12 | El bot no promete | **Implementada** (02/10/2026) |
 | [D27](#d27) | Qué reescribe `crear_admin` en cada arranque | SEC-05 | Comandos de operación | **Implementada** (03/10/2026) |
+| [D28](#d28) | Desde cuándo cuenta la gracia de un turno | BE-03 | Base de datos y cron | **Implementada** (15/10/2026) |
 
 Los hallazgos 2, 6, 7, 8, 9, 11 y 14 son correcciones técnicas sin decisión de
 producto; no tienen ficha aquí y se ejecutan en los Loops B y C.
@@ -2298,6 +2299,82 @@ La prueba que exigía el defecto se reemplazó, diciendo por qué. Hay 3 pruebas
 médico se promovía sin error. La del reset pasaba **por la razón equivocada**
 —reescribía siempre—, igual que pasó en D15. 3 reversiones, las 3 atrapadas,
 incluida la que anula el reset.
+
+<a id="d28"></a>
+
+## D28 — Desde cuándo cuenta la gracia de un turno
+
+**Hallazgo:** auditoría de seis frentes del 07/09/2026, BE-03 · **Loop:**
+Base de datos y cron · **Estado:** **Implementada** (15/10/2026). Aprobada por
+el Arquitecto el 15/10/2026: «contar desde que existe».
+
+### Problema
+
+`cerrar_checkins_vencidos` cierra un turno `PENDIENTE` cuando han pasado
+`HORAS_GRACIA` (10) desde su `hora_programada`, y entonces genera SILENCIO. La
+hora programada del turno de la mañana es las 7:00, **la escriba quien la
+escriba y cuando la escriba**.
+
+Si `cron_matutino` arranca tarde —un reinicio, un servicio que se cae y vuelve
+a las 18:00—, `crear_checkins_diarios` crea el turno de la mañana con hora 7:00
+y, **en la misma corrida**, `cerrar_checkins_vencidos` lo encuentra vencido (7 +
+10 = 17 < 18) y lo cierra. Resultado: **un SILENCIO para cada paciente activo**,
+por un turno que existió cero segundos. Al médico le llega «este paciente no
+responde» sobre personas a las que nunca se les preguntó nada.
+
+Y la prueba que cubría esa secuencia **anulaba la condición**: fijaba el reloj de
+forma que el turno nunca quedaba vencido al crearse.
+
+### Decisión
+
+1. `CheckInProgramado` guarda **cuándo se creó** (`fecha_creacion`).
+2. Un turno se da por vencido cuando han pasado `HORAS_GRACIA` desde **la más
+   tardía** de dos fechas: su hora programada y su creación. Un turno creado
+   tarde le da al paciente sus 10 horas completas.
+3. **Los turnos que ya existían quedan con `fecha_creacion` vacía** y siguen la
+   regla de siempre (desde la hora programada). No se rellena con un valor
+   inventado: es la misma regla que D3 y la migración 0019 —no se hace backfill
+   de datos que nadie observó—.
+
+**Lo que NO cambia:** la escalera de SILENCIO, la racha y lo que cuenta como
+turno no respondido (D1). Cambia solo cuándo empieza a correr el reloj.
+
+### Por qué esta decisión y no otra
+
+**Por qué no «no crear turnos ya vencidos».** Era más simple y sin migración,
+pero ese día el paciente perdía el turno de la mañana sin rastro: ni lo podía
+responder, ni el médico sabría que hubo un turno que no se ofreció.
+
+**Por qué guardar la creación y no calcularla.** Porque es un hecho que solo se
+conoce en el momento: después no hay forma de saber si un turno de las 7:00 se
+creó a las 6:00 o a las 18:00.
+
+### Limitación aceptada
+
+El bot solo sirve los turnos **de hoy**. Un turno creado a las 18:00 se puede
+responder hasta la medianoche —seis horas, no diez— y se cierra a las 4:00 del
+día siguiente. Es mejor que cero segundos, pero no es la ventana completa. Si el
+cron arranca muy tarde, la ventana se acorta en la misma medida. Ampliarla
+exigiría servir turnos del día anterior, y eso cambia el bot.
+
+### Verificación
+
+Cuatro pruebas en `GraciaDesdeQueElTurnoExisteTests`; las tres que dependen
+del cambio, en rojo antes. Un cron a las 18:00 cerraba el turno que acababa de
+crear. Las dos de la otra dirección: un turno creado tarde vence exactamente a
+las 10 horas de su creación (abierto a las 3:59, cerrado a las 4:01), y un cron
+a su hora sigue venciendo a las 17:00.
+
+**La prueba más elocuente fue quitar un retoque.** El helper
+`_correr_scheduler_matutino` movía los turnos de hoy a «ahora» antes de
+cerrar, y su comentario decía por qué: *«sin eso, un test corrido por la
+tarde cerraría también el turno de la mañana de hoy»*. Era BE-03, descrito y
+tapado en la misma frase. Sin el retoque, las tres pruebas de la escalera de
+SILENCIO pasan con D28 y caen con la regla vieja: quedan vigilándolo.
+
+Las pruebas que fabricaban turnos «creados ahora, programados hace 11 horas»
+—una combinación que el sistema real no produce— pasan a crearlos cuando
+debían existir.
 
 ## Método de trabajo acordado
 

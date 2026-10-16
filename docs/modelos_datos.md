@@ -339,6 +339,12 @@ etiqueta         CharField choices=[MAÑANA, TARDE]
 hora_programada  DateTimeField
                  # Momento en que el sistema disparó (o debía disparar) el
                  # prompt. Es el origen del corte de 10 horas de gracia.
+fecha_creacion   DateTimeField nullable, default=now, no editable  (D28, migración 0033)
+                 # Cuándo se creó el turno. La gracia cuenta desde la más
+                 # tardía entre esta fecha y hora_programada: un cron tardío ya
+                 # no cierra el turno que acaba de crear. NULL en los turnos
+                 # anteriores al 15/10/2026, que siguen la regla de siempre: la
+                 # migración NO la rellena, para no inventar una fecha (D3).
 fecha_respuesta  DateTimeField nullable   # null = aún no respondió
 estado           CharField choices=[PENDIENTE, COMPLETADO, NO_RESPONDIDO, SIN_CONSENTIMIENTO]
                  # SIN_CONSENTIMIENTO (D22, migración 0029): turno cerrado porque
@@ -380,7 +386,8 @@ latencia y porcentaje de respuesta tardía se derivan en el dashboard.
 
 **Quién lo escribe:** `crear_checkins_diarios` crea los 2 turnos de cada
 paciente activo; `bot.py` los marca `COMPLETADO`; `cerrar_checkins_vencidos`
-cierra como `NO_RESPONDIDO` los que pasaron 10 horas de su `hora_programada` y
+cierra como `NO_RESPONDIDO` los que pasaron 10 horas de su `hora_programada`
+—o de su `fecha_creacion`, si es posterior (D28)— y
 calcula sobre ellos la racha de la escalera de SILENCIO — regla y umbrales en
 `docs/reglas_clinicas.md`, razonamiento en la ficha **D1** de
 `docs/decisiones_correccion_auditoria.md`.

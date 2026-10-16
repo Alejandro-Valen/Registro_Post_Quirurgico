@@ -49,7 +49,7 @@ las lea es que invente un umbral.
 | `docs/trampas_conocidas.md` | Antes de tocar despliegue, cron, Twilio o correo. Son errores que ya costaron horas |
 | `docs/railway_deploy.md` | Antes de cambiar variables de entorno o desplegar |
 | `docs/cron_setup.md` | Antes de tocar los management commands programados |
-| `docs/decisiones_correccion_auditoria.md` | Antes de tocar lo que corrigieron los loops de auditoría (fichas **D1-D27**) |
+| `docs/decisiones_correccion_auditoria.md` | Antes de tocar lo que corrigieron los loops de auditoría (fichas **D1-D28**) |
 | `ROADMAP_MONITOREO_POSQUIRURGICO.md` | Antes de proponer alcance nuevo o discutir prioridades |
 
 ### Consúltalo cuando necesites contexto
@@ -170,7 +170,7 @@ noche.
 > ser presente pasa a `docs/resumen_sprints.md` (qué se entregó) o al cuaderno de
 > trabajo (cómo fue). Es lo que la tenía en 700 líneas.
 
-**Sprints 0 a 6 completos y mergeados**, con los loops A-E, D1-D27 implementadas
+**Sprints 0 a 6 completos y mergeados**, con los loops A-E, D1-D28 implementadas
 y la auditoría de seis frentes del 07/09/2026 en curso de cierre. Historia
 completa, con PR y merge de cada etapa: `docs/resumen_sprints.md`.
 
@@ -192,8 +192,7 @@ sesión técnica** (ver abajo).
 - **El médico:** BE-08 y BE-09 (dos ramas de sobre-alerta, fijadas por pruebas de
   caracterización; ficha D10, y `docs/reglas_clinicas.md`) y la redacción de las
   respuestas de la FAQ (D4).
-- **León:** BE-03 (cron tardío crea y cierra el turno de la mañana en la misma
-  corrida: cambia qué cuenta como turno no respondido, D1); caducidad de sesión
+- **León:** caducidad de sesión
   por inactividad (hoy 8 h desde el ingreso); SEC-13 (requiere Docker Desktop);
   rotar las credenciales del `.env` de desarrollo (SEC-09); lo legal (SEC-07,
   SEC-08, DB-11).
