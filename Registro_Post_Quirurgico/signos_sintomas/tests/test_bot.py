@@ -1127,7 +1127,7 @@ class BotEntiendeAlPacienteTests(TestCase):
         self._checkin()
         respuesta = bot.procesar_mensaje(self.WA, 'tengo fiebre')
         self.assertTrue(respuesta.startswith(bot.RESP_FIEBRE))
-        self.assertIn('1. ¿Cuál es tu temperatura corporal?', respuesta)
+        self.assertIn(bot._PREGUNTA_1, respuesta)
         conv = ConversacionWhatsApp.objects.get()
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_TEMPERATURA)
         self.assertIsNotNone(conv.checkin_actual)
@@ -1268,3 +1268,44 @@ class ElBotNoPrometeTests(TestCase):
         self.assertIn('no tienes un reporte pendiente', respuesta)
         conv.refresh_from_db()
         self.assertEqual(conv.estado, ConversacionWhatsApp.ESTADO_INICIO)
+
+
+def _mensajes_al_paciente():
+    """Todo texto del módulo que el bot le puede enviar al paciente."""
+    return {
+        nombre: valor for nombre, valor in vars(bot).items()
+        if (nombre.startswith('MSG_') or nombre.startswith('_PREGUNTA'))
+        and isinstance(valor, str)
+    }
+
+
+class LenguajeDelBotTests(TestCase):
+    """UX-B06 y UX-B09 (15/10/2026), textos aprobados por el Arquitecto."""
+
+    def test_ninguna_pregunta_lleva_numero(self):
+        """UX-B06: el paciente sin drenaje pasaba de la 3 a la 6, y el
+        cuestionario anunciado no coincidía con el que recibía. Además, la
+        pregunta del aspecto se contesta con números del 1 al 5, y el número de
+        la pregunta se mezclaba con el de la respuesta. Las opciones numeradas
+        de esa pregunta SÍ se quedan: son respuestas, no preguntas."""
+        for nombre, texto in _mensajes_al_paciente().items():
+            with self.subTest(mensaje=nombre):
+                self.assertNotRegex(texto, r'(^|\n)\d+\.\s*(¿|Del |Ya casi|Última)')
+
+    def test_todo_el_bot_tutea(self):
+        """UX-B09: de la 1 a la 7 tuteaban y de la 8 a la 11 trataban de usted,
+        contra la regla de docs/bot_whatsapp.md («tuteo, tono cálido»)."""
+        usted = re.compile(
+            r'\b(su|sus|usted|Responda|responda|Escriba|escriba|puede|siente|'
+            r'Ha podido|Pudo)\b')
+        for nombre, texto in _mensajes_al_paciente().items():
+            with self.subTest(mensaje=nombre):
+                self.assertIsNone(usted.search(texto), usted.search(texto))
+
+    def test_el_aspecto_del_drenaje_nunca_es_sin_drenaje(self):
+        """BE-11: por eso la rama `aspecto == 'sin_drenaje'` del estado
+        ASPECTO_DRENAJE no se alcanzaba nunca y se quitó. «Sin drenaje» se
+        resuelve una pregunta antes, cuando el paciente responde *no*."""
+        posibles = {bot._parse_aspecto(str(n)) for n in range(10)} - {None}
+        self.assertEqual(posibles,
+                         {'seroso', 'hematico', 'turbio', 'purulento', 'fecaloide'})
