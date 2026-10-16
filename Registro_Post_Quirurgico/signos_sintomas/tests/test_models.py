@@ -462,6 +462,34 @@ class PacienteActivoExigeMedicoTests(TestCase):
         paciente = Paciente.objects.get(cedula='D12-0005')
         self.assertEqual(paciente.medico_responsable, self.medico)
 
+    def test_un_medico_tampoco_deja_nacer_una_ficha_inactiva_sin_responsable(self):
+        """SEC-11 (15/10/2026). La asignación de arriba solo valía con el
+        paciente ACTIVO: un médico que registraba una ficha inactiva —basta con
+        no marcar la casilla— la dejaba sin responsable. Desaparecía de su
+        propio listado y perdía la atribución clínica: quién la registró.
+
+        Un médico no-superusuario solo puede elegirse a sí mismo, así que se le
+        asigna siempre. El superusuario conserva la libertad de D12 para las
+        fichas históricas (ver la prueba de abajo, que nace en verde).
+        """
+        self.client.force_login(self.medico)
+
+        self.client.post(
+            '/admin/signos_sintomas/paciente/add/',
+            {
+                'nombre_completo': 'Paciente Inactivo Del Medico',
+                'cedula': 'D12-0006',
+                'telefono_whatsapp': '+573007770006',
+                'fecha_cirugia': timezone.localdate().isoformat(),
+                # sin 'activo': la ficha nace inactiva, que es el caso.
+            },
+            follow=True,
+        )
+
+        paciente = Paciente.objects.get(cedula='D12-0006')
+        self.assertFalse(paciente.activo)
+        self.assertEqual(paciente.medico_responsable, self.medico)
+
     def test_borrar_la_cuenta_del_medico_no_deja_pacientes_huerfanos(self):
         """Capa 2 — la puerta de atrás.
 

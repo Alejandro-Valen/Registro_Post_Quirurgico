@@ -473,8 +473,12 @@ class PacienteAdmin(admin.ModelAdmin):
         sincronía con el checkbox de consentimiento_informado.
         D12 (capa 1): última red antes de la base — un médico no-superusuario
         solo puede asignarse a sí mismo, así que no tiene sentido rechazarle el
-        guardado por un campo cuya única opción posible es él."""
-        if obj.activo and obj.medico_responsable_id is None and _solo_propios(request):
+        guardado por un campo cuya única opción posible es él.
+        SEC-11 (15/10/2026): también con la ficha INACTIVA. Antes solo se
+        asignaba a las activas, y una ficha registrada sin marcar «activo»
+        nacía sin responsable: fuera del listado de quien la registró y sin
+        atribución clínica. El superusuario conserva la libertad de D12."""
+        if obj.medico_responsable_id is None and _solo_propios(request):
             obj.medico_responsable = request.user
         if not change:
             dias_post = (timezone.localdate() - obj.fecha_cirugia).days
