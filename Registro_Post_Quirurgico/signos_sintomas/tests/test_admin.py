@@ -630,6 +630,23 @@ class PacienteAdminIngresoTardioAdvertenciaTests(TestCase):
         resp = self._post_nuevo_paciente(dias_cirugia=3, tel="+573002230002", cedula="900000002")
         self.assertNotContains(resp, "días postoperatorios")
 
+    # --- TEST-07: la frontera exacta del aviso (DIAS_SEGUIMIENTO - 2) ---
+    # Las dos de arriba usan 9 y 3, lejos del borde: un `>=` cambiado por `>`
+    # o un `- 2` por `- 1` las dejaba en verde. Estas dos van al valor que
+    # dispara y al inmediatamente inferior.
+
+    def test_frontera_advierte_justo_en_dias_seguimiento_menos_2(self):
+        from ..management.commands.desactivar_pacientes_vencidos import DIAS_SEGUIMIENTO
+        resp = self._post_nuevo_paciente(
+            dias_cirugia=DIAS_SEGUIMIENTO - 2, tel="+573002230003", cedula="900000003")
+        self.assertContains(resp, "días postoperatorios")
+
+    def test_frontera_no_advierte_un_dia_antes(self):
+        from ..management.commands.desactivar_pacientes_vencidos import DIAS_SEGUIMIENTO
+        resp = self._post_nuevo_paciente(
+            dias_cirugia=DIAS_SEGUIMIENTO - 3, tel="+573002230004", cedula="900000004")
+        self.assertNotContains(resp, "días postoperatorios")
+
 class PacienteAdminFiltrosHistorialTests(TestCase):
     """Sprint 5, Bloque 3 — filtro de alertas activas e historial configurable (P-8)."""
 
@@ -705,6 +722,32 @@ class PacienteAdminFiltrosHistorialTests(TestCase):
     def test_historial_rechaza_periodo_fuera_de_las_opciones(self):
         resp = self.client.get(self._url_change(self.paciente_con_alerta) + '?dias=30')
         self.assertContains(resp, '<strong>7 días</strong>', html=False)
+
+    def test_selector_de_dias_conserva_el_retorno_al_filtro(self):
+        """UX-P11: el enlace `?dias=N` reemplazaba el query string entero y se
+        llevaba `_changelist_filters`, que es lo que usa el Admin para volver
+        al listado filtrado. El médico perdía su filtro al cambiar de periodo."""
+        resp = self.client.get(
+            self._url_change(self.paciente_con_alerta)
+            + '?_changelist_filters=alerta_activa%3Dsi&dias=7'
+        )
+        contenido = resp.content.decode()
+        enlace = re.search(r'<a href="([^"]*dias=3[^"]*)">3 días</a>', contenido)
+        self.assertIsNotNone(enlace, 'no se encontró el enlace de 3 días')
+        self.assertIn('_changelist_filters=alerta_activa%3Dsi', enlace.group(1))
+
+    def test_tabla_del_historial_se_desplaza_en_horizontal(self):
+        """UX-P07: nueve columnas sin contenedor desplazable desbordan en móvil."""
+        RegistroDiario.objects.create(
+            paciente=self.paciente_sin_alerta,
+            temperatura=Decimal('37.0'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+        resp = self.client.get(self._url_change(self.paciente_sin_alerta))
+        self.assertRegex(
+            resp.content.decode(),
+            r'<div[^>]*overflow-x:\s*auto[^>]*>\s*<table',
+        )
 
     def test_historial_de_3_dias_no_incluye_un_cuarto_dia(self):
         for desplazamiento in (1, 2, 3):
@@ -1137,6 +1180,133 @@ class GraficaSignosVitalesTests(TestCase):
         umbrales = self._extraer_umbrales(resp.content.decode())
         self.assertEqual(umbrales['fiebre'], 38.4)
         self.assertEqual(umbrales['fc_media'], 120)
+
+    def test_si_chartjs_no_carga_el_medico_lo_ve(self):
+        """UX-P04: sin Chart.js quedaban tres lienzos en blanco, idénticos a
+        «no hay datos». El aviso viene del servidor y el JS lo quita solo al
+        dibujar: si el JS no llega, el aviso se queda."""
+        RegistroDiario.objects.create(
+            paciente=self.paciente,
+            temperatura=Decimal('37.0'), dolor_eva=2,
+            aspecto_drenaje='sin_drenaje', presencia_gases=True, episodios_nauseas=0,
+        )
+        resp = self.client.get(self._url_change())
+        self.assertContains(resp, 'class="js-graficas-aviso"')
+        self.assertContains(resp, 'no se pudieron dibujar')
+
+    def test_chartjs_no_se_descarga_en_el_listado(self):
+        """UX-P09: `PacienteAdmin.Media` aplicaba también al listado, donde no
+        hay gráficas: 204 KB de Chart.js en cada carga de la lista."""
+        resp = self.client.get('/admin/signos_sintomas/paciente/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, 'chart.umd.min.js')
+        self.assertNotContains(resp, 'graficas_signos_vitales.js')
+
+    def test_la_ficha_abre_con_la_evolucion_clinica(self):
+        """UX-P08: sin `fieldsets`, la gráfica y el historial quedaban al final,
+        debajo de los campos administrativos."""
+        from django.contrib import admin as django_admin
+
+        modelo_admin = django_admin.site._registry[Paciente]
+        peticion = RequestFactory().get('/')
+        peticion.user = self.medico
+        fieldsets = modelo_admin.get_fieldsets(peticion, self.paciente)
+        self.assertEqual(
+            fieldsets[0][1]['fields'],
+            ['grafica_signos_vitales', 'historial_paciente'],
+        )
+
+    def test_el_alta_no_muestra_la_evolucion_y_conserva_todos_los_campos(self):
+        """La otra dirección de UX-P08: al crear un paciente no hay evolución
+        que mostrar, y ningún campo editable puede quedar fuera del formulario."""
+        from django.contrib import admin as django_admin
+
+        modelo_admin = django_admin.site._registry[Paciente]
+        peticion = RequestFactory().get('/')
+        peticion.user = self.medico
+        campos = [c for _, opciones in modelo_admin.get_fieldsets(peticion, None)
+                  for c in opciones['fields']]
+        self.assertNotIn('grafica_signos_vitales', campos)
+        editables = {f.name for f in Paciente._meta.get_fields()
+                     if getattr(f, 'editable', False) and f.concrete
+                     and not f.auto_created and f.name != 'fecha_consentimiento'}
+        self.assertTrue(editables <= set(campos), editables - set(campos))
+
+
+class ContrasteDelPanelTests(TestCase):
+    """UX-P06: el texto del panel tiene que llegar a 4,5:1 (WCAG AA).
+
+    La auditoría midió la píldora MEDIA en 2,90:1, el texto atenuado en 3,57:1 y
+    la nota de la gráfica en 2,54:1. Al recalcular aparecieron tres más que no
+    nombraba: las píldoras ALTA (4,19) y BAJA (4,08) y el atenuado del modo
+    oscuro (4,08). La prueba lee los colores del CSS, así que un token nuevo
+    que no cumpla la pone en rojo.
+    """
+
+    @staticmethod
+    def _luminancia(color):
+        canales = [int(color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        canales = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+                   for c in canales]
+        return 0.2126 * canales[0] + 0.7152 * canales[1] + 0.0722 * canales[2]
+
+    def _contraste(self, a, b):
+        la, lb = sorted((self._luminancia(a), self._luminancia(b)), reverse=True)
+        return (la + 0.05) / (lb + 0.05)
+
+    def _temas(self):
+        from pathlib import Path
+        css = (Path(__file__).resolve().parents[1]
+               / 'static' / 'admin' / 'css' / 'panel_admin.css').read_text(encoding='utf-8')
+        claro = re.search(r'^\.pt-wrap \{(.*?)\}', css, re.S | re.M).group(1)
+        oscuro = re.search(r'html\[data-theme="dark"\] \.pt-wrap \{(.*?)\}', css, re.S).group(1)
+        for nombre, bloque in (('claro', claro), ('oscuro', oscuro)):
+            yield nombre, dict(re.findall(r'--pt-([\w-]+):\s*(#[0-9A-Fa-f]{6})', bloque))
+
+    def test_texto_del_panel_llega_a_4_5(self):
+        pares = [
+            ('alta-ink', 'alta-soft'), ('media-ink', 'media-soft'),
+            ('baja-ink', 'baja-soft'), ('faint', 'surface'), ('faint', 'paper'),
+            ('soft', 'surface-2'),
+        ]
+        for tema, tokens in self._temas():
+            for texto, fondo in pares:
+                with self.subTest(tema=tema, texto=texto, fondo=fondo):
+                    self.assertIn(texto, tokens)
+                    self.assertGreaterEqual(
+                        self._contraste(tokens[texto], tokens[fondo]), 4.5)
+
+    def test_las_pildoras_usan_el_tono_de_texto(self):
+        from pathlib import Path
+        css = (Path(__file__).resolve().parents[1]
+               / 'static' / 'admin' / 'css' / 'panel_admin.css').read_text(encoding='utf-8')
+        for nivel in ('alta', 'media', 'baja'):
+            with self.subTest(nivel=nivel):
+                self.assertRegex(
+                    css, rf'\.pt-pill\.{nivel}\s*\{{color:var\(--pt-{nivel}-ink\)')
+
+    def test_la_nota_de_la_grafica_no_usa_el_gris_ilegible(self):
+        """#9ca3af sobre blanco da 2,54:1."""
+        from .. import admin as admin_signos
+        self.assertNotIn('#9ca3af', admin_signos._HTML_GRAFICAS_TEMPLATE)
+
+
+class AvisosDelSistemaEnElPanelTests(TestCase):
+    """UX-P10: `.pt-alerta-sistema` no existía en ningún CSS; el estilo iba en
+    línea y copiado dos veces en la plantilla."""
+
+    def _leer(self, *partes):
+        from pathlib import Path
+        return (Path(__file__).resolve().parents[2].joinpath(*partes)
+                .read_text(encoding='utf-8'))
+
+    def test_la_clase_tiene_estilo_en_el_css(self):
+        css = self._leer('signos_sintomas', 'static', 'admin', 'css', 'panel_admin.css')
+        self.assertIn('.pt-alerta-sistema', css)
+
+    def test_la_plantilla_no_lleva_el_estilo_en_linea(self):
+        plantilla = self._leer('templates', 'admin', 'panel_triage.html')
+        self.assertNotRegex(plantilla, r'class="pt-alerta-sistema"[^>]*style=')
 
 
 class AdminFiltrosNoExponenOtrasCuentasTests(TestCase):
