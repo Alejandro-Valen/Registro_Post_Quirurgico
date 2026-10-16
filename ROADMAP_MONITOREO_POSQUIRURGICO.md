@@ -17,10 +17,11 @@
 > los dos el 04/10/2026; **la gráfica del panel deja de llevar umbrales
 > escritos a mano (BE-02)** y **la ficha del paciente abre con la evolución y
 > se lee con contraste suficiente (UX-P04 a P11)**, **cada restricción de la
-> base se ve fallar por su nombre (DB-04)** y **el panel deja de delatar
+> base se ve fallar por su nombre (DB-04)**, **el bot tutea de principio a fin
+> y sin preguntas numeradas (UX-B06, UX-B09)** y **el panel deja de delatar
 > pacientes ajenos y de dejar fichas sin responsable (SEC-12, SEC-11)**, todo el
 > 15/10/2026,
-> 510 tests OK)
+> 513 tests OK)
 > **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026 —
 > **diez comprobaciones** desde el 09/09/2026 (siete hasta el 07/09; se sumaron
 > el linter `ruff` y `pip-audit`, `check --deploy` recuperó la capacidad de

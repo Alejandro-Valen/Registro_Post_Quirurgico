@@ -149,15 +149,18 @@ _AVISO_ABANDONO = (
 MSG_ABANDONO_REINICIO = (
     _AVISO_ABANDONO
     + "¡Empecemos el reporte de hoy!\n\n"
-    "1. ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5"
+    "¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5"
 )
 
 # El arranque del reporte se compone de piezas porque se dice de dos maneras:
 # como saludo, y pegado a la respuesta de una duda (BE-04). Las dos llevan el
 # aviso de AYUDA — es el primer mensaje del cuestionario en ambos casos (D21).
 _AVISO_AYUDA = "Si en algún momento te sientes en peligro, escribe *AYUDA*.\n\n"
+# UX-B06 (15/10/2026): las preguntas no llevan número. El paciente sin drenaje
+# pasaba de la 3 a la 6, y la del aspecto se contesta con números del 1 al 5:
+# el número de la pregunta se mezclaba con el de la respuesta.
 _PREGUNTA_1 = (
-    "1. ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5\n"
+    "¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5\n"
     "(si hoy no tienes termómetro, responde *saltar*)"
 )
 MSG_PREGUNTA_TEMPERATURA = (
@@ -177,7 +180,7 @@ MSG_REINTENTO_TEMPERATURA = (
 )
 
 MSG_PREGUNTA_DOLOR = (
-    "2. Del 0 al 10, ¿cuánto dolor sientes hoy?\n"
+    "Del 0 al 10, ¿cuánto dolor sientes hoy?\n"
     "(0 es ninguno, 10 es insoportable)"
 )
 MSG_REINTENTO_DOLOR = (
@@ -186,7 +189,7 @@ MSG_REINTENTO_DOLOR = (
 )
 
 MSG_PREGUNTA_TIENE_DRENAJE = (
-    "3. ¿Tienes drenaje activo en este momento? Responde *sí* o *no*."
+    "¿Tienes drenaje activo en este momento? Responde *sí* o *no*."
 )
 MSG_REINTENTO_TIENE_DRENAJE = (
     "No entendí tu respuesta. "
@@ -195,7 +198,7 @@ MSG_REINTENTO_TIENE_DRENAJE = (
 )
 
 MSG_PREGUNTA_ASPECTO = (
-    "4. ¿Cómo se ve el líquido del drenaje hoy? Responde con el número:\n"
+    "¿Cómo se ve el líquido del drenaje hoy? Responde con el número:\n"
     "1. Amarillo claro o rosado\n"
     "2. Rojo con sangre\n"
     "3. Amarillo turbio\n"
@@ -207,7 +210,7 @@ MSG_REINTENTO_ASPECTO = (
 )
 
 MSG_PREGUNTA_CANTIDAD = (
-    "5. ¿Cuánto líquido salió por el drenaje hoy?\n"
+    "¿Cuánto líquido salió por el drenaje hoy?\n"
     "Responde: poco, normal o mucho.\n"
     "Si puedes medirlo, agrega los ml (ej: 'poco, 30ml')"
 )
@@ -220,7 +223,7 @@ MSG_REINTENTO_CANTIDAD = (
 # respuesta «si, no tuve nauseas: 0» —el paciente SÍ pasó gases— se guardaba
 # como sin gases, porque el «no» de las náuseas ganaba. Una pregunta, un dato.
 MSG_PREGUNTA_GASES = (
-    "6. Ya casi terminamos.\n"
+    "Ya casi terminamos.\n"
     "¿Has podido pasar gases o ir al baño hoy? Responde *sí* o *no*."
 )
 MSG_REINTENTO_GASES = (
@@ -229,7 +232,7 @@ MSG_REINTENTO_GASES = (
     "(las náuseas te las pregunto justo después)"
 )
 MSG_PREGUNTA_NAUSEAS = (
-    "7. ¿Cuántas veces has tenido náuseas o vómito hoy?\n"
+    "¿Cuántas veces has tenido náuseas o vómito hoy?\n"
     "Escribe el número. Si ninguna, responde 0."
 )
 MSG_REINTENTO_NAUSEAS = (
@@ -239,49 +242,51 @@ MSG_REINTENTO_NAUSEAS = (
 MSG_TURNO_SIGUIENTE = (
     "El reporte anterior se cerró, pero todavía tienes uno pendiente de hoy. "
     "¡Vamos con ese!\n\n"
-    "1. ¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5\n"
+    "¿Cuál es tu temperatura corporal? Escríbela en números, por ejemplo: 37.5\n"
     "(si hoy no tienes termómetro, responde *saltar*)"
 )
 
+# UX-B09 (15/10/2026): de aquí en adelante trataban de usted, y de la 1 a la 7
+# tuteaban. La regla de docs/bot_whatsapp.md es tuteo.
 MSG_PREGUNTA_HINCHAZON = (
-    "8. ¿Cómo siente la hinchazón o distensión de su abdomen hoy?\n"
-    "Responda: *nada*, *algo* o *mucho*."
+    "¿Cómo sientes la hinchazón o distensión de tu abdomen hoy?\n"
+    "Responde: *nada*, *algo* o *mucho*."
 )
 MSG_REINTENTO_HINCHAZON = (
-    "No entendí. ¿Cómo siente la hinchazón de su abdomen? "
-    "Responda *nada*, *algo* o *mucho*."
+    "No entendí. ¿Cómo sientes la hinchazón de tu abdomen? "
+    "Responde *nada*, *algo* o *mucho*."
 )
 
 MSG_PREGUNTA_FRECUENCIA_CARDIACA = (
-    "9. ¿Cuál es su frecuencia cardíaca (pulso) en este momento?\n"
-    "Escriba el número de latidos por minuto, por ejemplo: 78.\n"
-    "Si no puede medirla ahora, responda con alguna de estas palabras:\n"
+    "¿Cuál es tu frecuencia cardíaca (pulso) en este momento?\n"
+    "Escribe el número de latidos por minuto, por ejemplo: 78.\n"
+    "Si no puedes medirla ahora, responde con alguna de estas palabras:\n"
     "*saltar · omitir · no sé · no tengo · sin dato*"
 )
 MSG_REINTENTO_FRECUENCIA_CARDIACA = (
-    "No entendí. Escriba su frecuencia cardíaca en latidos por minuto (ej: 78), "
-    "o responda *saltar* si no puede medirla ahora."
+    "No entendí. Escribe tu frecuencia cardíaca en latidos por minuto (ej: 78), "
+    "o responde *saltar* si no puedes medirla ahora."
 )
 
 MSG_PREGUNTA_FRECUENCIA_RESPIRATORIA = (
-    "10. ¿Cuál es su frecuencia respiratoria?\n"
-    "Escriba el número de respiraciones por minuto, por ejemplo: 16.\n"
-    "Si no puede medirla ahora, responda con alguna de estas palabras:\n"
+    "¿Cuál es tu frecuencia respiratoria?\n"
+    "Escribe el número de respiraciones por minuto, por ejemplo: 16.\n"
+    "Si no puedes medirla ahora, responde con alguna de estas palabras:\n"
     "*saltar · omitir · no sé · no tengo · sin dato*"
 )
 MSG_REINTENTO_FRECUENCIA_RESPIRATORIA = (
-    "No entendí. Escriba su frecuencia respiratoria en respiraciones por minuto "
-    "(ej: 16), o responda *saltar* si no puede medirla ahora."
+    "No entendí. Escribe tu frecuencia respiratoria en respiraciones por minuto "
+    "(ej: 16), o responde *saltar* si no puedes medirla ahora."
 )
 
 MSG_PREGUNTA_TOLERANCIA_LIQUIDOS = (
-    "11. Última pregunta.\n"
-    "¿Ha podido tomar líquidos (agua, caldo, jugo) sin vomitar? "
-    "Responda *sí* o *no*."
+    "Última pregunta.\n"
+    "¿Has podido tomar líquidos (agua, caldo, jugo) sin vomitar? "
+    "Responde *sí* o *no*."
 )
 MSG_REINTENTO_TOLERANCIA_LIQUIDOS = (
-    "No entendí su respuesta. ¿Pudo tomar líquidos sin vomitar? "
-    "Responda *sí* o *no*."
+    "No entendí tu respuesta. ¿Pudiste tomar líquidos sin vomitar? "
+    "Responde *sí* o *no*."
 )
 
 # Respuestas predefinidas a dudas (espejo de knowledge_base.md mientras no haya RAG)
@@ -529,13 +534,9 @@ def _procesar_respuesta_flujo(conv, paciente, texto, checkin):
         if aspecto is None:
             return MSG_REINTENTO_ASPECTO
         conv.temp_aspecto_drenaje = aspecto
-        # Si no hay drenaje, la cantidad es coherente y se omite la pregunta 4.
-        if aspecto == 'sin_drenaje':
-            conv.temp_cantidad_drenaje = 'sin_drenaje'
-            conv.temp_volumen_drenaje_ml = None
-            conv.estado = ConversacionWhatsApp.ESTADO_GASES
-            conv.save()
-            return MSG_PREGUNTA_GASES
+        # BE-11 (15/10/2026): aquí había una rama `aspecto == 'sin_drenaje'` que
+        # nunca se alcanzaba: `_parse_aspecto` solo devuelve las cinco claves
+        # del 1 al 5. «Sin drenaje» se resuelve una pregunta antes.
         conv.estado = ConversacionWhatsApp.ESTADO_CANTIDAD_DRENAJE
         conv.save()
         return MSG_PREGUNTA_CANTIDAD
