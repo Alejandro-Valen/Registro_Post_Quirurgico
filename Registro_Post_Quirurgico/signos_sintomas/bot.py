@@ -218,6 +218,16 @@ MSG_REINTENTO_CANTIDAD = (
     "No te entendí. Responde poco, normal o mucho "
     "(y si quieres, los ml, ej: 'normal, 50ml')."
 )
+# Decisión de León del 27/10/2026 (opción a): el paciente ya dijo que tiene
+# drenaje y describió su aspecto. Un «no tengo» aquí contradice lo anterior, y
+# se guardaba tiene_drenaje=True con cantidad sin_drenaje. No se da por buena la
+# última respuesta: cambiar tiene_drenaje a False borraría la Regla 2 sobre un
+# aspecto ya informado. Se vuelve a pedir la cantidad.
+MSG_CANTIDAD_CON_DRENAJE_DECLARADO = (
+    "Antes me dijiste que tienes drenaje, así que necesito saber cuánto "
+    "líquido salió hoy. Responde poco, normal o mucho "
+    "(y si quieres, los ml, ej: 'normal, 50ml')."
+)
 
 # UX-B03 (02/10/2026): gases y náuseas se preguntan por separado. Juntas, la
 # respuesta «si, no tuve nauseas: 0» —el paciente SÍ pasó gases— se guardaba
@@ -544,6 +554,8 @@ def _procesar_respuesta_flujo(conv, paciente, texto, checkin):
     if estado == ConversacionWhatsApp.ESTADO_CANTIDAD_DRENAJE:
         cantidad, ml = _parse_cantidad(texto)
         if cantidad is None:
+            if _dice_sin_drenaje(texto):
+                return MSG_CANTIDAD_CON_DRENAJE_DECLARADO
             return MSG_REINTENTO_CANTIDAD
         conv.temp_cantidad_drenaje = cantidad
         conv.temp_volumen_drenaje_ml = ml  # puede ser None
@@ -885,8 +897,19 @@ def _parse_aspecto(texto):
     return mapa[match.group(0)]
 
 
+def _dice_sin_drenaje(texto):
+    """¿La respuesta dice que no hay drenaje? Solo para reconocerla y volver a
+    preguntar: en la pregunta de cantidad no es una respuesta válida."""
+    t = _sin_acentos(texto.lower())
+    return 'sin drenaje' in t or 'no tengo' in t or 'ninguno' in t
+
+
 def _parse_cantidad(texto):
-    """Devuelve (cantidad_cualitativa, ml_o_None). cantidad=None si no se entiende."""
+    """Devuelve (cantidad_cualitativa, ml_o_None). cantidad=None si no se entiende.
+
+    Nunca devuelve 'sin_drenaje': a esta pregunta solo llega quien dijo que
+    tiene drenaje, y «sin drenaje» se resuelve una pregunta antes.
+    """
     t = _sin_acentos(texto.lower())
     if 'poco' in t:
         cantidad = 'poco'
@@ -894,8 +917,6 @@ def _parse_cantidad(texto):
         cantidad = 'normal'
     elif 'mucho' in t:
         cantidad = 'mucho'
-    elif 'sin drenaje' in t or 'no tengo' in t or 'ninguno' in t:
-        cantidad = 'sin_drenaje'
     else:
         return None, None
 
