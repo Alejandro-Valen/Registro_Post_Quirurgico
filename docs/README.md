@@ -85,10 +85,11 @@ parte del repositorio y no debe agregarse automáticamente a commits o PR.
 
 - **Tres auditorías ejecutadas y cerradas**: 22/07, 27/07 y la de seis frentes
   del 07/09. **No se repiten.** Sus correcciones son las fichas D1-D17.
-- **Cada PR se verifica solo** con **diez comprobaciones**: suite, `check`,
+- **Cada PR se verifica solo** con **once comprobaciones**: suite, `check`,
   `makemigrations --check`, `check --deploy` con `--fail-level WARNING`, higiene
-  del diff, guardia de secretos, control de archivos de entorno, linter y
-  auditoría de dependencias.
+  del diff, guardia de secretos, control de archivos de entorno, linter,
+  auditoría de dependencias, barrido de veracidad de la documentación y la
+  imagen de producción (se construye y arranca `healthy` sin root).
 - **Los checks se ven pero no bloquean.** `Desarrollo` no tiene protección de
   rama, y no es cuestión de permisos: en un repositorio privado sin GitHub Pro
   no existe para nadie. La compuerta es humana.
