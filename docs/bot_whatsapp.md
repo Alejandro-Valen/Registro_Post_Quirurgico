@@ -41,6 +41,7 @@ INICIO
   → ESPERANDO_TIENE_DRENAJE     "¿Tienes drenaje activo? sí/no"
   → ESPERANDO_ASPECTO_DRENAJE   menú 1-5 en lenguaje no médico — se OMITE si tiene_drenaje=False
   → ESPERANDO_CANTIDAD_DRENAJE  poco/normal/mucho (+ ml opcional) — se OMITE si tiene_drenaje=False
+                                «no tengo» / «sin drenaje» / «ninguno» se repregunta (27/10/2026)
   → ESPERANDO_GASES             "¿Has podido pasar gases o ir al baño? sí/no" (pregunta 6)
                                 un mensaje con «sí» Y «no» se repregunta (UX-B03)
   → ESPERANDO_NAUSEAS           "¿Cuántas veces náuseas o vómito?" número, 0-20 (pregunta 7)
@@ -59,6 +60,16 @@ pregunta 2. No es cosmético: el parser rechaza lo ambiguo (`379`, `37 9`,
 `375`), pero **no puede detectar un dedazo válido**. Quien quiso escribir 37.5
 y escribió 38.5 pasa todos los filtros, porque es una temperatura posible. El
 eco es lo único que se lo enseña.
+
+**Quien dijo que tiene drenaje no puede responder «no tengo» a la cantidad
+(decisión de León, 27/10/2026).** Hasta esa fecha esa respuesta se guardaba
+como `tiene_drenaje=True` con `cantidad_drenaje='sin_drenaje'`: un registro
+que se contradice. Ahora el bot responde «Antes me dijiste que tienes
+drenaje…» y vuelve a pedir poco, normal o mucho. Se descartó dar por buena la
+última respuesta y pasar `tiene_drenaje` a False: el aspecto ya está
+informado, y un «purulento» dejaría de disparar la Regla 2 (FUGA ALTA). Ninguna
+alerta cambia; desde entonces el bot solo guarda `cantidad_drenaje='sin_drenaje'`
+junto a `tiene_drenaje=False`.
 
 **Una pregunta, un dato (UX-B03, 02/10/2026).** Hasta esa fecha la pregunta 6
 pedía gases y náuseas en el mismo mensaje, y el parser buscaba un «no» en

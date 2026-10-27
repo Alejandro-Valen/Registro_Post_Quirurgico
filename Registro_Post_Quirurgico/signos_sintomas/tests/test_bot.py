@@ -63,6 +63,36 @@ class BotWhatsAppTests(TestCase):
         bot.procesar_mensaje(self.TELEFONO_TWILIO, frecuencia_respiratoria)  # -> tolerancia líquidos
         return bot.procesar_mensaje(self.TELEFONO_TWILIO, tolero_liquidos)
 
+    def test_cantidad_sin_drenaje_tras_decir_que_tiene_se_vuelve_a_preguntar(self):
+        """Decisión de León del 27/10/2026, opción (a).
+
+        El paciente dijo que SÍ tiene drenaje y describió su aspecto; si en la
+        cantidad responde «no tengo», se guardaba `tiene_drenaje=True` con
+        `cantidad_drenaje='sin_drenaje'`: un dato que se contradice. Dar por
+        buena la última respuesta y pasar `tiene_drenaje` a False borraría la
+        Regla 2 sobre un aspecto ya informado —un «purulento» dejaría de ser
+        FUGA ALTA—, así que el bot vuelve a pedir poco, normal o mucho.
+        """
+        for frase in ("no tengo", "sin drenaje", "ninguno"):
+            with self.subTest(frase=frase):
+                ConversacionWhatsApp.objects.all().delete()
+                CheckInProgramado.objects.all().delete()
+                Paciente.objects.all().delete()
+                self._crear_paciente()
+                for texto in ("hola", "37.0", "3", "sí", "4"):  # aspecto purulento
+                    bot.procesar_mensaje(self.TELEFONO_TWILIO, texto)
+
+                respuesta = bot.procesar_mensaje(self.TELEFONO_TWILIO, frase)
+
+                self.assertEqual(respuesta, bot.MSG_CANTIDAD_CON_DRENAJE_DECLARADO)
+                self.assertIn("poco, normal o mucho", respuesta)
+                conv = ConversacionWhatsApp.objects.get()
+                self.assertEqual(
+                    conv.estado, ConversacionWhatsApp.ESTADO_CANTIDAD_DRENAJE)
+                self.assertTrue(conv.temp_tiene_drenaje)
+                self.assertEqual(conv.temp_aspecto_drenaje, "purulento")
+                self.assertIsNone(conv.temp_cantidad_drenaje)
+
     def test_paciente_no_registrado(self):
         respuesta = bot.procesar_mensaje("whatsapp:+570000000000", "hola")
         self.assertEqual(respuesta, bot.MSG_NO_REGISTRADO)
