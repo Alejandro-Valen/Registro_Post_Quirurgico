@@ -1,4 +1,4 @@
-# Integración continua — nueve comprobaciones ejecutadas en Linux por cada PR.
+# Integración continua — once comprobaciones ejecutadas en Linux por cada PR.
 #
 # Cinco nacieron con esta CI (31/07/2026) y eran las que hasta entonces solo
 # corrían en la máquina Windows del Arquitecto. Las dos de seguridad —guardia
@@ -304,3 +304,31 @@ jobs:
         if: ${{ !cancelled() && steps.dependencias.conclusion == 'success' }}
         working-directory: Registro_Post_Quirurgico
         run: python manage.py test --noinput
+
+  imagen:
+    # Undécima comprobación, añadida el 27/10/2026, en un job aparte para que
+    # corra en paralelo con la suite.
+    #
+    # Por qué existe: desde el 07/09/2026 hasta el 27/10/2026 la imagen de
+    # producción NO SE CONSTRUÍA —`.dockerignore` excluía el README.md que
+    # `pip install .` necesita— y nada lo dijo durante siete semanas, porque
+    # Railway ya no existía y esta CI no construía la imagen. La suite, en verde,
+    # no puede ver un fallo que solo ocurre al construir o al arrancar.
+    #
+    # Qué exige: que la imagen se construya, que el contenedor arranque con la
+    # base y el cache de `docker-compose.yml` —collectstatic y migrate incluidos—,
+    # que su HEALTHCHECK llegue a `healthy` y que el proceso NO sea root (SEC-13).
+    # Vista fallar el 27/10/2026 con el `.dockerignore` anterior.
+    name: Imagen de producción
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Traer el repositorio
+        uses: actions/checkout@v7
+
+      - name: La imagen se construye, arranca healthy y sin root
+        env:
+          # De relleno, como las del job de la suite: el contenedor vive solo
+          # en este runner.
+          SECRET_KEY_DOCKER: ci-clave-de-relleno-de-la-imagen-efimera
+        run: bash proceso/verificaciones/2026-10-27_imagen_arranca.sh
