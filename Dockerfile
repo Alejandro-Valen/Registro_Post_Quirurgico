@@ -33,8 +33,31 @@ WORKDIR /app
 COPY pyproject.toml LICENSE README.md ./
 RUN pip install .
 
-# Código de la app.
+# SEC-13: la app NO corre como root. Usuario de sistema sin shell. Necesita
+# home propio: gunicorn 26 abre ahí su "control server", y sin home el arranque
+# deja `Permission denied: '/home/registro'` en el log (visto el 27/10/2026).
+RUN useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin registro
+
+# Código de la app. Queda de root y la app solo lo LEE: un proceso
+# comprometido no puede reescribir su propio código.
 COPY . .
+
+# La única carpeta en la que la app escribe es la de estáticos: collectstatic
+# corre al ARRANCAR, ya como `registro`. Con un permiso mal puesto aquí el
+# contenedor no arranca, y ninguna prueba de la suite lo vería — solo se
+# comprueba levantando la imagen (docker-compose.yml). PYTHONDONTWRITEBYTECODE
+# evita que intente escribir __pycache__ junto al código.
+RUN mkdir -p Registro_Post_Quirurgico/staticfiles \
+ && chown registro:registro Registro_Post_Quirurgico/staticfiles
+
+USER registro
+
+# SEC-13: Docker marca el contenedor healthy/unhealthy según /salud/ (base de
+# datos y cache). start-period cubre collectstatic + migrate del arranque.
+# Railway no usa esta instrucción —tiene su propio healthcheckPath— y en los
+# servicios cron, que no levantan gunicorn, saldría unhealthy: es esperado.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+  CMD ["python", "/app/comprobar_salud.py"]
 
 # collectstatic, migrate y gunicorn corren en el ARRANQUE (no en el build):
 # en un build de Docker en Railway las variables del servicio no están

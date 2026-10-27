@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 from django.core.exceptions import ImproperlyConfigured
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 _RUTA_PAQUETE = Path(__file__).resolve().parent
 
@@ -288,6 +288,44 @@ class ArranqueSinVariableFallaCerradoTests(SimpleTestCase):
             como_principal=True,
         )
         self.assertEqual(elegido, 'Registro_Post_Quirurgico.settings')
+
+
+class SaludSinRedireccionHttpsTests(TestCase):
+    """SEC-13 — el HEALTHCHECK del contenedor llega a `/salud/` por HTTP.
+
+    Dentro del contenedor no hay TLS: el chequeo habla con gunicorn en
+    `127.0.0.1`. Con `SECURE_SSL_REDIRECT=True`, todo pedido HTTP recibe un 301
+    hacia HTTPS, y el chequeo —el de Docker o el `healthcheckPath` de Railway—
+    nunca vería un 200: el contenedor quedaría `unhealthy` estando sano.
+
+    `/salud/` no devuelve ningún dato, solo el código de estado, así que
+    eximirla de la redirección no expone nada. El resto del sitio sigue
+    redirigiendo: eso es lo que comprueba la segunda prueba.
+    """
+
+    def _exentas_de_produccion(self):
+        produccion = cargar_produccion_sobre_base_fresca(
+            dict(ENTORNO_PRODUCCION_VALIDO))
+        return getattr(produccion, 'SECURE_REDIRECT_EXEMPT', [])
+
+    def test_salud_responde_200_por_http(self):
+        with override_settings(
+            SECURE_SSL_REDIRECT=True,
+            SECURE_REDIRECT_EXEMPT=self._exentas_de_produccion(),
+        ):
+            resp = self.client.get('/salud/')
+
+        self.assertEqual(resp.status_code, 200)
+
+    def test_el_resto_del_sitio_sigue_redirigiendo_a_https(self):
+        with override_settings(
+            SECURE_SSL_REDIRECT=True,
+            SECURE_REDIRECT_EXEMPT=self._exentas_de_produccion(),
+        ):
+            resp = self.client.get('/')
+
+        self.assertEqual(resp.status_code, 301)
+        self.assertTrue(resp['Location'].startswith('https://'))
 
 
 class SesionDelPanelCaducaTests(SimpleTestCase):
