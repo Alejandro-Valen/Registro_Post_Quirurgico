@@ -41,6 +41,28 @@
   - Arranque: `collectstatic` + `migrate` + configuración idempotente de roles
     + `gunicorn`, con `--chdir Registro_Post_Quirurgico`
     porque `manage.py` vive un nivel debajo de la raíz del repo.
+  - **Corre como el usuario `registro` (uid 10001), no como root** (SEC-13,
+    27/10/2026). El código es de root y la app solo lo lee; la única carpeta
+    escribible es `Registro_Post_Quirurgico/staticfiles/`, porque
+    `collectstatic` corre al arrancar. El usuario tiene home porque gunicorn 26
+    abre ahí su *control server*.
+  - **`HEALTHCHECK`** con `comprobar_salud.py` (raíz del repo): pide `/salud/`
+    a `127.0.0.1:$PORT` con el primer host de `ALLOWED_HOSTS` y exige un 200,
+    sin seguir redirecciones. Para que llegue, `settings_production` exime
+    `/salud/` de `SECURE_SSL_REDIRECT` (`SECURE_REDIRECT_EXEMPT`); el resto del
+    sitio sigue redirigiendo a HTTPS. Railway **no** usa esta instrucción: al
+    reconstruir, configurar su `healthcheckPath` en `/salud/`. En los servicios
+    cron, que no levantan gunicorn, Docker la vería fallar, y es esperado.
+  - **`.dockerignore` usa `**/`** para los secretos. Hasta el 27/10/2026 decía
+    `.env`, que solo excluye el de la raíz: un `docker build` local metía en la
+    imagen `Registro_Post_Quirurgico/.env`, el de desarrollo. Y su `*.md`
+    excluía `README.md`, que `pyproject.toml` necesita: **la imagen no se
+    construía** desde el 07/09/2026 y nadie lo vio, porque Railway ya no
+    existía y la CI no construye la imagen.
+- **`docker-compose.yml`** (raíz del repo) levanta esa misma imagen en local con
+  PostgreSQL 18 y Redis, para comprobar que arranca y llega a `healthy` antes
+  de desplegar. Instrucciones en su cabecera. No sirve para desarrollar: corre
+  con `settings_production` y fuera de `/salud/` todo redirige a HTTPS.
 - **`nixpacks.toml`** queda como fallback; el despliegue actual no lo usa.
 - **`.python-version`** = `3.13` (fija la versión de Python del build).
 - **WhiteNoise** sirve los estáticos del Admin en producción (Railway no tiene

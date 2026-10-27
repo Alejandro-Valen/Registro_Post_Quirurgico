@@ -81,6 +81,10 @@ STORAGES = {
 SESSION_COOKIE_SECURE   = True
 CSRF_COOKIE_SECURE      = True
 SECURE_SSL_REDIRECT     = True
+# SEC-13: el HEALTHCHECK del contenedor (y el healthcheckPath de Railway) habla
+# con gunicorn por HTTP, sin TLS. Con la redirección, /salud/ respondería 301 y
+# el chequeo nunca vería el 200. /salud/ no devuelve datos, solo el código.
+SECURE_REDIRECT_EXEMPT  = [r'^salud/$']
 SECURE_HSTS_SECONDS     = 31536000   # 1 año
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD     = True

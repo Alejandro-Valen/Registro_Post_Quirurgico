@@ -1,14 +1,41 @@
-.git
-.gitignore
-__pycache__/
-*.pyc
-*.pyo
-staticfiles/
-.env
+# Lo que NO entra al contexto del build.
+#
+# OJO (27/10/2026): en .dockerignore un patrón sin `**/` solo vale para la RAÍZ
+# del contexto. Aquí decía `.env`, y eso dejaba pasar
+# `Registro_Post_Quirurgico/.env` —el de desarrollo, con credenciales reales—:
+# cualquier `docker build` local lo metía en la imagen, y python-decouple lo
+# leía en silencio como respaldo de toda variable que faltara. Por eso los
+# patrones de abajo llevan `**/`.
+
+# Secretos: ningún archivo de entorno, en ninguna carpeta.
+**/.env
+**/.env.*
+
+# Entornos virtuales y cachés de la máquina de desarrollo.
+.venv/
+venv/
 .entorno_registro/
 entorno_registro/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.ruff_cache/
+**/*.egg-info/
+**/staticfiles/
+
+# Repositorio, herramientas y material que no corre en el servidor.
+.git
+.gitignore
+.github/
+.claude/
+demo/
+proceso/
 inicio_entornoR.bat
-# Documentación y freeze de desarrollo: no se necesitan en la imagen.
+docker-compose.yml
+
+# Documentación: no se necesita en la imagen. README.md SÍ entra, porque
+# `pyproject.toml` lo referencia y sin él `pip install .` no encuentra el
+# archivo: hasta el 27/10/2026 el `*.md` de abajo lo excluía y el build fallaba.
 docs/
 *.md
-!Registro_Post_Quirurgico/signos_sintomas/static/admin/js/vendor/Chart.js-LICENSE.md
+!README.md

@@ -1,0 +1,73 @@
+# La imagen de producción, en local, con su base y su cache (REPO-18).
+#
+# Para qué sirve: comprobar que la imagen ARRANCA tal como arrancaría en
+# Railway —collectstatic, migrate, cuentas y gunicorn, como usuario no root— y
+# que /salud/ ve la base y el cache. No sustituye a `runserver` para
+# desarrollar: corre con `settings_production`, así que toda página que no sea
+# /salud/ redirige a HTTPS y en el navegador no se abre.
+#
+# Uso, desde la raíz del repositorio:
+#
+#   $env:SECRET_KEY_DOCKER = python -c "import secrets; print(secrets.token_urlsafe(50))"
+#   docker compose up --build -d
+#   docker compose ps                  # web debe llegar a (healthy)
+#   curl http://localhost:8000/salud/  # 200
+#   docker compose down -v             # -v borra también la base de prueba
+#
+# Todos los valores de abajo son de relleno, como los de la CI: la base y el
+# cache no publican puertos fuera de esta red y se borran con `down -v`. La
+# única que se exige es la SECRET_KEY, para que nadie levante esto en un
+# servidor con una clave escrita en un archivo público.
+
+name: registro-postquirurgico
+
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      SECRET_KEY: ${SECRET_KEY_DOCKER:?Define SECRET_KEY_DOCKER antes de levantar (ver la cabecera de docker-compose.yml)}
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      CSRF_TRUSTED_ORIGINS: https://localhost
+      DB_NAME: registro_postquirurgico_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: db
+      DB_PORT: "5432"
+      REDIS_URL: redis://redis:6379/1
+      EMAIL_DELIVERY_PROVIDER: resend
+      RESEND_API_KEY: compose-clave-de-relleno
+      RESEND_FROM_EMAIL: avisos@ejemplo.com
+      TRUST_RAILWAY_PROXY: "False"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  db:
+    # La misma versión mayor que la base local y la CI.
+    image: postgres:18
+    environment:
+      POSTGRES_DB: registro_postquirurgico_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - datos-postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d registro_postquirurgico_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  datos-postgres:
