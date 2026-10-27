@@ -114,22 +114,24 @@ ROADMAP, sección "Estructura del Proyecto Django".
   desde `Desarrollo` (`docs/railway_deploy.md` §4.1).
 - **Borrar la rama al mergear:** `gh pr merge <n> --merge --delete-branch`. El
   borrado automático de GitHub solo lo puede activar el dueño de la cuenta.
-- **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **diez
+- **Cada PR se verifica solo:** `.github/workflows/ci.yml` corre **once
   comprobaciones** en cada PR y cada push a `Desarrollo` y `produccion`: la
   suite, `check`, `makemigrations --check`, `check --deploy --fail-level
   WARNING`, la higiene del diff, `gitleaks` sobre la historia completa, que no
-  haya un `.env` rastreado, `ruff`, `pip-audit` y el **barrido de veracidad**
+  haya un `.env` rastreado, `ruff`, `pip-audit`, el **barrido de veracidad**
   (`proceso/verificaciones/2026-09-09_barrido_veracidad.py`), que comprueba que
   lo que la documentación afirma sea cierto —rutas, conteo de pruebas, commits
   citados y **que los umbrales de `docs/reglas_clinicas.md` sean las constantes
-  de `alert_engine.py`**—.
+  de `alert_engine.py`**—, y que **la imagen de producción se construya y
+  arranque `healthy` sin root** (desde el 27/10/2026: estuvo siete semanas sin
+  construirse y nada lo dijo).
 - **Ficha D16:** ninguna guardia entra ni permanece en la CI sin haberse visto
   fallar al menos una vez. Sin `--fail-level WARNING`, `check --deploy` nunca
   pudo fallar.
 - **Los checks se ven pero no bloquean.** En un repositorio privado de cuenta
   personal sin GitHub Pro, la protección de rama no existe **para nadie**. Las
   salidas son GitHub Pro, hacer el repositorio público o la compuerta humana; hoy
-  rige la última: **mirar las diez antes de mergear**.
+  rige la última: **mirar las once antes de mergear**.
 
 ---
 

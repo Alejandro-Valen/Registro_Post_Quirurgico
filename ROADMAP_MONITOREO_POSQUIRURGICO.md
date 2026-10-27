@@ -29,7 +29,9 @@
 > **diez comprobaciones** desde el 09/09/2026 (siete hasta el 07/09; se sumaron
 > el linter `ruff` y `pip-audit`, `check --deploy` recuperó la capacidad de
 > fallar con `--fail-level WARNING`, y el 09/09 el barrido de veracidad). Hasta
-> el 02/10/2026 esta línea decía «nueve», un mes después de que fueran diez
+> el 02/10/2026 esta línea decía «nueve», un mes después de que fueran diez.
+> **Once desde el 27/10/2026**: la imagen de producción se construye y arranca
+> `healthy` sin root en cada PR.
 > **⚠️ No hay producción viva desde el 07/08/2026** — venció la prueba de Railway.
 > Mergear a `produccion` no despliega nada. Ver `docs/railway_deploy.md`.
 
@@ -100,7 +102,7 @@ Registro_Post_Quirurgico/                    ← raíz del repositorio
 ├── Dockerfile  nixpacks.toml  .dockerignore ← despliegue (ver docs/railway_deploy.md)
 ├── .gitleaks.toml  .gitleaksignore          ← guardia de secretos de la CI
 ├── .gitignore  .mailmap  .python-version  inicio_entornoR.bat
-├── .github/                                 ← ci.yml (diez comprobaciones), dependabot.yml,
+├── .github/                                 ← ci.yml (once comprobaciones), dependabot.yml,
 │                                               CODEOWNERS, plantillas de PR e issues
 ├── docs/                                    ← solo producto; docs/README.md es el índice
 │   ├── reglas_clinicas.md                   ← fuente única de las reglas del motor

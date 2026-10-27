@@ -58,7 +58,8 @@
     imagen `Registro_Post_Quirurgico/.env`, el de desarrollo. Y su `*.md`
     excluía `README.md`, que `pyproject.toml` necesita: **la imagen no se
     construía** desde el 07/09/2026 y nadie lo vio, porque Railway ya no
-    existía y la CI no construye la imagen.
+    existía y la CI no construía la imagen. Desde el 27/10/2026 la construye y
+    la arranca en cada PR (job «Imagen de producción»).
 - **`docker-compose.yml`** (raíz del repo) levanta esa misma imagen en local con
   PostgreSQL 18 y Redis, para comprobar que arranca y llega a `healthy` antes
   de desplegar. Instrucciones en su cabecera. No sirve para desarrollar: corre

@@ -97,7 +97,7 @@ gráfica clínica es cómo se inventa un hecho.
 |  |  |
 |---|---|
 | **Suite** | 532 pruebas |
-| **Integración continua** | 10 comprobaciones por PR: suite, `check`, migraciones, configuración de producción, higiene del diff, `gitleaks` sobre la historia completa, control de archivos de entorno, linter, auditoría de dependencias y barrido de veracidad de la documentación |
+| **Integración continua** | 11 comprobaciones por PR: suite, `check`, migraciones, configuración de producción, higiene del diff, `gitleaks` sobre la historia completa, control de archivos de entorno, linter, auditoría de dependencias, barrido de veracidad de la documentación y la imagen de producción, que debe construirse y arrancar sana sin root |
 | **Despliegue** | **Sin entorno productivo activo.** Ver [`docs/railway_deploy.md`](docs/railway_deploy.md) |
 | **Piloto con pacientes reales** | **No.** Ver la sección siguiente |
 
