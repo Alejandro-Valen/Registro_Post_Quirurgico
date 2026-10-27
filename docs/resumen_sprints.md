@@ -48,6 +48,9 @@ estaba, y `CLAUDE.md` solo dice dónde vamos.
 | El panel y la seguridad | El rechazo de un duplicado no delata al paciente, ninguna ficha nace sin responsable, el punto rojo en la medición que disparó la ALTA (SEC-12, SEC-11, DB-03) | ✅ 15/10/2026, PR #53, `8827fdd` |
 | D28 · BE-03 | La gracia de un turno cuenta desde que existe: un cron tardío ya no genera SILENCIO falso | ✅ 15/10/2026, PR #54, `1b5de23`. 519 tests OK |
 | D29 · D30 | La sesión caduca tras 30 minutos sin uso; queda constancia de quién abre cada ficha (SEC-07) | ✅ 15/10/2026, PR #55, `13d6c7d`. 530 tests OK |
+| El contenedor | La imagen vuelve a construirse (no lo hacía desde el 07/09), ya no lleva el `.env` de desarrollo, corre sin root y declara `HEALTHCHECK`; `docker-compose.yml` (SEC-13, REPO-18) | ✅ 27/10/2026, PR #57, `db17fed`. 532 tests OK |
+| La imagen en la CI | Undécima comprobación: la imagen se construye y arranca `healthy` sin root en cada PR | ✅ 27/10/2026, PR #58, `a454041` |
+| El drenaje | Quien dijo que tiene drenaje no puede responder «no tengo» a la cantidad: el bot repregunta | ✅ 27/10/2026, PR #59, `e078f11`. 533 tests OK |
 
 ---
 

@@ -180,29 +180,23 @@ completa, con PR y merge de cada etapa: `docs/resumen_sprints.md`.
 cada uno lo lleva el cuaderno de trabajo. **Lo clínico abierto no lo decide una
 sesión técnica** (ver abajo).
 
-**Al cerrar el 15/10/2026 no queda ningún hallazgo que se pueda cerrar solo con
-código.** Nueve PR mergeados ese día (#46 a #55); la suite pasó de 484 a 530.
+**Al cerrar el 27/10/2026 los pendientes técnicos de la sesión anterior están
+cerrados.** Tres PR ese día: la imagen vuelve a construirse —no lo hacía desde
+el 07/09— y corre sin root con `HEALTHCHECK` (#57, SEC-13, REPO-18); la CI la
+construye y la arranca en cada PR (#58, once comprobaciones); y el bot repregunta
+la cantidad de drenaje en vez de guardar un dato que se contradice (#59). La
+suite pasó de 530 a 533.
 
-**Pendiente técnico, en orden:**
-
-1. **SEC-13 y REPO-18:** que el contenedor no corra como root y declare
-   `HEALTHCHECK`, y un `docker-compose.yml`. Necesitan **Docker Desktop
-   encendido** para verificarlos: `collectstatic` y `migrate` corren al arrancar
-   y escriben en `/app`, así que un permiso mal puesto rompe el arranque sin que
-   ninguna prueba lo vea. No se entrega sin ver el contenedor arrancar.
-2. **Una inconsistencia del bot, por decidir con el Arquitecto:** si el paciente
-   dice que tiene drenaje y en la pregunta de cantidad responde «no tengo», se
-   guarda `tiene_drenaje=True` con cantidad `sin_drenaje`. No cambia ninguna
-   alerta (la Regla 2 mira el aspecto), pero el dato se contradice.
-3. **Auditoría de la calidad de las pruebas** y la decisión de **protección de
-   rama** (ver "Repositorio").
+**Pendiente técnico:** la **auditoría de la calidad de las pruebas** y la
+decisión de **protección de rama** (ver "Repositorio"). No queda ningún hallazgo
+conocido que se pueda cerrar solo con código.
 
 **Lo que necesita a alguien, no a una sesión técnica:**
 
 - **El médico:** BE-08 y BE-09 (dos ramas de sobre-alerta, fijadas por pruebas de
   caracterización; ficha D10, y `docs/reglas_clinicas.md`) y la redacción de las
   respuestas de la FAQ (D4).
-- **León:** SEC-13 (requiere Docker Desktop); rotar las credenciales del `.env`
+- **León:** rotar las credenciales del `.env`
   de desarrollo (SEC-09); lo legal (SEC-08, DB-11, y cuánto se conserva el
   registro de accesos de SEC-07).
 - **Alejandro:** borrado automático de ramas en GitHub; datos de un tercero en la
