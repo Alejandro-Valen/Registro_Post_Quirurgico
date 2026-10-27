@@ -24,7 +24,7 @@
 > sesión caduca tras 30 minutos sin uso (D29)** y **queda constancia de quién
 > abre cada ficha (SEC-07, D30)**, todo el 15/10/2026, y **la imagen vuelve a
 > construirse y corre sin root, con su HEALTHCHECK (SEC-13, REPO-18)**, el
-> 27/10/2026, 532 tests OK)
+> 27/10/2026, y **el bot ya no guarda un drenaje que se contradice**, 533 tests OK)
 > **Cada PR se verifica solo:** `.github/workflows/ci.yml` desde el 31/07/2026 —
 > **diez comprobaciones** desde el 09/09/2026 (siete hasta el 07/09; se sumaron
 > el linter `ruff` y `pip-audit`, `check --deploy` recuperó la capacidad de
